@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	kCoreFullPackageName PackageFullName = "github.com/oak-lang/core"
+	kCoreFullPackageName PackageFullName = "github.com/oaklang/core"
 	kBasicsModuleName    string          = "Basics"
 	kCharModuleName                      = "Char"
 	kStringModuleName                    = "String"
