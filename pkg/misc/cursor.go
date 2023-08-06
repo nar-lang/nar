@@ -95,6 +95,22 @@ func (c *Cursor) SkipComment() {
 		if level != 0 {
 			return
 		}
+	} else if c.Exact("{-|") {
+		level := 1
+		for c.IsOk() {
+			if c.Exact("{-|") {
+				level++
+			} else if c.Exact("-}") {
+				level--
+				if level == 0 {
+					break
+				}
+			}
+			c.Pos++
+		}
+		if level != 0 {
+			return
+		}
 	} else {
 		c.SkipWhiteSpace()
 		return

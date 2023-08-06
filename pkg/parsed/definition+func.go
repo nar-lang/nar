@@ -70,10 +70,6 @@ func (def definitionFunc) resolveName(misc.Cursor, *Metadata) (string, error) {
 }
 
 func (def definitionFunc) resolve(md *Metadata) (resolved.Definition, bool, error) {
-	if def.Name() == "exec" {
-		println("x")
-	}
-
 	if def.Extern {
 		return nil, false, nil
 	}
