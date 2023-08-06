@@ -29,12 +29,12 @@ func (e expressionApply) precondition(md *Metadata) (Expression, error) {
 	return e, nil
 }
 
-func (e expressionApply) setType(type_ Type, gm genericsMap, md *Metadata) (Expression, Type, error) {
-	exprType, err := md.getTypeByName(md.currentModuleName(), e.Name, type_.getGenerics(), e.cursor)
+func (e expressionApply) setType(returnType Type, gm genericsMap, md *Metadata) (Expression, Type, error) {
+	fnType, fnGenerics, err := md.getTypeByName(md.currentModuleName(), e.Name, nil, e.cursor)
 	if err != nil {
 		return nil, nil, err
 	}
-	dt, err := exprType.dereference(md)
+	dt, err := fnType.dereference(md)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -43,23 +43,18 @@ func (e expressionApply) setType(type_ Type, gm genericsMap, md *Metadata) (Expr
 		return nil, nil, misc.NewError(e.cursor, "expected function here")
 	}
 
-	types, returnType := signature.flatten(len(e.Args))
+	types, inferredReturnType := signature.flatten(len(e.Args))
+	inferredReturnType.extractGenerics(returnType, gm)
+	inferredReturnType = inferredReturnType.mapGenerics(gm)
 	for i, arg := range e.Args {
-		e.Args[i], types[i], err = arg.setType(types[i], gm, md)
+		e.Args[i], types[i], err = arg.setType(types[i].mapGenerics(gm), gm, md)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
-	e.GenericArgs = exprType.getGenerics()
-	e.RetType = returnType.mapGenerics(gm)
+	e.GenericArgs = fnGenerics.mapGenerics(gm)
+	e.RetType = inferredReturnType
 
-	type_.extractGenerics(returnType, gm)
-	e.RetType = returnType.mapGenerics(gm)
-	inferredType := type_.mapGenerics(gm)
-	if !typesEqual(e.RetType, inferredType, false, md) {
-		return nil, nil, misc.NewError(e.cursor, "types do not match, expected %s got %s", e.RetType, inferredType)
-	}
-	e.GenericArgs = e.GenericArgs.mapGenerics(gm)
 	return e, e.RetType, nil
 }
 

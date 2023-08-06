@@ -11,12 +11,24 @@ const (
 	kBasicsModuleName    string          = "Basics"
 	kCharModuleName                      = "Char"
 	kStringModuleName                    = "String"
+	kListModuleName                      = "List"
 	kBoolName                            = "Bool"
 	kCharName                            = "Char"
 	kIntName                             = "Int"
 	kFloatName                           = "Float"
 	kStringName                          = "String"
+	kListName                            = "List"
 )
+
+func TypeBuiltinList(c misc.Cursor, enclosingModule ModuleFullName, itemType Type) Type {
+	return NewAddressedType(
+		c, enclosingModule,
+		NewDefinitionAddress(
+			ModuleFullName{packageName: kCoreFullPackageName, moduleName: kListModuleName}, kListName,
+		),
+		GenericArgs{itemType}, false,
+	)
+}
 
 func TypeBuiltinBool(c misc.Cursor, enclosingModule ModuleFullName) Type {
 	return NewAddressedType(
@@ -69,6 +81,13 @@ func TypeBuiltinString(c misc.Cursor, enclosingModule ModuleFullName) Type {
 }
 
 type PackageFullName string
+
+func NewModuleFullName(packageName PackageFullName, moduleName string) ModuleFullName {
+	return ModuleFullName{
+		packageName: packageName,
+		moduleName:  moduleName,
+	}
+}
 
 type ModuleFullName struct {
 	packageName PackageFullName

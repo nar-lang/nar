@@ -66,7 +66,7 @@ func (t typeAddressed) dereference(md *Metadata) (Type, error) {
 		return t, nil
 	}
 
-	type_, err := md.getTypeByAddress(t.Address, t.Generics, t.cursor)
+	type_, _, err := md.getTypeByAddress(t.Address, t.Generics, t.cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (t typeAddressed) resolveWithRefName(cursor misc.Cursor, refName string, ge
 }
 
 func (t typeAddressed) resolve(cursor misc.Cursor, md *Metadata) (resolved.Type, error) {
-	type_, err := md.getTypeByAddress(t.Address, t.Generics, t.cursor)
+	type_, _, err := md.getTypeByAddress(t.Address, t.Generics, t.cursor)
 	if err != nil {
 		return nil, err
 	}

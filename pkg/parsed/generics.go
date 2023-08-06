@@ -18,6 +18,10 @@ type GenericParam struct {
 	modName    ModuleFullName
 }
 
+func (p GenericParam) Name() string {
+	return p.name
+}
+
 func (p GenericParam) Resolve(md *Metadata) (resolved.GenericParam, error) {
 	resolvedConstraint, err := p.constraint.Resolve(p.cursor, md)
 	if err != nil {
@@ -141,7 +145,7 @@ type GenericConstraintComparable struct {
 }
 
 func (g GenericConstraintComparable) Resolve(cursor misc.Cursor, md *Metadata) (resolved.GenericConstraint, error) {
-	return resolved.NewComparableGenericConstraint(makeSpecialGenericName("Comparable", md)), nil
+	return resolved.NewComparableGenericConstraint(makeSpecialGenericName("runtime.Comparable", md)), nil
 }
 
 type GenericConstraintEquatable struct {
@@ -149,7 +153,7 @@ type GenericConstraintEquatable struct {
 }
 
 func (g GenericConstraintEquatable) Resolve(cursor misc.Cursor, md *Metadata) (resolved.GenericConstraint, error) {
-	return resolved.NewEquatableGenericConstraint(makeSpecialGenericName("Equatable", md)), nil
+	return resolved.NewEquatableGenericConstraint(makeSpecialGenericName("runtime.Equatable", md)), nil
 }
 
 type GenericConstraintCombined struct {

@@ -22,14 +22,14 @@ type Metadata struct {
 
 func (md *Metadata) getTypeByName(
 	enclosingModuleName ModuleFullName, name string, generics GenericArgs, cursor misc.Cursor,
-) (Type, error) {
+) (Type, GenericArgs, error) {
 	if tp, ok := md.findLocalType(name); ok {
-		return tp, nil
+		return tp, nil, nil
 	}
 
 	address, err := md.getAddressByName(enclosingModuleName, name, cursor)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	return md.getTypeByAddress(address, generics, cursor)
@@ -41,22 +41,24 @@ func (md *Metadata) getAddressByName(enclosingModuleName ModuleFullName, name st
 		return DefinitionAddress{}, misc.NewError(cursor, "enclosing module not found (this is a compiler error)")
 	}
 
-	address, ok := module.unpackedImports[name]
-	if !ok {
-		if _, ok := module.definitions[name]; ok {
-			address = DefinitionAddress{
-				moduleFullName: enclosingModuleName,
-				definitionName: name,
-			}
-		} else if _, ok := md.CurrentModule.definitions[name]; ok {
-			address = DefinitionAddress{
-				moduleFullName: md.currentModuleName(),
-				definitionName: name,
-			}
-		} else {
-			return DefinitionAddress{}, misc.NewError(cursor, "unknown definition")
-		}
+	var address DefinitionAddress
+	{
 	}
+
+	if _, ok := module.definitions[name]; ok {
+		address = DefinitionAddress{
+			moduleFullName: enclosingModuleName,
+			definitionName: name,
+		}
+	} else if _, ok := md.CurrentModule.definitions[name]; ok {
+		address = DefinitionAddress{
+			moduleFullName: md.currentModuleName(),
+			definitionName: name,
+		}
+	} else if address, ok = module.unpackedImports[name]; !ok {
+		return DefinitionAddress{}, misc.NewError(cursor, "unknown identifier")
+	}
+
 	return address, nil
 }
 
@@ -69,12 +71,12 @@ func (md *Metadata) findLocalType(name string) (Type, bool) {
 
 func (md *Metadata) getTypeByAddress(
 	address DefinitionAddress, generics GenericArgs, cursor misc.Cursor,
-) (Type, error) {
+) (Type, GenericArgs, error) {
 	if def, ok := md.findDefinitionByAddress(address); ok {
 		return def.getType(cursor, generics, md)
 	}
 
-	return nil, misc.NewError(cursor, "unknown identifier, dont you forget to import it?")
+	return nil, nil, misc.NewError(cursor, "unknown identifier, dont you forget to import it?")
 }
 
 func (md *Metadata) findDefinitionByAddress(address DefinitionAddress) (Definition, bool) {
@@ -87,18 +89,6 @@ func (md *Metadata) findDefinitionByAddress(address DefinitionAddress) (Definiti
 	}
 	return nil, false
 }
-
-/*func (md *Metadata) findDefinitionByName(name string) (Definition, bool) {
-	address, ok := md.Imports[name]
-	if !ok {
-		address = DefinitionAddress{
-			ModuleFullName: md.currentModuleName(),
-			definitionName: name,
-		}
-	}
-
-	return md.findDefinitionByAddress(address)
-}*/
 
 func (md *Metadata) cloneLocalVars() map[string]Type {
 	c := map[string]Type{}

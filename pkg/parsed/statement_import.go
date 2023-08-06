@@ -93,7 +93,8 @@ func addImport(
 		identifier = alias + "."
 	}
 	identifier += name
-	imports[identifier] = NewDefinitionAddress(
-		ModuleFullName{packageName: packageName, moduleName: module}, name,
-	)
+	imports[identifier] = NewDefinitionAddress(NewModuleFullName(packageName, module), name)
+	if exposing {
+		addImport(packageName, module, alias, name, false, imports)
+	}
 }

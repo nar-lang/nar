@@ -51,6 +51,10 @@ func (e expressionSelect) setType(type_ Type, gm genericsMap, md *Metadata) (Exp
 	if err != nil {
 		return nil, nil, err
 	}
+	e.Condition, t, err = e.Condition.setType(t, gm, md)
+	if err != nil {
+		return nil, nil, err
+	}
 	var exprType Type
 	for i, cs := range e.Cases {
 		locals := md.cloneLocalVars()
@@ -60,6 +64,9 @@ func (e expressionSelect) setType(type_ Type, gm genericsMap, md *Metadata) (Exp
 		}
 		var inferredType Type
 		cs.Expression, inferredType, err = cs.Expression.setType(type_, gm, md)
+		if err != nil {
+			return nil, nil, err
+		}
 		if i == 0 {
 			exprType, err = inferredType.dereference(md)
 		} else {

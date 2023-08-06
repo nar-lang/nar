@@ -32,6 +32,8 @@ func (m Module) write(sb *strings.Builder) {
 	}
 	sb.WriteString("\n")
 
+	sb.WriteString("import \"github.com/oaklang/runtime\"\nvar _ = runtime.Use()\n\n")
+
 	for _, name := range m.order {
 		def := m.definitions[name]
 		def.write(sb)

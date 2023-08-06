@@ -60,14 +60,14 @@ func unwrapChain(chain Expression, md *Metadata) (Expression, error) {
 		ident, ok := exs[0].(expressionIdentifier)
 
 		if !ok {
-			infix, ok := exs[0].(expressionInfix)
+			infix, ok := exs[0].(ExpressionInfix)
 			if !ok {
 				return nil, misc.NewError(exs[0].getCursor(), "expected function here")
 			}
-			ident = expressionIdentifier{Name: infix.Name, cursor: exs[0].getCursor()}
+			ident = expressionIdentifier{Name: infix.name, cursor: exs[0].getCursor()}
 		}
 
-		type_, err := md.getTypeByName(md.currentModuleName(), ident.Name, ident.GenericArgs, ident.cursor)
+		type_, _, err := md.getTypeByName(md.currentModuleName(), ident.Name, ident.GenericArgs, ident.cursor)
 		if err != nil {
 			return nil, err
 		}
@@ -112,10 +112,18 @@ func infixToPrefix(exs []Expression, md *Metadata) ([]Expression, error) {
 	assocCollision := -1
 	var maxPriority int
 	var currentAssoc InfixAssociativity
+	var neg = false
 
 	for i, e := range exs {
-		if infixExpr, ok := e.(expressionInfix); ok {
-			type_, err := md.getTypeByName(md.currentModuleName(), infixExpr.Name, nil, infixExpr.cursor)
+		if infixExpr, ok := e.(ExpressionInfix); ok && !infixExpr.asParameter {
+			if infixExpr.isNegateOp() {
+				index = i
+				neg = true
+				assocCollision = -1
+				break
+			}
+
+			type_, _, err := md.getTypeByName(md.currentModuleName(), infixExpr.name, nil, infixExpr.cursor)
 			if err != nil {
 				return nil, err
 			}
@@ -143,29 +151,52 @@ func infixToPrefix(exs []Expression, md *Metadata) ([]Expression, error) {
 		}
 	}
 	if index >= 0 {
-		if assocCollision >= 0 {
-			return nil, misc.NewError(
-				exs[index].getCursor(),
-				"cannot resolve infix priority of `%s` and `%s`, use brackets",
-				exs[index].(expressionInfix).Name,
-				exs[assocCollision].(expressionInfix).Name,
-			)
-		}
-		if index == 0 {
-			if len(exs) != 3 {
-				return nil, misc.NewError(exs[index].getCursor(), "infix function expects 2 arguments")
+		if neg {
+			if len(exs) == index+1 {
+				return nil, misc.NewError(exs[index].getCursor(), "unary minus requires operand")
 			}
+			return infixToPrefix(
+				append(
+					append(
+						exs[0:index],
+						expressionChain{
+							Args: Expressions{
+								expressionIdentifier{
+									cursor: exs[index].getCursor(),
+									Name:   "neg",
+								},
+								exs[index+1],
+							},
+							cursor: exs[index].getCursor(),
+						},
+					),
+					exs[index+2:]...,
+				), md)
 		} else {
-			left, err := infixToPrefix(exs[0:index], md)
-			if err != nil {
-				return nil, err
+			if assocCollision >= 0 {
+				return nil, misc.NewError(
+					exs[index].getCursor(),
+					"cannot resolve infix priority of `%s` and `%s`, use brackets",
+					exs[index].(ExpressionInfix).name,
+					exs[assocCollision].(ExpressionInfix).name,
+				)
 			}
-			right, err := infixToPrefix(exs[index+1:], md)
-			if err != nil {
-				return nil, err
-			}
+			if index == 0 {
+				if len(exs) != 3 {
+					return nil, misc.NewError(exs[index].getCursor(), "infix function expects 2 arguments")
+				}
+			} else {
+				left, err := infixToPrefix(exs[0:index], md)
+				if err != nil {
+					return nil, err
+				}
+				right, err := infixToPrefix(exs[index+1:], md)
+				if err != nil {
+					return nil, err
+				}
 
-			exs = []Expression{exs[index], expressionChain{Args: left}, expressionChain{Args: right}}
+				exs = []Expression{exs[index], expressionChain{Args: left}, expressionChain{Args: right}}
+			}
 		}
 	} else {
 		if len(exs) == 1 {

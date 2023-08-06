@@ -116,7 +116,6 @@ func (t typeUnion) unpackNestedDefinitions(def Definition) []Definition {
 			ParamName:  "x",
 			ParamType:  opt.valueType,
 			ReturnType: rt,
-			Generics:   generics,
 		}
 		fn.Expression = expressionOption{
 			Type:     rt,

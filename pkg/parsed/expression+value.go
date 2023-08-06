@@ -9,6 +9,7 @@ type expressionValue struct {
 	ExpressionValue__ int
 	Name              string
 	InferredType      Type
+	InferredGenerics  GenericArgs
 	cursor            misc.Cursor
 }
 
@@ -25,10 +26,15 @@ func (e expressionValue) setType(type_ Type, gm genericsMap, md *Metadata) (Expr
 	if err != nil {
 		return nil, nil, err
 	}
-	valueType, err := md.getTypeByName(md.currentModuleName(), e.Name, nil, e.cursor)
+	valueType, generics, err := md.getTypeByName(md.currentModuleName(), e.Name, nil, e.cursor)
 	if err != nil {
 		return nil, nil, err
 	}
+
+	//gm = genericsMap{}
+	valueType.extractGenerics(type_, gm)
+	valueType = valueType.mapGenerics(gm)
+	generics = generics.mapGenerics(gm)
 
 	if !typesEqual(dt, valueType, false, md) {
 		if g, ok := dt.(typeGenericNotResolved); ok {
@@ -39,6 +45,7 @@ func (e expressionValue) setType(type_ Type, gm genericsMap, md *Metadata) (Expr
 		}
 	}
 	e.InferredType = type_
+	e.InferredGenerics = generics
 	return e, type_, nil
 }
 
@@ -52,22 +59,26 @@ func (e expressionValue) getType(md *Metadata) (Type, error) {
 
 func (e expressionValue) resolve(md *Metadata) (resolved.Expression, error) {
 	name := e.Name
-	type_, ok := md.findLocalType(e.Name)
-	if !ok {
-		def, ok := md.CurrentModule.definitions[e.Name]
-		if !ok {
-			return nil, misc.NewError(e.cursor, "unknown value")
-		}
-		var err error
-		type_, err = def.getType(e.cursor, nil, md)
-		if err != nil {
-			return nil, err
-		}
-		name = md.CurrentModule.Name() + "_" + name
+	_, local := md.findLocalType(e.Name)
+	if e.InferredType == nil {
+		return nil, misc.NewError(e.cursor, "trying to resolve not inferred expression value type (this is a compiler error)")
 	}
-	resolvedType, err := type_.resolve(e.cursor, md)
+
+	resolvedType, err := e.InferredType.resolve(e.cursor, md)
 	if err != nil {
 		return nil, err
 	}
-	return resolved.NewValueExpression(resolvedType, name), nil
+
+	if !local {
+		name, err = md.makeRefNameByName(md.currentModuleName(), name, e.cursor)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	resolvedGenerics, err := e.InferredGenerics.resolve(e.cursor, md)
+	if err != nil {
+		return nil, err
+	}
+	return resolved.NewValueExpression(resolvedType, name, resolvedGenerics), nil
 }

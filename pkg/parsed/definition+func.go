@@ -10,10 +10,6 @@ func NewFuncDefinition(
 	address DefinitionAddress, genericParams GenericParams,
 	hidden, extern bool, type_ Type, expression Expression,
 ) Definition {
-	if signature, ok := type_.(typeSignature); ok {
-		signature.Generics = genericParams.toArgs()
-		type_ = signature
-	}
 	return definitionFunc{
 		definitionBase: definitionBase{
 			Address:       address,
@@ -53,12 +49,12 @@ func (def definitionFunc) precondition(md *Metadata) (Definition, error) {
 	return def, nil
 }
 
-func (def definitionFunc) getType(cursor misc.Cursor, generics GenericArgs, md *Metadata) (Type, error) {
-	gs, err := def.getGenericsMap(cursor, generics)
+func (def definitionFunc) getType(cursor misc.Cursor, generics GenericArgs, md *Metadata) (Type, GenericArgs, error) {
+	gm, err := def.getGenericsMap(cursor, generics)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return def.Type.mapGenerics(gs), nil
+	return def.Type.mapGenerics(gm), def.GenericParams.toArgs().mapGenerics(gm), nil
 }
 
 func (def definitionFunc) nestedDefinitionNames() []string {
@@ -74,6 +70,10 @@ func (def definitionFunc) resolveName(misc.Cursor, *Metadata) (string, error) {
 }
 
 func (def definitionFunc) resolve(md *Metadata) (resolved.Definition, bool, error) {
+	if def.Name() == "exec" {
+		println("x")
+	}
+
 	if def.Extern {
 		return nil, false, nil
 	}
@@ -117,7 +117,6 @@ func (def definitionFunc) resolve(md *Metadata) (resolved.Definition, bool, erro
 			ParamName:  "x",
 			ParamType:  typeVoid{},
 			ReturnType: fnType,
-			Generics:   nil,
 			typeBase: typeBase{
 				cursor:     misc.Cursor{},
 				moduleName: md.currentModuleName(),

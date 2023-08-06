@@ -1,8 +1,10 @@
-package parsed
+package compiler
 
 import (
+	"errors"
 	"fmt"
 	"oak-compiler/pkg/misc"
+	"oak-compiler/pkg/parsed"
 	"strconv"
 	"unicode"
 )
@@ -31,17 +33,17 @@ const (
 
 var expressionStopWords = []string{")", kwHidden, kwType, kwDef, kwThen, kwElse, kwCase, kwIn}
 
-func ParseModule(c *misc.Cursor, packageName PackageFullName) (Module, error) {
+func ParseModule(c *misc.Cursor, packageName parsed.PackageFullName) (parsed.Module, error) {
 	moduleDefinition, err := parseModuleStatement(c)
 	if err != nil {
-		return Module{}, err
+		return parsed.Module{}, err
 	}
 
-	var imports []StatementImport
+	var imports []parsed.StatementImport
 	for {
 		imp, ok, err := parseImportStatement(c)
 		if err != nil {
-			return Module{}, err
+			return parsed.Module{}, err
 		}
 		if !ok {
 			break
@@ -49,56 +51,56 @@ func ParseModule(c *misc.Cursor, packageName PackageFullName) (Module, error) {
 		imports = append(imports, imp)
 	}
 
-	var definitions []Definition
+	var definitions []parsed.Definition
 	var order []string
 	for !c.IsEof() {
 		definition, err := parseDefinition(
-			c, ModuleFullName{packageName: packageName, moduleName: moduleDefinition.Name()},
+			c, parsed.NewModuleFullName(packageName, moduleDefinition.Name()),
 		)
 		if err != nil {
-			return Module{}, err
+			return parsed.Module{}, err
 		}
 		definitions = append(definitions, definition)
 		order = append(order, definition.Name())
 	}
 
-	return NewModule(moduleDefinition, imports, definitions), nil
+	return parsed.NewModule(moduleDefinition, imports, definitions), nil
 }
 
-func parseModuleStatement(c *misc.Cursor) (StatementModule, error) {
+func parseModuleStatement(c *misc.Cursor) (parsed.StatementModule, error) {
 	c.SkipComment()
 
 	if !c.Exact(kwModule) {
-		return StatementModule{}, misc.NewError(*c, "expected `module` keyword here")
+		return parsed.StatementModule{}, misc.NewError(*c, "expected `module` keyword here")
 	}
 	name := c.QualifiedIdentifier()
 	if name == "" {
-		return StatementModule{}, misc.NewError(*c, "expected identifier here")
+		return parsed.StatementModule{}, misc.NewError(*c, "expected identifier here")
 	}
-	return NewModuleStatement(name), nil
+	return parsed.NewModuleStatement(name), nil
 }
 
-func parseImportStatement(c *misc.Cursor) (StatementImport, bool, error) {
+func parseImportStatement(c *misc.Cursor) (parsed.StatementImport, bool, error) {
 	startCursor := *c
 	if !c.Exact(kwImport) {
-		return StatementImport{}, false, nil
+		return parsed.StatementImport{}, false, nil
 	}
 	module := c.QualifiedIdentifier()
 	alias := module
 	if module == "" {
-		return StatementImport{}, false, misc.NewError(*c, "expected module name here")
+		return parsed.StatementImport{}, false, misc.NewError(*c, "expected module name here")
 	}
 	if c.Exact(kwAs) {
 		alias = c.Identifier()
 		if alias == "" {
-			return StatementImport{}, false, misc.NewError(*c, "expected module alias here")
+			return parsed.StatementImport{}, false, misc.NewError(*c, "expected module alias here")
 		}
 	}
-	var package_ PackageFullName
+	var package_ parsed.PackageFullName
 	if c.Exact(kwFrom) {
-		package_ = PackageFullName(c.String())
+		package_ = parsed.PackageFullName(c.String())
 		if package_ == "" {
-			return StatementImport{}, false, misc.NewError(*c, "expected package url here")
+			return parsed.StatementImport{}, false, misc.NewError(*c, "expected package url here")
 		}
 		package_ = package_[1 : len(package_)-1]
 	}
@@ -109,7 +111,7 @@ func parseImportStatement(c *misc.Cursor) (StatementImport, bool, error) {
 			exposingAll = true
 		} else {
 			if !c.OpenParenthesis() {
-				return StatementImport{}, false, misc.NewError(*c, "expected `(` here")
+				return parsed.StatementImport{}, false, misc.NewError(*c, "expected `(` here")
 			}
 
 			for {
@@ -118,7 +120,7 @@ func parseImportStatement(c *misc.Cursor) (StatementImport, bool, error) {
 					id = c.Identifier()
 				}
 				if id == "" {
-					return StatementImport{}, false, misc.NewError(*c, "expected identifier here")
+					return parsed.StatementImport{}, false, misc.NewError(*c, "expected identifier here")
 				}
 				exposing = append(exposing, id)
 				if c.Exact(",") {
@@ -127,15 +129,15 @@ func parseImportStatement(c *misc.Cursor) (StatementImport, bool, error) {
 				if c.CloseParenthesis() {
 					break
 				}
-				return StatementImport{}, false, misc.NewError(*c, "expected `,` or `)` here")
+				return parsed.StatementImport{}, false, misc.NewError(*c, "expected `,` or `)` here")
 			}
 		}
 	}
 
-	return NewImportStatement(startCursor, package_, module, alias, exposingAll, exposing), true, nil
+	return parsed.NewImportStatement(startCursor, package_, module, alias, exposingAll, exposing), true, nil
 }
 
-func parseDefinition(c *misc.Cursor, modName ModuleFullName) (Definition, error) {
+func parseDefinition(c *misc.Cursor, modName parsed.ModuleFullName) (parsed.Definition, error) {
 	startCursor := *c
 	hidden := c.Exact(kwHidden)
 
@@ -174,18 +176,20 @@ func parseDefinition(c *misc.Cursor, modName ModuleFullName) (Definition, error)
 			return nil, misc.NewError(*c, "expected `=` here")
 		}
 
-		var type_ Type
+		var type_ parsed.Type
 		extern := c.Exact(kwExtern)
 		if extern {
-			type_ = NewAddressedType(startCursor, modName, NewDefinitionAddress(modName, name), nil, false)
+			type_ = parsed.NewAddressedType(
+				startCursor, modName, parsed.NewDefinitionAddress(modName, name), nil, false,
+			)
 		} else {
 			type_, err = parseType(c, modName, true, false, true, gps)
 			if err != nil {
 				return nil, err
 			}
 		}
-		return NewTypeDefinition(
-			startCursor, NewDefinitionAddress(modName, name), gps, hidden, extern, type_,
+		return parsed.NewTypeDefinition(
+			startCursor, parsed.NewDefinitionAddress(modName, name), gps, hidden, extern, type_,
 		), nil
 
 	case kwDef:
@@ -197,13 +201,13 @@ func parseDefinition(c *misc.Cursor, modName ModuleFullName) (Definition, error)
 				return nil, misc.NewError(*c, "expected `(` here")
 			}
 
-			var assoc InfixAssociativity
+			var assoc parsed.InfixAssociativity
 			if c.Exact(kwLeft) {
-				assoc = InfixAssociativityLeft
+				assoc = parsed.InfixAssociativityLeft
 			} else if c.Exact(kwRight) {
-				assoc = InfixAssociativityRight
+				assoc = parsed.InfixAssociativityRight
 			} else if c.Exact(kwNon) {
-				assoc = InfixAssociativityNon
+				assoc = parsed.InfixAssociativityNon
 			} else {
 				return nil, misc.NewError(*c, "expected `left`, `right` or `non` here")
 			}
@@ -228,8 +232,8 @@ func parseDefinition(c *misc.Cursor, modName ModuleFullName) (Definition, error)
 				return nil, misc.NewError(*c, "expected infix function alias here")
 			}
 
-			return NewInfixDefinition(
-				startCursor, NewDefinitionAddress(modName, name), hidden, assoc, int(priority), alias,
+			return parsed.NewInfixDefinition(
+				startCursor, parsed.NewDefinitionAddress(modName, name), hidden, assoc, int(priority), alias,
 			), nil
 		} else {
 			type_, err := parseType(c, modName, false, false, false, gps)
@@ -239,7 +243,7 @@ func parseDefinition(c *misc.Cursor, modName ModuleFullName) (Definition, error)
 			if !c.Exact("=") {
 				return nil, misc.NewError(*c, "expected `=` here")
 			}
-			var ex Expression
+			var ex parsed.Expression
 			extern := c.Exact(kwExtern)
 			if !extern {
 				ex, err = parseExpression(c, modName, gps)
@@ -247,8 +251,8 @@ func parseDefinition(c *misc.Cursor, modName ModuleFullName) (Definition, error)
 					return nil, err
 				}
 			}
-			return NewFuncDefinition(
-				startCursor, NewDefinitionAddress(modName, name), gps, hidden, extern, type_, ex,
+			return parsed.NewFuncDefinition(
+				startCursor, parsed.NewDefinitionAddress(modName, name), gps, hidden, extern, type_, ex,
 			), nil
 		}
 	default:
@@ -256,12 +260,12 @@ func parseDefinition(c *misc.Cursor, modName ModuleFullName) (Definition, error)
 	}
 }
 
-func parseGenericParameters(c *misc.Cursor, modName ModuleFullName) (GenericParams, error) {
+func parseGenericParameters(c *misc.Cursor, modName parsed.ModuleFullName) (parsed.GenericParams, error) {
 	if !c.OpenBrackets() {
 		return nil, nil
 	}
 
-	var parameters GenericParams
+	var parameters parsed.GenericParams
 
 	for {
 		eltStart := *c
@@ -270,9 +274,9 @@ func parseGenericParameters(c *misc.Cursor, modName ModuleFullName) (GenericPara
 			return nil, misc.NewError(*c, "generic parameter name shold start with lowercase letter")
 		}
 
-		constraint := GenericConstraint(GenericConstraintAny{})
+		constraint := parsed.GenericConstraint(parsed.GenericConstraintAny{})
 		if c.Exact(":") {
-			var gcs []GenericConstraint
+			var gcs []parsed.GenericConstraint
 			for {
 				cs := c.Identifier()
 				if cs == "" {
@@ -280,16 +284,16 @@ func parseGenericParameters(c *misc.Cursor, modName ModuleFullName) (GenericPara
 				}
 				switch cs {
 				case "any":
-					constraint = GenericConstraintAny{}
+					constraint = parsed.GenericConstraintAny{}
 					break
 				case "comparable":
-					constraint = GenericConstraintComparable{}
+					constraint = parsed.GenericConstraintComparable{}
 					break
 				case "equatable":
-					constraint = GenericConstraintEquatable{}
+					constraint = parsed.GenericConstraintEquatable{}
 					break
 				default:
-					constraint = GenericConstraintType{Name: cs} //TODO: generic args
+					constraint = parsed.GenericConstraintType{Name: cs} //TODO: generic args
 				}
 				gcs = append(gcs, constraint)
 				if c.Exact("+") {
@@ -298,11 +302,11 @@ func parseGenericParameters(c *misc.Cursor, modName ModuleFullName) (GenericPara
 				break
 			}
 			if len(gcs) > 1 {
-				constraint = GenericConstraintCombined{Constraints: gcs}
+				constraint = parsed.GenericConstraintCombined{Constraints: gcs}
 			}
 		}
 
-		parameters = append(parameters, NewGenericParam(eltStart, modName, name, constraint))
+		parameters = append(parameters, parsed.NewGenericParam(eltStart, modName, name, constraint))
 
 		if c.Exact(",") {
 			continue
@@ -324,30 +328,19 @@ var errNotAType = fmt.Errorf("optional type is not not a type")
 
 func parseType(
 	c *misc.Cursor,
-	modName ModuleFullName,
+	modName parsed.ModuleFullName,
 	definition bool,
 	optional bool,
 	allowSignature bool,
-	genericParams GenericParams,
-) (Type, error) {
+	genericParams parsed.GenericParams,
+) (parsed.Type, error) {
 	startCursor := *c
-
-	if c.OpenParenthesis() {
-		type_, err := parseType(c, modName, false, false, true, genericParams)
-		if err != nil {
-			return nil, err
-		}
-		if !c.CloseParenthesis() {
-			return nil, misc.NewError(*c, "expected `)` here")
-		}
-		return type_, nil
-	}
 
 	if c.OpenBraces() {
 		start := c.Pos
 		c.Identifier()
 		if c.Exact(":") {
-			var fields []RecordField
+			var fields []parsed.RecordField
 			c.Pos = start
 			for {
 				fieldStart := *c
@@ -370,7 +363,7 @@ func parseType(
 				if err != nil {
 					return nil, err
 				}
-				fields = append(fields, NewRecordField(fieldStart, name, type_))
+				fields = append(fields, parsed.NewRecordField(fieldStart, name, type_))
 				if c.Exact(",") {
 					continue
 				}
@@ -379,9 +372,9 @@ func parseType(
 				}
 				return nil, misc.NewError(*c, "failed to read record, expected `,` or `}` here")
 			}
-			return NewRecordType(startCursor, modName, fields), nil
+			return parsed.NewRecordType(startCursor, modName, fields), nil
 		} else {
-			var items []Type
+			var items []parsed.Type
 			c.Pos = start
 
 			for {
@@ -400,12 +393,12 @@ func parseType(
 				return nil, misc.NewError(*c, "failed to read tuple, expected `,` or `}` here")
 			}
 
-			return NewTupleType(startCursor, modName, items), nil
+			return parsed.NewTupleType(startCursor, modName, items), nil
 		}
 	}
 
 	if definition {
-		var options []UnionOption
+		var options []parsed.UnionOption
 		for {
 			if !c.Exact("|") {
 				break
@@ -433,18 +426,23 @@ func parseType(
 				return nil, err
 			}
 			if type_ == nil {
-				type_ = NewVoidType(*c, modName)
+				type_ = parsed.NewVoidType(*c, modName)
 			}
-			options = append(options, NewUnionOption(optionStart, name, type_))
+			options = append(options, parsed.NewUnionOption(optionStart, name, type_))
 		}
 		if len(options) > 0 {
-			return NewUnionType(startCursor, modName, options), nil
+			return parsed.NewUnionType(startCursor, modName, options), nil
 		}
 	}
 
 	if allowSignature {
-		paramName := c.Identifier()
-		var paramType Type
+		var paramName string
+		if c.Exact("_") {
+			paramName = "_"
+		} else {
+			paramName = c.Identifier()
+		}
+		var paramType parsed.Type
 		noType := false
 		if c.Exact(":") {
 			var err error
@@ -456,7 +454,8 @@ func parseType(
 			c.Pos = startCursor.Pos
 			var err error
 			paramType, err = parseType(c, modName, false, true, false, genericParams)
-			noType = err == errNotAType
+			noType = errors.Is(err, errNotAType)
+			paramName = ""
 		}
 
 		if !noType {
@@ -465,17 +464,28 @@ func parseType(
 				if err != nil {
 					return nil, err
 				}
-				return NewSignatureType(startCursor, modName, paramType, returnType, paramName, nil), nil
+				return parsed.NewSignatureType(startCursor, modName, paramType, returnType, paramName, nil), nil
 			} else {
 				c.Pos = startCursor.Pos
 			}
 		}
 	}
 
+	if c.OpenParenthesis() {
+		type_, err := parseType(c, modName, false, false, true, genericParams)
+		if err != nil {
+			return nil, err
+		}
+		if !c.CloseParenthesis() {
+			return nil, misc.NewError(*c, "expected `)` here")
+		}
+		return type_, nil
+	}
+
 	for _, g := range genericParams {
 		cs := *c
-		if c.Exact(g.name) {
-			return NewGenericNameType(cs, modName, g.name), nil
+		if c.Exact(g.Name()) {
+			return parsed.NewGenericNameType(cs, modName, g.Name()), nil
 		}
 	}
 
@@ -487,13 +497,17 @@ func parseType(
 				return nil, nil
 			}
 			c.Pos = startCursor.Pos
-			return nil, misc.NewError(*c, "expected type name starting with uppercase letter here,this one looks like not declared generic parameter")
+			return nil, misc.NewError(
+				*c,
+				"expected type name starting with uppercase letter here, "+
+					"this one looks like not declared generic parameter",
+			)
 		}
 		genericArgs, err := parseGenericArgs(c, modName, genericParams)
 		if err != nil {
 			return nil, err
 		}
-		return NewNamedType(startCursor, modName, typeName, genericArgs), nil
+		return parsed.NewNamedType(startCursor, modName, typeName, genericArgs), nil
 	}
 	c.Pos = startCursor.Pos
 
@@ -504,8 +518,10 @@ func parseType(
 	return nil, errNotAType
 }
 
-func parseGenericArgs(c *misc.Cursor, modName ModuleFullName, generics GenericParams) (GenericArgs, error) {
-	var genericArgs GenericArgs
+func parseGenericArgs(
+	c *misc.Cursor, modName parsed.ModuleFullName, generics parsed.GenericParams,
+) (parsed.GenericArgs, error) {
+	var genericArgs parsed.GenericArgs
 	if c.OpenBrackets() {
 		for {
 			genericArg, err := parseType(c, modName, false, false, true, generics)
@@ -525,9 +541,11 @@ func parseGenericArgs(c *misc.Cursor, modName ModuleFullName, generics GenericPa
 	return genericArgs, nil
 }
 
-func parseExpression(c *misc.Cursor, modName ModuleFullName, generics GenericParams) (Expression, error) {
+func parseExpression(
+	c *misc.Cursor, modName parsed.ModuleFullName, generics parsed.GenericParams,
+) (parsed.Expression, error) {
 	startCursor := *c
-	var exs []Expression
+	var exs []parsed.Expression
 
 	for {
 		eltCursor := *c
@@ -546,29 +564,33 @@ func parseExpression(c *misc.Cursor, modName ModuleFullName, generics GenericPar
 			if !c.CloseParenthesis() {
 				return nil, misc.NewError(*c, "failed to read nexted expression, expeted `)` here")
 			}
-			exs = append(exs, nested)
+			if inf, ok := nested.(parsed.ExpressionInfix); ok {
+				exs = append(exs, inf.AsParameter())
+			} else {
+				exs = append(exs, nested)
+			}
 			continue
 		}
 
 		// const char
 		if constChar := c.Char(); constChar != "" {
-			exs = append(exs, NewConstExpression(eltCursor, ConstKindChar, constChar))
+			exs = append(exs, parsed.NewConstExpression(eltCursor, parsed.ConstKindChar, constChar))
 			continue
 		}
 
 		// const int / float
 		if constNumber, integer := c.Number(); constNumber != "" {
 			if integer {
-				exs = append(exs, NewConstExpression(eltCursor, ConstKindInt, constNumber))
+				exs = append(exs, parsed.NewConstExpression(eltCursor, parsed.ConstKindInt, constNumber))
 			} else {
-				exs = append(exs, NewConstExpression(eltCursor, ConstKindFloat, constNumber))
+				exs = append(exs, parsed.NewConstExpression(eltCursor, parsed.ConstKindFloat, constNumber))
 			}
 			continue
 		}
 
 		// const string
 		if constString := c.String(); constString != "" {
-			exs = append(exs, NewConstExpression(eltCursor, ConstKindString, constString))
+			exs = append(exs, parsed.NewConstExpression(eltCursor, parsed.ConstKindString, constString))
 			continue
 		}
 
@@ -592,7 +614,7 @@ func parseExpression(c *misc.Cursor, modName ModuleFullName, generics GenericPar
 			if err != nil {
 				return nil, err
 			}
-			exs = append(exs, NewIfExpression(eltCursor, condition, positive, negative))
+			exs = append(exs, parsed.NewIfExpression(eltCursor, condition, positive, negative))
 			continue
 		}
 
@@ -602,7 +624,7 @@ func parseExpression(c *misc.Cursor, modName ModuleFullName, generics GenericPar
 			if err != nil {
 				return nil, err
 			}
-			var cases []ExpressionSelectCase
+			var cases []parsed.ExpressionSelectCase
 			for {
 				if !c.Exact(kwCase) {
 					break
@@ -616,18 +638,18 @@ func parseExpression(c *misc.Cursor, modName ModuleFullName, generics GenericPar
 				if err != nil {
 					return nil, err
 				}
-				cases = append(cases, ExpressionSelectCase{Decons: ds, Expression: ex})
+				cases = append(cases, parsed.ExpressionSelectCase{Decons: ds, Expression: ex})
 			}
 			if len(cases) == 0 {
 				return nil, misc.NewError(*c, "expected at least one case here")
 			}
-			exs = append(exs, NewSelectExpression(eltCursor, condition, cases))
+			exs = append(exs, parsed.NewSelectExpression(eltCursor, condition, cases))
 			continue
 		}
 
 		//let
 		if c.Exact(kwLet) {
-			var defs []LetDefinition
+			var defs []parsed.LetDefinition
 			for {
 				var name string
 				if c.Exact("_") {
@@ -653,7 +675,7 @@ func parseExpression(c *misc.Cursor, modName ModuleFullName, generics GenericPar
 					return nil, err
 				}
 
-				defs = append(defs, NewLetDefinition(name, protoType, expr))
+				defs = append(defs, parsed.NewLetDefinition(name, protoType, expr))
 
 				if c.Exact(";") {
 					continue
@@ -669,14 +691,20 @@ func parseExpression(c *misc.Cursor, modName ModuleFullName, generics GenericPar
 				return nil, err
 			}
 
-			exs = append(exs, NewLetExpression(eltCursor, defs, expr))
+			exs = append(exs, parsed.NewLetExpression(eltCursor, defs, expr))
 			continue
 		}
 
-		//tuple
-		if c.OpenBraces() {
-			var items []Expression
+		//tuple & list
+		isTuple := c.OpenBraces()
+		isList := !isTuple && c.OpenBrackets()
+		if isTuple || isList {
+			var items []parsed.Expression
 			for {
+				if isList && c.CloseBrackets() {
+					break
+				}
+
 				item, err := parseExpression(c, modName, generics)
 				if err != nil {
 					return nil, err
@@ -686,28 +714,38 @@ func parseExpression(c *misc.Cursor, modName ModuleFullName, generics GenericPar
 				if c.Exact(",") {
 					continue
 				}
-				if c.CloseBraces() {
+				if isTuple && c.CloseBraces() {
 					break
 				}
-				return nil, misc.NewError(*c, "expected `,` or `}` here")
+				if isTuple {
+					return nil, misc.NewError(*c, "expected `,` or `}` here")
+				}
+				if isList {
+					return nil, misc.NewError(*c, "expected `,` or `]` here")
+				}
 			}
 
-			if len(items) < 2 {
-				return nil, misc.NewError(*c, "tuple should contain at least 2 items")
+			if isTuple {
+				if len(items) < 2 {
+					return nil, misc.NewError(*c, "tuple should contain at least 2 items")
+				}
+				exs = append(exs, parsed.NewTupleExpression(eltCursor, items))
 			}
-			exs = append(exs, NewTupleExpression(eltCursor, items))
+			if isList {
+				exs = append(exs, parsed.NewListExpression(eltCursor, items))
+			}
 			continue
 		}
 
 		//infix
-		if infix := c.InfixName(); infix != "" {
-			exs = append(exs, NewInfixExpression(eltCursor, infix))
+		if wp, infix, wa := c.InfixName(); infix != "" {
+			exs = append(exs, parsed.NewInfixExpression(eltCursor, wp, infix, wa))
 			continue
 		}
 
 		//identifier/call
 		if id := c.QualifiedIdentifier(); id != "" {
-			var genericArgs GenericArgs
+			var genericArgs parsed.GenericArgs
 			if len(exs) == 0 {
 				var err error
 				genericArgs, err = parseGenericArgs(c, modName, generics)
@@ -715,7 +753,7 @@ func parseExpression(c *misc.Cursor, modName ModuleFullName, generics GenericPar
 					return nil, err
 				}
 			}
-			exs = append(exs, NewIdentifierExpression(eltCursor, id, genericArgs))
+			exs = append(exs, parsed.NewIdentifierExpression(eltCursor, id, genericArgs))
 			continue
 		}
 
@@ -726,41 +764,43 @@ func parseExpression(c *misc.Cursor, modName ModuleFullName, generics GenericPar
 		return exs[0], nil
 	}
 	if len(exs) > 1 {
-		return NewChainExpression(startCursor, exs), nil
+		return parsed.NewChainExpression(startCursor, exs), nil
 	}
 
 	c.Pos = startCursor.Pos
 	return nil, misc.NewError(*c, "failed to read expression here")
 }
 
-func parseDecons(c *misc.Cursor, modName ModuleFullName, generics GenericParams) (Decons, error) {
+func parseDecons(
+	c *misc.Cursor, modName parsed.ModuleFullName, generics parsed.GenericParams,
+) (parsed.Decons, error) {
 	startCursor := *c
 	// any
 	if c.Exact("_") {
-		return NewAnyDecons(), nil
+		return parsed.NewAnyDecons(), nil
 	}
 
 	// const char
 	if constChar := c.Char(); constChar != "" {
-		return NewConstDecons(ConstKindChar, constChar), nil
+		return parsed.NewConstDecons(parsed.ConstKindChar, constChar), nil
 	}
 
 	if constNumber, integer := c.Number(); constNumber != "" {
 		if integer {
-			return NewConstDecons(ConstKindInt, constNumber), nil
+			return parsed.NewConstDecons(parsed.ConstKindInt, constNumber), nil
 		} else {
-			return NewConstDecons(ConstKindFloat, constNumber), nil
+			return parsed.NewConstDecons(parsed.ConstKindFloat, constNumber), nil
 		}
 	}
 
 	// const string
 	if constString := c.String(); constString != "" {
-		return NewConstDecons(ConstKindString, constString), nil
+		return parsed.NewConstDecons(parsed.ConstKindString, constString), nil
 	}
 
 	//tuple
 	if c.OpenBraces() {
-		var items []Decons
+		var items []parsed.Decons
 		for {
 			item, err := parseDecons(c, modName, generics)
 			if err != nil {
@@ -780,7 +820,7 @@ func parseDecons(c *misc.Cursor, modName ModuleFullName, generics GenericParams)
 			return nil, misc.NewError(*c, "decons typle should contain at least 2 elements")
 		}
 
-		return NewTupleDecons(startCursor, items, ""), nil //TODO: alias
+		return parsed.NewTupleDecons(startCursor, items, ""), nil //TODO: alias
 	}
 
 	// union
@@ -793,7 +833,7 @@ func parseDecons(c *misc.Cursor, modName ModuleFullName, generics GenericParams)
 			}
 
 			pos := c.Pos
-			var arg Decons
+			var arg parsed.Decons
 			if c.Exact("->") {
 				c.Pos = pos
 			} else {
@@ -804,11 +844,11 @@ func parseDecons(c *misc.Cursor, modName ModuleFullName, generics GenericParams)
 				}
 			}
 			if arg == nil {
-				arg = NewAnyDecons()
+				arg = parsed.NewAnyDecons()
 			}
-			return NewOptionDecons(cs, id, genericArgs, arg, ""), nil //TODO: alias
+			return parsed.NewOptionDecons(cs, id, genericArgs, arg, ""), nil //TODO: alias
 		} else {
-			return NewNamedDecons(cs, id), nil
+			return parsed.NewNamedDecons(cs, id), nil
 		}
 	}
 

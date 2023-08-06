@@ -30,22 +30,21 @@ func (def definitionType) precondition(*Metadata) (Definition, error) {
 	return def, nil
 }
 
-func (def definitionType) getType(cursor misc.Cursor, generics GenericArgs, md *Metadata) (Type, error) {
-
+func (def definitionType) getType(cursor misc.Cursor, generics GenericArgs, md *Metadata) (Type, GenericArgs, error) {
 	if def.Extern {
 		if len(def.GenericParams) != len(generics) {
-			return nil, misc.NewError(
+			return nil, nil, misc.NewError(
 				cursor, "expected %d generic arguments, got %d", len(def.GenericParams), len(generics),
 			)
 		}
-		return NewAddressedType(def.cursor, def.Address.moduleFullName, def.Address, generics, true), nil
+		return NewAddressedType(def.cursor, def.Address.moduleFullName, def.Address, generics, true), nil, nil
 	}
 
-	gs, err := def.getGenericsMap(cursor, generics)
+	gm, err := def.getGenericsMap(cursor, generics)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return def.Type.mapGenerics(gs), nil
+	return def.Type.mapGenerics(gm), def.GenericParams.toArgs().mapGenerics(gm), nil
 }
 
 func (def definitionType) nestedDefinitionNames() []string {

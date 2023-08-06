@@ -44,7 +44,7 @@ func (t typeNamed) mapGenerics(gm genericsMap) Type {
 }
 
 func (t typeNamed) dereference(md *Metadata) (Type, error) {
-	type_, err := md.getTypeByName(t.moduleName, t.Name, t.Generics, t.cursor)
+	type_, _, err := md.getTypeByName(t.moduleName, t.Name, t.Generics, t.cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (t typeNamed) resolveWithRefName(cursor misc.Cursor, refName string, generi
 }
 
 func (t typeNamed) resolve(cursor misc.Cursor, md *Metadata) (resolved.Type, error) {
-	def, err := md.getTypeByName(t.moduleName, t.Name, t.Generics, t.cursor)
+	def, _, err := md.getTypeByName(t.moduleName, t.Name, t.Generics, t.cursor)
 	if err != nil {
 		return nil, err
 	}

@@ -44,7 +44,7 @@ func (t typeInfix) resolve(cursor misc.Cursor, md *Metadata) (resolved.Type, err
 func (t typeInfix) dereference(md *Metadata) (Type, error) {
 	addr := t.definition.Address
 	addr.definitionName = t.definition.Alias
-	x, err := md.getTypeByAddress(addr, nil, t.cursor)
+	x, _, err := md.getTypeByAddress(addr, nil, t.cursor)
 	if err != nil {
 		return nil, err
 	}

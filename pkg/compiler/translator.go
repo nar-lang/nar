@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-func Compile(inDir string, outDir string, mainName string) error {
+func Translate(inDir string, outDir string, mainName string) error {
 	md := parsed.NewMetadata()
 
 	pkg, err := loadPackageWithDependencies(inDir, md.Packages)
@@ -134,7 +134,7 @@ func loadPackage(packageDir string) (parsed.Package, error) {
 			return pkg, fmt.Errorf("failed to read file `%s`: %w", sourcePath, err)
 		}
 		cursor := misc.NewCursor(sourcePath, []rune(string(data)))
-		module, err := parsed.ParseModule(&cursor, pkg.FullName())
+		module, err := ParseModule(&cursor, pkg.FullName())
 		if err != nil {
 			return pkg, err
 		}

@@ -15,7 +15,7 @@ type Definition interface {
 	resolveName(cursor misc.Cursor, md *Metadata) (string, error)
 	isHidden() bool
 	getAddress() DefinitionAddress
-	getType(cursor misc.Cursor, generics GenericArgs, md *Metadata) (Type, error)
+	getType(cursor misc.Cursor, generics GenericArgs, md *Metadata) (Type, GenericArgs, error)
 	isExtern() bool
 	precondition(md *Metadata) (Definition, error)
 }

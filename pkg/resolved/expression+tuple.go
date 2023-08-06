@@ -19,8 +19,7 @@ func (e expressionTuple) Type() Type {
 }
 
 func (e expressionTuple) write(sb *strings.Builder) {
-	t := e.type_
-	t.write(sb)
+	e.type_.write(sb)
 	sb.WriteString("{")
 	for i, item := range e.items {
 		if i > 0 {

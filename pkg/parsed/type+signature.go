@@ -13,7 +13,6 @@ func NewSignatureType(
 		ParamName:  name,
 		ParamType:  param,
 		ReturnType: ret,
-		Generics:   generics,
 		typeBase:   typeBase{cursor: c, moduleName: modName},
 	}
 }
@@ -24,12 +23,9 @@ type typeSignature struct {
 	ParamName  string
 	ParamType  Type
 	ReturnType Type
-	Generics   GenericArgs
 }
 
 func (t typeSignature) extractGenerics(other Type, gm genericsMap) {
-	t.Generics.extractGenerics(other.getGenerics(), gm)
-
 	if ts, ok := other.(typeSignature); ok {
 		t.ParamType.extractGenerics(ts.ParamType, gm)
 		t.ReturnType.extractGenerics(ts.ReturnType, gm)
@@ -41,12 +37,11 @@ func (t typeSignature) equalsTo(other Type, ignoreGenerics bool, md *Metadata) b
 
 	return ok &&
 		typesEqual(o.ParamType, t.ParamType, ignoreGenerics, md) &&
-		typesEqual(o.ReturnType, t.ReturnType, ignoreGenerics, md) &&
-		o.Generics.equalsTo(t.Generics, ignoreGenerics, md)
+		typesEqual(o.ReturnType, t.ReturnType, ignoreGenerics, md)
 }
 
 func (t typeSignature) String() string {
-	return fmt.Sprintf("%s%s -> %s", t.Generics, t.ParamType, t.ReturnType)
+	return fmt.Sprintf("%s -> %s", t.ParamType.String(), t.ReturnType.String())
 }
 
 func (t typeSignature) getCursor() misc.Cursor {
@@ -54,13 +49,12 @@ func (t typeSignature) getCursor() misc.Cursor {
 }
 
 func (t typeSignature) getGenerics() GenericArgs {
-	return t.Generics
+	return nil
 }
 
 func (t typeSignature) mapGenerics(gm genericsMap) Type {
 	t.ParamType = t.ParamType.mapGenerics(gm)
 	t.ReturnType = t.ReturnType.mapGenerics(gm)
-	t.Generics = t.Generics.mapGenerics(gm)
 	return t
 }
 
@@ -76,7 +70,9 @@ func (t typeSignature) unpackNestedDefinitions(def Definition) []Definition {
 	return nil
 }
 
-func (t typeSignature) resolveWithRefName(cursor misc.Cursor, refName string, generics GenericArgs, md *Metadata) (resolved.Type, error) {
+func (t typeSignature) resolveWithRefName(
+	cursor misc.Cursor, refName string, generics GenericArgs, md *Metadata,
+) (resolved.Type, error) {
 	resolvedParamType, err := t.ParamType.resolve(cursor, md)
 	if err != nil {
 		return nil, err
@@ -84,9 +80,6 @@ func (t typeSignature) resolveWithRefName(cursor misc.Cursor, refName string, ge
 	resolvedReturnType, err := t.ReturnType.resolve(cursor, md)
 	if err != nil {
 		return nil, err
-	}
-	if len(generics) == 0 {
-		generics = t.Generics
 	}
 	resolvedGenerics, err := generics.resolve(cursor, md)
 	if err != nil {

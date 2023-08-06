@@ -16,3 +16,7 @@ func (t typeBase) writeNamed(sb *strings.Builder) bool {
 	t.genericArgs.Write(sb)
 	return true
 }
+
+func (t typeBase) RefName() string {
+	return t.refName
+}

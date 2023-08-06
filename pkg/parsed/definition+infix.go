@@ -32,8 +32,8 @@ func (def definitionInfix) precondition(*Metadata) (Definition, error) {
 	return def, nil
 }
 
-func (def definitionInfix) getType(cursor misc.Cursor, generics GenericArgs, md *Metadata) (Type, error) {
-	return typeInfix{definition: def}, nil
+func (def definitionInfix) getType(cursor misc.Cursor, generics GenericArgs, md *Metadata) (Type, GenericArgs, error) {
+	return typeInfix{definition: def}, def.GenericParams.toArgs(), nil
 }
 
 func (def definitionInfix) nestedDefinitionNames() []string {

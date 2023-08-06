@@ -436,12 +436,14 @@ func (c *Cursor) InfixNameWithParenthesis() string {
 	return name
 }
 
-func (c *Cursor) InfixName() string {
-	name := c.infix()
+func (c *Cursor) InfixName() (whiteSpaceBefore bool, name string, whitespaceAfter bool) {
+	whiteSpaceBefore = c.Pos > 0 && unicode.IsSpace(c.text[c.Pos-1])
+	name = c.infix()
 	if name != "" {
+		whitespaceAfter = c.IsOk() && unicode.IsSpace(c.text[c.Pos])
 		c.SkipComment()
 	}
-	return name
+	return
 }
 
 func (c *Cursor) infix() string {

@@ -27,7 +27,7 @@ func mainWithError() error {
 		return fmt.Errorf("no input package provided")
 	}
 
-	err := compiler.Compile(*inDir, *outDir, *mainName)
+	err := compiler.Translate(*inDir, *outDir, *mainName)
 	if err != nil {
 		return err
 	}

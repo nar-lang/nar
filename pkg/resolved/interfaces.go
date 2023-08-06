@@ -16,6 +16,8 @@ type DefinitionWithGenerics interface {
 }
 
 type Type interface {
+	RefName() string
+
 	Writer
 }
 

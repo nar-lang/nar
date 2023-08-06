@@ -11,5 +11,9 @@ func NewVoidType() Type {
 type typeVoid struct {
 }
 
+func (t typeVoid) RefName() string {
+	return ""
+}
+
 func (t typeVoid) write(sb *strings.Builder) {
 }
