@@ -21,8 +21,9 @@ func (p parameterTuple) writeName(sb *strings.Builder) {
 
 func (p parameterTuple) writeHeader(sb *strings.Builder) {
 	for i, item := range p.items {
+		sb.WriteString("var ")
 		sb.WriteString(item.getName())
-		sb.WriteString(" := ")
+		sb.WriteString(" = ")
 		sb.WriteString(p.name)
 		sb.WriteString(".P")
 		sb.WriteString(strconv.Itoa(i))

@@ -21,8 +21,9 @@ func (p parameterOption) writeName(sb *strings.Builder) {
 }
 
 func (p parameterOption) writeHeader(sb *strings.Builder) {
+	sb.WriteString("var ")
 	sb.WriteString(p.value.getName())
-	sb.WriteString(" := ")
+	sb.WriteString(" = ")
 	p.valueType.write(sb)
 	sb.WriteString(".(")
 	sb.WriteString(p.name)

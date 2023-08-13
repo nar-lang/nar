@@ -29,8 +29,9 @@ func (d deconsOption) writeComparison(sb *strings.Builder, name string) {
 
 func (d deconsOption) writeHeader(sb *strings.Builder, name string) {
 	if d.alias != "" {
+		sb.WriteString("var ")
 		sb.WriteString(d.alias)
-		sb.WriteString(" := ")
+		sb.WriteString(" = ")
 		sb.WriteString(name)
 		sb.WriteString("\n")
 		sb.WriteString("runtime.UseVar(")

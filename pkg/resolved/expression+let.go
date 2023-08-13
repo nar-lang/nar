@@ -24,8 +24,9 @@ func (e expressionLet) write(sb *strings.Builder) {
 	e.Type().write(sb)
 	sb.WriteString("{\n")
 	for _, def := range e.definitions {
+		sb.WriteString("var ")
 		def.param.writeName(sb)
-		sb.WriteString(" := ")
+		sb.WriteString(" = ")
 
 		if signature, isSignature := def.type_.(TypeSignature); isSignature {
 			signature.writeAsDefinition(sb, def.expression, "", nil)
