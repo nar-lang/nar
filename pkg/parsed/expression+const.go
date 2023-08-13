@@ -24,7 +24,7 @@ func (e expressionConst) precondition(md *Metadata) (Expression, error) {
 	return e, nil
 }
 
-func (e expressionConst) setType(type_ Type, gm genericsMap, md *Metadata) (Expression, Type, error) {
+func (e expressionConst) setType(type_ Type, md *Metadata) (Expression, Type, error) {
 	dt, err := type_.dereference(md)
 	if err != nil {
 		return nil, nil, err
@@ -35,11 +35,19 @@ func (e expressionConst) setType(type_ Type, gm genericsMap, md *Metadata) (Expr
 	}
 
 	if !typesEqual(dt, constType, false, md) {
-		if g, ok := dt.(typeGenericNotResolved); ok {
-			gm[g.Name] = constType
-		} else {
-			return nil, nil, misc.NewError(e.cursor, "types do not match, expected %s got %s", dt, constType)
+		if gn, ok := dt.(typeGenericName); ok {
+			if param, ok := md.CurrentDefinition.getGenerics().byName(gn.Name); ok {
+				canHandle, err := param.constraint.canHandle(constType, e.cursor, md)
+				if err != nil {
+					return nil, nil, err
+				}
+				if canHandle {
+					return e, constType, nil
+				}
+			}
 		}
+
+		return nil, nil, misc.NewError(e.cursor, "types do not match, expected %s got %s", dt, constType)
 	}
 
 	return e, constType, nil

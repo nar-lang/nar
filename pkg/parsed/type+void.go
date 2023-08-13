@@ -14,7 +14,8 @@ type typeVoid struct {
 	typeBase
 }
 
-func (t typeVoid) extractGenerics(other Type, gm genericsMap) {
+func (t typeVoid) extractGenerics(other Type) genericsMap {
+	return nil
 }
 
 func (t typeVoid) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool {
@@ -24,10 +25,6 @@ func (t typeVoid) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool {
 
 func (t typeVoid) String() string {
 	return "()"
-}
-
-func (t typeVoid) getCursor() misc.Cursor {
-	return t.cursor
 }
 
 func (t typeVoid) getGenerics() GenericArgs {

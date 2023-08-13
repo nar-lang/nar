@@ -24,7 +24,7 @@ func (def definitionType) inferGenerics() Definition {
 func (def definitionType) write(sb *strings.Builder) {
 	sb.WriteString("type ")
 	sb.WriteString(def.name)
-	def.writeGenericsFull(sb)
+	def.getGenerics().writeFull(sb)
 	sb.WriteString(" ")
 	def.type_.write(sb)
 	return

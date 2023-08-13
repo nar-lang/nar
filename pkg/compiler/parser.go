@@ -73,7 +73,7 @@ func parseModuleStatement(c *misc.Cursor) (parsed.StatementModule, error) {
 	if !c.Exact(kwModule) {
 		return parsed.StatementModule{}, misc.NewError(*c, "expected `module` keyword here")
 	}
-	name := c.QualifiedIdentifier()
+	name, _ := c.QualifiedIdentifier()
 	if name == "" {
 		return parsed.StatementModule{}, misc.NewError(*c, "expected identifier here")
 	}
@@ -85,13 +85,13 @@ func parseImportStatement(c *misc.Cursor) (parsed.StatementImport, bool, error) 
 	if !c.Exact(kwImport) {
 		return parsed.StatementImport{}, false, nil
 	}
-	module := c.QualifiedIdentifier()
+	module, _ := c.QualifiedIdentifier()
 	alias := module
 	if module == "" {
 		return parsed.StatementImport{}, false, misc.NewError(*c, "expected module name here")
 	}
 	if c.Exact(kwAs) {
-		alias = c.Identifier()
+		alias, _ = c.Identifier()
 		if alias == "" {
 			return parsed.StatementImport{}, false, misc.NewError(*c, "expected module alias here")
 		}
@@ -117,7 +117,7 @@ func parseImportStatement(c *misc.Cursor) (parsed.StatementImport, bool, error) 
 			for {
 				id := c.InfixNameWithParenthesis()
 				if id == "" {
-					id = c.Identifier()
+					id, _ = c.Identifier()
 				}
 				if id == "" {
 					return parsed.StatementImport{}, false, misc.NewError(*c, "expected identifier here")
@@ -152,7 +152,7 @@ func parseDefinition(c *misc.Cursor, modName parsed.ModuleFullName) (parsed.Defi
 	if name != "" {
 		infix = true
 	} else {
-		name = c.Identifier()
+		name, _ = c.Identifier()
 	}
 
 	if name == "" {
@@ -227,7 +227,7 @@ func parseDefinition(c *misc.Cursor, modName parsed.ModuleFullName) (parsed.Defi
 				return nil, misc.NewError(*c, "expected `=` here")
 			}
 
-			alias := c.Identifier()
+			alias, _ := c.Identifier()
 			if alias == "" {
 				return nil, misc.NewError(*c, "expected infix function alias here")
 			}
@@ -269,40 +269,33 @@ func parseGenericParameters(c *misc.Cursor, modName parsed.ModuleFullName) (pars
 
 	for {
 		eltStart := *c
-		name := c.Identifier()
-		if !unicode.IsLower([]rune(name)[0]) {
-			return nil, misc.NewError(*c, "generic parameter name shold start with lowercase letter")
+		name, _ := c.Identifier()
+		if unicode.IsLower([]rune(name)[0]) {
+			return nil, misc.NewError(eltStart, "generic parameter name should start with uppercase letter")
 		}
 
 		constraint := parsed.GenericConstraint(parsed.GenericConstraintAny{})
 		if c.Exact(":") {
-			var gcs []parsed.GenericConstraint
-			for {
-				cs := c.Identifier()
-				if cs == "" {
-					return nil, misc.NewError(*c, "expected generic parameter constraint here")
-				}
-				switch cs {
-				case "any":
-					constraint = parsed.GenericConstraintAny{}
-					break
-				case "comparable":
-					constraint = parsed.GenericConstraintComparable{}
-					break
-				case "equatable":
-					constraint = parsed.GenericConstraintEquatable{}
-					break
-				default:
-					constraint = parsed.GenericConstraintType{Name: cs} //TODO: generic args
-				}
-				gcs = append(gcs, constraint)
-				if c.Exact("+") {
-					continue
-				}
-				break
+			csStart := *c
+			cs, _ := c.Identifier()
+			if cs == "" {
+				return nil, misc.NewError(*c, "expected generic parameter constraint here")
 			}
-			if len(gcs) > 1 {
-				constraint = parsed.GenericConstraintCombined{Constraints: gcs}
+			switch cs {
+			case "Any":
+				constraint = parsed.GenericConstraintAny{}
+				break
+			case "Comparable":
+				constraint = parsed.GenericConstraintComparable{}
+				break
+			case "Equatable":
+				constraint = parsed.GenericConstraintEquatable{}
+				break
+			case "Number":
+				constraint = parsed.GenericConstraintNumber{}
+				break
+			default:
+				return nil, misc.NewError(csStart, "unsupported generic type `%s`, expected `Any`, `Comparable`, `Equatable` of `Number`", cs)
 			}
 		}
 
@@ -325,6 +318,7 @@ func parseGenericParameters(c *misc.Cursor, modName parsed.ModuleFullName) (pars
 }
 
 var errNotAType = fmt.Errorf("optional type is not not a type")
+var uniqueIndex = 0
 
 func parseType(
 	c *misc.Cursor,
@@ -336,6 +330,79 @@ func parseType(
 ) (parsed.Type, error) {
 	startCursor := *c
 
+	if definition {
+		var options []parsed.UnionOption
+		for {
+			if !c.Exact("|") {
+				break
+			}
+
+			optionStart := *c
+			pos := c.Pos
+			name, _ := c.Identifier()
+			if name == "" {
+				return nil, misc.NewError(*c, "failed tor read union option, expected name here")
+			}
+			if !unicode.IsUpper([]rune(name)[0]) {
+				c.Pos = pos
+				return nil, misc.NewError(*c, "option name should start with uppercase letter")
+			}
+			for _, o := range options {
+				if o.Name() == name {
+					c.Pos = pos
+					return nil, misc.NewError(*c, "union has already declared option `%s`", name)
+				}
+			}
+
+			type_, err := parseType(c, modName, false, true, false, genericParams)
+			if err != nil && err != errNotAType {
+				return nil, err
+			}
+			if type_ == nil {
+				type_ = parsed.NewVoidType(*c, modName)
+			}
+			options = append(options, parsed.NewUnionOption(optionStart, name, type_))
+		}
+		if len(options) > 0 {
+			return parsed.NewUnionType(startCursor, modName, options), nil
+		}
+	}
+
+	if allowSignature {
+		param, err := parseParameter(c, uniqueIndex, true)
+		if err != nil {
+			return nil, err
+		}
+
+		var paramType parsed.Type
+		noType := false
+		if c.Exact(":") {
+			if param == nil {
+				return nil, misc.NewError(startCursor, "expected parameter here")
+			}
+			paramType, err = parseType(c, modName, false, false, false, genericParams)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			*c = startCursor
+			paramType, err = parseType(c, modName, false, true, false, genericParams)
+			noType = errors.Is(err, errNotAType)
+		}
+
+		if !noType {
+			if c.Exact("->") {
+				returnType, err := parseType(c, modName, false, false, true, genericParams)
+				if err != nil {
+					return nil, err
+				}
+				return parsed.NewSignatureType(startCursor, modName, paramType, returnType, param), nil
+			} else {
+				c.Pos = startCursor.Pos
+			}
+		}
+	}
+
 	if c.OpenBraces() {
 		start := c.Pos
 		c.Identifier()
@@ -344,7 +411,7 @@ func parseType(
 			c.Pos = start
 			for {
 				fieldStart := *c
-				name := c.Identifier()
+				name, _ := c.Identifier()
 				if name == "" {
 					return nil, misc.NewError(*c, "failed to read record, expected field name here")
 				}
@@ -397,80 +464,6 @@ func parseType(
 		}
 	}
 
-	if definition {
-		var options []parsed.UnionOption
-		for {
-			if !c.Exact("|") {
-				break
-			}
-
-			optionStart := *c
-			pos := c.Pos
-			name := c.Identifier()
-			if name == "" {
-				return nil, misc.NewError(*c, "failed tor read union option, expected name here")
-			}
-			if !unicode.IsUpper([]rune(name)[0]) {
-				c.Pos = pos
-				return nil, misc.NewError(*c, "option name should start with uppercase letter")
-			}
-			for _, o := range options {
-				if o.Name() == name {
-					c.Pos = pos
-					return nil, misc.NewError(*c, "union has already declared option `%s`", name)
-				}
-			}
-
-			type_, err := parseType(c, modName, false, true, false, genericParams)
-			if err != nil && err != errNotAType {
-				return nil, err
-			}
-			if type_ == nil {
-				type_ = parsed.NewVoidType(*c, modName)
-			}
-			options = append(options, parsed.NewUnionOption(optionStart, name, type_))
-		}
-		if len(options) > 0 {
-			return parsed.NewUnionType(startCursor, modName, options), nil
-		}
-	}
-
-	if allowSignature {
-		var paramName string
-		if c.Exact("_") {
-			paramName = "_"
-		} else {
-			paramName = c.Identifier()
-		}
-		var paramType parsed.Type
-		noType := false
-		if c.Exact(":") {
-			var err error
-			paramType, err = parseType(c, modName, false, false, false, genericParams)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			c.Pos = startCursor.Pos
-			var err error
-			paramType, err = parseType(c, modName, false, true, false, genericParams)
-			noType = errors.Is(err, errNotAType)
-			paramName = ""
-		}
-
-		if !noType {
-			if c.Exact("->") {
-				returnType, err := parseType(c, modName, false, false, true, genericParams)
-				if err != nil {
-					return nil, err
-				}
-				return parsed.NewSignatureType(startCursor, modName, paramType, returnType, paramName, nil), nil
-			} else {
-				c.Pos = startCursor.Pos
-			}
-		}
-	}
-
 	if c.OpenParenthesis() {
 		type_, err := parseType(c, modName, false, false, true, genericParams)
 		if err != nil {
@@ -489,7 +482,7 @@ func parseType(
 		}
 	}
 
-	typeName := c.QualifiedIdentifier()
+	typeName, spaceAfter := c.QualifiedIdentifier()
 	if typeName != "" {
 		if !unicode.IsUpper([]rune(typeName)[0]) {
 			if optional {
@@ -497,15 +490,15 @@ func parseType(
 				return nil, nil
 			}
 			c.Pos = startCursor.Pos
-			return nil, misc.NewError(
-				*c,
-				"expected type name starting with uppercase letter here, "+
-					"this one looks like not declared generic parameter",
-			)
+			return nil, misc.NewError(*c, "expected type/generic name starting with uppercase letter here")
 		}
-		genericArgs, err := parseGenericArgs(c, modName, genericParams)
-		if err != nil {
-			return nil, err
+		var genericArgs parsed.GenericArgs
+		if !spaceAfter {
+			var err error
+			genericArgs, err = parseGenericArgs(c, modName, genericParams)
+			if err != nil {
+				return nil, err
+			}
 		}
 		return parsed.NewNamedType(startCursor, modName, typeName, genericArgs), nil
 	}
@@ -650,16 +643,11 @@ func parseExpression(
 		//let
 		if c.Exact(kwLet) {
 			var defs []parsed.LetDefinition
+			index := 0
 			for {
-				var name string
-				if c.Exact("_") {
-					name = "_"
-				} else {
-					name = c.Identifier()
-				}
-				if name == "" {
-					return nil, misc.NewError(*c, "expected name here")
-				}
+				param, err := parseParameter(c, index, false)
+				index++
+
 				if !c.Exact(":") {
 					return nil, misc.NewError(*c, "expected `:` here")
 				}
@@ -675,7 +663,7 @@ func parseExpression(
 					return nil, err
 				}
 
-				defs = append(defs, parsed.NewLetDefinition(name, protoType, expr))
+				defs = append(defs, parsed.NewLetDefinition(param, protoType, expr))
 
 				if c.Exact(";") {
 					continue
@@ -700,28 +688,30 @@ func parseExpression(
 		isList := !isTuple && c.OpenBrackets()
 		if isTuple || isList {
 			var items []parsed.Expression
-			for {
-				if isList && c.CloseBrackets() {
-					break
-				}
 
-				item, err := parseExpression(c, modName, generics)
-				if err != nil {
-					return nil, err
-				}
-				items = append(items, item)
+			if !isList || !c.CloseBrackets() {
+				for {
+					item, err := parseExpression(c, modName, generics)
+					if err != nil {
+						return nil, err
+					}
+					items = append(items, item)
 
-				if c.Exact(",") {
-					continue
-				}
-				if isTuple && c.CloseBraces() {
-					break
-				}
-				if isTuple {
-					return nil, misc.NewError(*c, "expected `,` or `}` here")
-				}
-				if isList {
-					return nil, misc.NewError(*c, "expected `,` or `]` here")
+					if c.Exact(",") {
+						continue
+					}
+					if isTuple && c.CloseBraces() {
+						break
+					}
+					if isList && c.CloseBrackets() {
+						break
+					}
+					if isTuple {
+						return nil, misc.NewError(*c, "expected `,` or `}` here")
+					}
+					if isList {
+						return nil, misc.NewError(*c, "expected `,` or `]` here")
+					}
 				}
 			}
 
@@ -744,13 +734,15 @@ func parseExpression(
 		}
 
 		//identifier/call
-		if id := c.QualifiedIdentifier(); id != "" {
+		if id, spaceAfter := c.QualifiedIdentifier(); id != "" {
 			var genericArgs parsed.GenericArgs
 			if len(exs) == 0 {
 				var err error
-				genericArgs, err = parseGenericArgs(c, modName, generics)
-				if err != nil {
-					return nil, err
+				if !spaceAfter {
+					genericArgs, err = parseGenericArgs(c, modName, generics)
+					if err != nil {
+						return nil, err
+					}
 				}
 			}
 			exs = append(exs, parsed.NewIdentifierExpression(eltCursor, id, genericArgs))
@@ -777,25 +769,33 @@ func parseDecons(
 	startCursor := *c
 	// any
 	if c.Exact("_") {
-		return parsed.NewAnyDecons(), nil
+		return finishParseDecons(c, modName, generics, parsed.NewAnyDecons(startCursor))
 	}
 
 	// const char
 	if constChar := c.Char(); constChar != "" {
-		return parsed.NewConstDecons(parsed.ConstKindChar, constChar), nil
+		return finishParseDecons(
+			c, modName, generics, parsed.NewConstDecons(startCursor, parsed.ConstKindChar, constChar),
+		)
 	}
 
 	if constNumber, integer := c.Number(); constNumber != "" {
 		if integer {
-			return parsed.NewConstDecons(parsed.ConstKindInt, constNumber), nil
+			return finishParseDecons(
+				c, modName, generics, parsed.NewConstDecons(startCursor, parsed.ConstKindInt, constNumber),
+			)
 		} else {
-			return parsed.NewConstDecons(parsed.ConstKindFloat, constNumber), nil
+			return finishParseDecons(
+				c, modName, generics, parsed.NewConstDecons(startCursor, parsed.ConstKindFloat, constNumber),
+			)
 		}
 	}
 
 	// const string
 	if constString := c.String(); constString != "" {
-		return parsed.NewConstDecons(parsed.ConstKindString, constString), nil
+		return finishParseDecons(
+			c, modName, generics, parsed.NewConstDecons(startCursor, parsed.ConstKindString, constString),
+		)
 	}
 
 	//tuple
@@ -820,16 +820,44 @@ func parseDecons(
 			return nil, misc.NewError(*c, "decons typle should contain at least 2 elements")
 		}
 
-		return parsed.NewTupleDecons(startCursor, items, ""), nil //TODO: alias
+		return finishParseDecons(c, modName, generics, parsed.NewTupleDecons(startCursor, items))
+	}
+
+	//list
+	if c.OpenBrackets() {
+		var items []parsed.Decons
+		if !c.CloseBrackets() {
+			for {
+				item, err := parseDecons(c, modName, generics)
+				if err != nil {
+					return nil, err
+				}
+				items = append(items, item)
+
+				if c.Exact(",") {
+					continue
+				}
+				if c.CloseBrackets() {
+					break
+				}
+				return nil, misc.NewError(*c, "expected `,` or `]` here")
+			}
+		}
+
+		return finishParseDecons(c, modName, generics, parsed.NewListDecons(startCursor, items))
 	}
 
 	// union
-	if id := c.QualifiedIdentifier(); id != "" {
+	if id, spaceAfter := c.QualifiedIdentifier(); id != "" {
 		cs := *c
 		if unicode.IsUpper([]rune(id)[0]) {
-			genericArgs, err := parseGenericArgs(c, modName, generics)
-			if err != nil {
-				return nil, err
+			var genericArgs parsed.GenericArgs
+			if !spaceAfter {
+				var err error
+				genericArgs, err = parseGenericArgs(c, modName, generics)
+				if err != nil {
+					return nil, err
+				}
 			}
 
 			pos := c.Pos
@@ -844,13 +872,119 @@ func parseDecons(
 				}
 			}
 			if arg == nil {
-				arg = parsed.NewAnyDecons()
+				var err error
+				arg, err = finishParseDecons(c, modName, generics, parsed.NewAnyDecons(cs))
+				if err != nil {
+					return nil, err
+				}
 			}
-			return parsed.NewOptionDecons(cs, id, genericArgs, arg, ""), nil //TODO: alias
+			return finishParseDecons(c, modName, generics, parsed.NewOptionDecons(cs, id, genericArgs, arg))
 		} else {
-			return parsed.NewNamedDecons(cs, id), nil
+			return finishParseDecons(c, modName, generics, parsed.NewNamedDecons(cs, id))
 		}
 	}
 
 	return nil, misc.NewError(*c, "expected case value here")
+}
+
+func finishParseDecons(
+	c *misc.Cursor, modName parsed.ModuleFullName, generics parsed.GenericParams, first parsed.Decons,
+) (parsed.Decons, error) {
+	cs := *c
+	if c.Exact("::") {
+		second, err := parseDecons(c, modName, generics)
+		if err != nil {
+			return nil, err
+		}
+		return parsed.NewConsDecons(cs, first, second), nil
+	}
+	if c.Exact(kwAs) {
+		alias, _ := c.Identifier()
+		if alias == "" {
+			return nil, misc.NewError(*c, "expected alias here")
+		}
+		return first.SetAlias(alias)
+	}
+	return first, nil
+}
+
+func parseParameter(c *misc.Cursor, index int, optional bool) (parsed.Parameter, error) {
+	startCursor := *c
+	//tuple
+	if c.OpenBraces() {
+		var items []parsed.Parameter
+		nestedIndex := 0
+		for {
+			item, err := parseParameter(c, nestedIndex, true)
+			nestedIndex++
+			if err != nil {
+				return nil, err
+			}
+			if item == nil {
+				if optional {
+					*c = startCursor
+					return nil, nil
+				}
+				return nil, misc.NewError(startCursor, "expected tuple deconstruction here")
+			}
+			items = append(items, item)
+			if c.Exact(",") {
+				continue
+			}
+			if c.CloseBraces() {
+				break
+			}
+			if optional {
+				*c = startCursor
+				return nil, nil
+			}
+			return nil, misc.NewError(*c, "expected `,` or `}` here")
+		}
+		if len(items) < 2 {
+			return nil, misc.NewError(startCursor, "tuple deconstruction should have at least 2 items")
+		}
+		return parsed.NewTupleParameter(startCursor, index, items), nil
+	}
+
+	//union
+	if c.OpenParenthesis() {
+		id, _ := c.QualifiedIdentifier()
+		value, err := parseParameter(c, 0, true)
+		if err != nil {
+			return nil, err
+		}
+		if !c.CloseParenthesis() {
+			if optional {
+				*c = startCursor
+				return nil, nil
+			}
+			return nil, misc.NewError(*c, "expected `)` here")
+		}
+		return parsed.NewOptionParameter(startCursor, index, id, value), nil
+	}
+
+	//omitted
+	if c.Exact("_") {
+		return parsed.NewOmittedParameter(startCursor), nil
+	}
+
+	//named
+	id, _ := c.Identifier()
+	if id != "" {
+		if unicode.IsUpper([]rune(id)[0]) {
+			if optional {
+				*c = startCursor
+				return nil, nil
+			}
+			return nil, misc.NewError(startCursor, "variable name should start with lowercase")
+		}
+		return parsed.NewNamedParameter(startCursor, id), nil
+	}
+
+	if optional {
+		*c = startCursor
+		return nil, nil
+	}
+
+	return nil, misc.NewError(startCursor, "expected parameter here")
 }

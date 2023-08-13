@@ -40,7 +40,7 @@ func (def definitionType) getType(cursor misc.Cursor, generics GenericArgs, md *
 		return NewAddressedType(def.cursor, def.Address.moduleFullName, def.Address, generics, true), nil, nil
 	}
 
-	gm, err := def.getGenericsMap(cursor, generics)
+	gm, err := def.getGenericsMap(cursor, generics, false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -76,8 +76,8 @@ func (def definitionType) resolve(md *Metadata) (resolved.Definition, bool, erro
 		return nil, false, err
 	}
 
-	resolvedParams, err := def.GenericParams.Resolve(md)
-	def.GenericParams.Resolve(md)
+	resolvedParams, err := def.GenericParams.resolve(md)
+	def.GenericParams.resolve(md)
 
 	return resolved.NewTypeDefinition(resolvedName, resolvedParams, resolvedType), true, nil
 }

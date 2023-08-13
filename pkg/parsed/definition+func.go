@@ -34,7 +34,8 @@ func (def definitionFunc) precondition(md *Metadata) (Definition, error) {
 	if def.Extern {
 		return def, nil
 	}
-	gm, err := def.getGenericsMap(def.cursor, def.GenericParams.toArgs())
+
+	gm, err := def.getGenericsMap(def.cursor, def.GenericParams.toArgs(), true)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +51,7 @@ func (def definitionFunc) precondition(md *Metadata) (Definition, error) {
 }
 
 func (def definitionFunc) getType(cursor misc.Cursor, generics GenericArgs, md *Metadata) (Type, GenericArgs, error) {
-	gm, err := def.getGenericsMap(cursor, generics)
+	gm, err := def.getGenericsMap(cursor, generics, false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -74,7 +75,7 @@ func (def definitionFunc) resolve(md *Metadata) (resolved.Definition, bool, erro
 		return nil, false, nil
 	}
 
-	gm, err := def.getGenericsMap(def.cursor, def.GenericParams.toArgs())
+	gm, err := def.getGenericsMap(def.cursor, def.GenericParams.toArgs(), true)
 	if err != nil {
 		return nil, false, err
 	}
@@ -84,7 +85,7 @@ func (def definitionFunc) resolve(md *Metadata) (resolved.Definition, bool, erro
 		return nil, false, err
 	}
 
-	def.Expression, _, err = def.Expression.setType(returnType, genericsMap{}, md)
+	def.Expression, _, err = def.Expression.setType(returnType, md)
 	if err != nil {
 		return nil, false, err
 	}
@@ -110,11 +111,11 @@ func (def definitionFunc) resolve(md *Metadata) (resolved.Definition, bool, erro
 
 	if _, ok := dt.(typeSignature); !ok {
 		fnType = typeSignature{
-			ParamName:  "x",
+			Param:      NewNamedParameter(def.cursor, "x"),
 			ParamType:  typeVoid{},
 			ReturnType: fnType,
 			typeBase: typeBase{
-				cursor:     misc.Cursor{},
+				cursor:     def.cursor,
 				moduleName: md.currentModuleName(),
 			},
 		}
@@ -122,7 +123,7 @@ func (def definitionFunc) resolve(md *Metadata) (resolved.Definition, bool, erro
 
 	resolvedType, err := fnType.resolve(def.cursor, md)
 
-	resolvedParams, err := def.GenericParams.Resolve(md)
+	resolvedParams, err := def.GenericParams.resolve(md)
 	if err != nil {
 		return nil, false, err
 	}
@@ -139,8 +140,11 @@ func (def definitionFunc) injectParameters(gm genericsMap, md *Metadata) (Type, 
 		if err != nil {
 			return nil, err
 		}
-		if signature, ok := dt.(typeSignature); ok && signature.ParamName != "" {
-			md.LocalVars[signature.ParamName] = signature.ParamType
+		if signature, ok := dt.(typeSignature); ok && signature.Param != nil {
+			err := signature.Param.extractLocals(signature.ParamType, md)
+			if err != nil {
+				return nil, err
+			}
 			defType = signature.ReturnType
 		} else {
 			break

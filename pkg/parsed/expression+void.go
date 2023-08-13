@@ -13,7 +13,7 @@ func (e expressionVoid) precondition(md *Metadata) (Expression, error) {
 	return e, nil
 }
 
-func (e expressionVoid) setType(type_ Type, gm genericsMap, md *Metadata) (Expression, Type, error) {
+func (e expressionVoid) setType(type_ Type, md *Metadata) (Expression, Type, error) {
 	_, ok := type_.(typeVoid)
 	if !ok {
 		return nil, nil, misc.NewError(e.cursor, "expecting void type here")

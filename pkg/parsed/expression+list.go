@@ -31,7 +31,7 @@ func (e expressionList) precondition(md *Metadata) (Expression, error) {
 	return e, nil
 }
 
-func (e expressionList) setType(type_ Type, gm genericsMap, md *Metadata) (Expression, Type, error) {
+func (e expressionList) setType(type_ Type, md *Metadata) (Expression, Type, error) {
 	gs := type_.getGenerics()
 	if len(gs) != 1 {
 		return nil, nil, misc.NewError(e.cursor, "expected list type here")
@@ -44,13 +44,13 @@ func (e expressionList) setType(type_ Type, gm genericsMap, md *Metadata) (Expre
 
 	var err error
 	for i, item := range e.Items {
-		e.Items[i], e.ItemType, err = item.setType(e.ItemType, gm, md)
+		e.Items[i], e.ItemType, err = item.setType(e.ItemType, md)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 	for i, item := range e.Items {
-		e.Items[i], _, err = item.setType(e.ItemType, gm, md)
+		e.Items[i], _, err = item.setType(e.ItemType, md)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -60,15 +60,17 @@ func (e expressionList) setType(type_ Type, gm genericsMap, md *Metadata) (Expre
 }
 
 func (e expressionList) getType(md *Metadata) (Type, error) {
-	var types []Type
+	if e.ItemType != nil {
+		return TypeBuiltinList(e.cursor, md.currentModuleName(), e.ItemType), nil
+	}
 	for _, ex := range e.Items {
-		t, err := ex.getType(md)
+		itemType, err := ex.getType(md)
 		if err != nil {
 			return nil, err
 		}
-		types = append(types, t)
+		return TypeBuiltinList(e.cursor, md.currentModuleName(), itemType), nil
 	}
-	return typeTuple{Items: types}, nil
+	return TypeBuiltinList(e.cursor, md.currentModuleName(), typeGenericNotResolved{Name: "__empty_list"}), nil
 }
 
 func (e expressionList) resolve(md *Metadata) (resolved.Expression, error) {

@@ -12,8 +12,9 @@ type typeInfix struct {
 	definition definitionInfix
 }
 
-func (t typeInfix) extractGenerics(other Type, gm genericsMap) {
+func (t typeInfix) extractGenerics(other Type) genericsMap {
 
+	return nil
 }
 
 func (t typeInfix) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool {

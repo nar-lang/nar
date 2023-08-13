@@ -32,7 +32,7 @@ func (e expressionChain) precondition(md *Metadata) (Expression, error) {
 	return ex.precondition(md)
 }
 
-func (e expressionChain) setType(type_ Type, gm genericsMap, md *Metadata) (Expression, Type, error) {
+func (e expressionChain) setType(type_ Type, md *Metadata) (Expression, Type, error) {
 	return nil, nil, misc.NewError(e.cursor, "trying to set type to chain expression (this is a compiler error)")
 }
 
@@ -67,13 +67,13 @@ func unwrapChain(chain Expression, md *Metadata) (Expression, error) {
 			ident = expressionIdentifier{Name: infix.name, cursor: exs[0].getCursor()}
 		}
 
-		type_, _, err := md.getTypeByName(md.currentModuleName(), ident.Name, ident.GenericArgs, ident.cursor)
-		if err != nil {
-			return nil, err
-		}
-
 		if len(exs) == 1 {
-			if ts, ok := type_.(typeSignature); ok {
+			type_, _, err := md.getTypeByName(md.currentModuleName(), ident.Name, ident.GenericArgs, ident.cursor)
+			if err != nil {
+				return nil, err
+			}
+
+			if ts, ok := type_.(typeSignature); ok && typesEqual(ts.ParamType, typeVoid{}, false, md) {
 				generics := ident.GenericArgs
 				if len(generics) == 0 {
 					generics = ts.ReturnType.getGenerics()

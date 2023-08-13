@@ -30,7 +30,7 @@ func (def definitionBase) getAddress() DefinitionAddress {
 	return def.Address
 }
 
-func (def definitionBase) getGenericsMap(cursor misc.Cursor, args GenericArgs) (genericsMap, error) {
+func (def definitionBase) getGenericsMap(cursor misc.Cursor, args GenericArgs, resolved bool) (genericsMap, error) {
 	var gm genericsMap
 	if len(def.GenericParams) != 0 {
 		gm = genericsMap{}
@@ -42,7 +42,11 @@ func (def definitionBase) getGenericsMap(cursor misc.Cursor, args GenericArgs) (
 			}
 		} else {
 			for _, p := range def.GenericParams {
-				args = append(args, typeGenericNotResolved{Name: p.name})
+				if resolved {
+					args = append(args, typeGenericName{Name: p.name})
+				} else {
+					args = append(args, typeGenericNotResolved{Name: p.name})
+				}
 			}
 		}
 

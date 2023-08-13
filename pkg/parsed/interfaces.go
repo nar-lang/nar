@@ -29,16 +29,17 @@ type Type interface {
 	mapGenerics(gm genericsMap) Type
 	getGenerics() GenericArgs
 	equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool
-	extractGenerics(other Type, gm genericsMap)
+	extractGenerics(other Type) genericsMap
 	getCursor() misc.Cursor
 	getEnclosingModuleName() ModuleFullName
+	extractLocals(type_ Type, md *Metadata) error
 
 	fmt.Stringer
 }
 
 type Expression interface {
 	precondition(md *Metadata) (Expression, error)
-	setType(type_ Type, gm genericsMap, md *Metadata) (Expression, Type, error)
+	setType(type_ Type, md *Metadata) (Expression, Type, error)
 	getType(md *Metadata) (Type, error)
 	resolve(md *Metadata) (resolved.Expression, error)
 	getCursor() misc.Cursor
@@ -47,4 +48,11 @@ type Expression interface {
 type Decons interface {
 	resolve(type_ Type, md *Metadata) (resolved.Decons, error)
 	extractLocals(type_ Type, md *Metadata) error
+	SetAlias(alias string) (Decons, error)
+}
+
+type Parameter interface {
+	resolve(type_ Type, md *Metadata) (resolved.Parameter, error)
+	extractLocals(type_ Type, md *Metadata) error
+	SetAlias(alias string) (Parameter, error)
 }

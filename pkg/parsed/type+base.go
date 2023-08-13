@@ -16,3 +16,7 @@ func (t typeBase) getCursor() misc.Cursor {
 func (t typeBase) getEnclosingModuleName() ModuleFullName {
 	return t.moduleName
 }
+
+func (t typeBase) extractLocals(type_ Type, md *Metadata) error {
+	return nil
+}

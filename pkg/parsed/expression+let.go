@@ -25,12 +25,21 @@ func (e expressionLet) precondition(md *Metadata) (Expression, error) {
 	var err error
 	locals := md.cloneLocalVars()
 	for i, def := range e.Definitions {
-		md.LocalVars[def.name] = def.type_
+		err = def.param.extractLocals(def.type_, md)
+		if err != nil {
+			return nil, err
+		}
+		innerLocals := md.cloneLocalVars()
+		err = def.type_.extractLocals(def.type_, md)
+		if err != nil {
+			return nil, err
+		}
 		def.expression, err = def.expression.precondition(md)
 		if err != nil {
 			return nil, err
 		}
 		e.Definitions[i] = def
+		md.LocalVars = innerLocals
 	}
 	e.Expression, err = e.Expression.precondition(md)
 	if err != nil {
@@ -40,19 +49,41 @@ func (e expressionLet) precondition(md *Metadata) (Expression, error) {
 	return e, nil
 }
 
-func (e expressionLet) setType(type_ Type, gm genericsMap, md *Metadata) (Expression, Type, error) {
+func (e expressionLet) setType(type_ Type, md *Metadata) (Expression, Type, error) {
 	var err error
 	locals := md.cloneLocalVars()
 	for i, def := range e.Definitions {
-		def.expression, def.type_, err = def.expression.setType(def.type_, gm, md)
+
+		innerLocals := md.cloneLocalVars()
+		err = def.type_.extractLocals(def.type_, md)
+		if err != nil {
+			return nil, nil, err
+		}
+		exprType := def.type_
+
+		dt, err := def.type_.dereference(md)
+		if err != nil {
+			return nil, nil, err
+		}
+		signature, ok := dt.(typeSignature)
+		if ok {
+			_, exprType = signature.flattenDefinition()
+		}
+
+		def.expression, _, err = def.expression.setType(exprType, md)
 		if err != nil {
 			return nil, nil, err
 		}
 		e.Definitions[i] = def
-		md.LocalVars[def.name] = def.type_
+		md.LocalVars = innerLocals
+
+		err = def.param.extractLocals(def.type_, md)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	var inferredType Type
-	e.Expression, inferredType, err = e.Expression.setType(type_, gm, md)
+	e.Expression, inferredType, err = e.Expression.setType(type_, md)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -67,13 +98,30 @@ func (e expressionLet) getType(md *Metadata) (Type, error) {
 func (e expressionLet) resolve(md *Metadata) (resolved.Expression, error) {
 	locals := md.cloneLocalVars()
 	var resolvedLets []resolved.LetDefinition
-	for _, definition := range e.Definitions {
-		resolvedExpression, err := definition.expression.resolve(md)
+	for _, def := range e.Definitions {
+		innerLocals := md.cloneLocalVars()
+		err := def.type_.extractLocals(def.type_, md)
 		if err != nil {
 			return nil, err
 		}
-		resolvedLets = append(resolvedLets, resolved.NewLetDefinition(definition.name, resolvedExpression))
-		md.LocalVars[definition.name] = definition.type_
+		resolvedExpression, err := def.expression.resolve(md)
+		if err != nil {
+			return nil, err
+		}
+		resolvedParam, err := def.param.resolve(def.type_, md)
+		if err != nil {
+			return nil, err
+		}
+		resolvedType, err := def.type_.resolve(e.cursor, md)
+		if err != nil {
+			return nil, err
+		}
+		resolvedLets = append(resolvedLets, resolved.NewLetDefinition(resolvedParam, resolvedType, resolvedExpression))
+		md.LocalVars = innerLocals
+		err = def.param.extractLocals(def.type_, md)
+		if err != nil {
+			return nil, err
+		}
 	}
 	resolvedExpression, err := e.Expression.resolve(md)
 	if err != nil {
@@ -84,23 +132,23 @@ func (e expressionLet) resolve(md *Metadata) (resolved.Expression, error) {
 	return result, nil
 }
 
-func NewLetDefinition(name string, type_ Type, expression Expression) LetDefinition {
-	return LetDefinition{name: name, type_: type_, expression: expression}
+func NewLetDefinition(param Parameter, type_ Type, expression Expression) LetDefinition {
+	return LetDefinition{param: param, type_: type_, expression: expression}
 }
 
 type LetDefinition struct {
-	name       string
+	param      Parameter
 	type_      Type
 	expression Expression
 }
 
 func (d LetDefinition) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Name       string
+		Param      Parameter
 		Type       Type
 		Expression Expression
 	}{
-		Name:       d.name,
+		Param:      d.param,
 		Type:       d.type_,
 		Expression: d.expression,
 	})

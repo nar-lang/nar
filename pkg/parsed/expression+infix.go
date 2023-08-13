@@ -44,7 +44,7 @@ func (e ExpressionInfix) precondition(md *Metadata) (Expression, error) {
 	return nil, misc.NewError(e.cursor, "trying to run precondition of infix expression (this is a compiler error)")
 }
 
-func (e ExpressionInfix) setType(type_ Type, gm genericsMap, md *Metadata) (Expression, Type, error) {
+func (e ExpressionInfix) setType(type_ Type, md *Metadata) (Expression, Type, error) {
 	return nil, nil, misc.NewError(e.cursor, "trying to set type of infix expression (this is a compiler error)")
 }
 

@@ -4,12 +4,15 @@ import (
 	"strings"
 )
 
-func NewApplyExpression(type_ Type, name string, genericArgs GenericArgs, args []Expression) Expression {
+func NewApplyExpression(
+	type_ Type, name string, genericArgs GenericArgs, args []Expression, argTypes []Type,
+) Expression {
 	return expressionApply{
 		type_:       type_,
 		name:        name,
 		genericArgs: genericArgs,
 		args:        args,
+		argTypes:    argTypes,
 	}
 }
 
@@ -18,6 +21,7 @@ type expressionApply struct {
 	name        string
 	genericArgs GenericArgs
 	args        []Expression
+	argTypes    []Type
 }
 
 func (e expressionApply) Type() Type {
@@ -27,9 +31,17 @@ func (e expressionApply) Type() Type {
 func (e expressionApply) write(sb *strings.Builder) {
 	sb.WriteString(e.name)
 	e.genericArgs.Write(sb)
-	for _, arg := range e.args {
+	for i, arg := range e.args {
 		sb.WriteString("(")
+		_, requiresCast := e.argTypes[i].(typeGenericName)
+		if requiresCast {
+			e.argTypes[i].write(sb)
+			sb.WriteString("(")
+		}
 		arg.write(sb)
+		if requiresCast {
+			sb.WriteString(")")
+		}
 		sb.WriteString(")")
 	}
 }

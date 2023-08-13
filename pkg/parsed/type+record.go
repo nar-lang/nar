@@ -17,9 +17,10 @@ type typeRecord struct {
 	Fields []RecordField
 }
 
-func (t typeRecord) extractGenerics(other Type, gm genericsMap) {
+func (t typeRecord) extractGenerics(other Type) genericsMap {
 	//TODO implement me
 	panic("implement me")
+	return nil
 }
 
 func (t typeRecord) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool {
@@ -52,10 +53,6 @@ func (t typeRecord) String() string {
 	}
 	sb.WriteString("}")
 	return sb.String()
-}
-
-func (t typeRecord) getCursor() misc.Cursor {
-	return t.cursor
 }
 
 func (t typeRecord) getGenerics() GenericArgs {

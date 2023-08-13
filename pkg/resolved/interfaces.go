@@ -11,8 +11,7 @@ type Definition interface {
 }
 
 type DefinitionWithGenerics interface {
-	writeGenericsShort(sb *strings.Builder)
-	writeGenericsFull(sb *strings.Builder)
+	getGenerics() GenericParams
 }
 
 type Type interface {
@@ -22,12 +21,18 @@ type Type interface {
 }
 
 type Expression interface {
-	Writer
-
 	Type() Type
+
+	Writer
 }
 
 type Decons interface {
 	writeComparison(sb *strings.Builder, name string)
 	writeHeader(sb *strings.Builder, name string)
+}
+
+type Parameter interface {
+	writeName(sb *strings.Builder)
+	writeHeader(sb *strings.Builder)
+	getName() string
 }

@@ -17,14 +17,16 @@ type typeUnion struct {
 	Options []UnionOption
 }
 
-func (t typeUnion) extractGenerics(other Type, gm genericsMap) {
+func (t typeUnion) extractGenerics(other Type) genericsMap {
+	var gm genericsMap
 	if to, ok := other.(typeUnion); ok {
 		if len(t.Options) == len(to.Options) {
 			for i, o := range t.Options {
-				o.valueType.extractGenerics(to.Options[i].valueType, gm)
+				gm = mergeGenericMaps(gm, o.valueType.extractGenerics(to.Options[i].valueType))
 			}
 		}
 	}
+	return gm
 }
 
 func (t typeUnion) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool {
@@ -57,10 +59,6 @@ func (t typeUnion) String() string {
 		}
 	}
 	return sb.String()
-}
-
-func (t typeUnion) getCursor() misc.Cursor {
-	return t.cursor
 }
 
 func (t typeUnion) getGenerics() GenericArgs {
@@ -113,7 +111,7 @@ func (t typeUnion) unpackNestedDefinitions(def Definition) []Definition {
 		}
 
 		fn.Type = typeSignature{
-			ParamName:  "x",
+			Param:      NewNamedParameter(t.cursor, "x"),
 			ParamType:  opt.valueType,
 			ReturnType: rt,
 		}

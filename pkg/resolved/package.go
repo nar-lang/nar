@@ -81,7 +81,9 @@ func (p Package) Write(outDir string) error {
 
 	sb.Reset()
 
-	sb.WriteString("require \"github.com/oaklang/runtime\" v0.0.1\n\n")
+	sb.WriteString("require \"github.com/oaklang/runtime\" ")
+	sb.WriteString(kTargetRuntimeVersion)
+	sb.WriteString("\n\n")
 
 	for k := range p.deps {
 		sb.WriteString("replace \"")

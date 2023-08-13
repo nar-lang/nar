@@ -15,6 +15,34 @@ type GenericParam struct {
 
 type GenericParams []GenericParam
 
+func (gs GenericParams) writeFull(sb *strings.Builder) {
+	if len(gs) > 0 {
+		sb.WriteString("[")
+		for i, p := range gs {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(p.name)
+			sb.WriteString(" ")
+			p.constraint.write(sb)
+		}
+		sb.WriteString("]")
+	}
+}
+
+func (gs GenericParams) writeShort(sb *strings.Builder) {
+	if len(gs) > 0 {
+		sb.WriteString("[")
+		for i, p := range gs {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(p.name)
+		}
+		sb.WriteString("]")
+	}
+}
+
 type GenericArgs []Type
 
 func (ga GenericArgs) Write(sb *strings.Builder) {
@@ -50,8 +78,7 @@ type GenericConstraintType struct {
 }
 
 func (g GenericConstraintType) write(sb *strings.Builder) {
-	//TODO implement me
-	panic("implement me")
+	sb.WriteString(g.name)
 }
 
 func NewComparableGenericConstraint(name string) GenericConstraint {
@@ -78,9 +105,14 @@ func (g genericConstraintEquatable) write(sb *strings.Builder) {
 	sb.WriteString(g.name)
 }
 
-type GenericConstraintCombined []GenericConstraint
+func NewNumberGenericConstraint(name string) GenericConstraint {
+	return genericConstraintNumber{name: name}
+}
 
-func (g GenericConstraintCombined) write(sb *strings.Builder) {
-	//TODO implement me
-	panic("implement me")
+type genericConstraintNumber struct {
+	name string
+}
+
+func (g genericConstraintNumber) write(sb *strings.Builder) {
+	sb.WriteString(g.name)
 }

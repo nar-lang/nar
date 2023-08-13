@@ -30,7 +30,7 @@ func (e expressionTuple) precondition(md *Metadata) (Expression, error) {
 	return e, nil
 }
 
-func (e expressionTuple) setType(type_ Type, gm genericsMap, md *Metadata) (Expression, Type, error) {
+func (e expressionTuple) setType(type_ Type, md *Metadata) (Expression, Type, error) {
 	tuple, ok := type_.(typeTuple)
 	if !ok {
 		return nil, nil, misc.NewError(e.cursor, "expected tuple type here")
@@ -39,7 +39,7 @@ func (e expressionTuple) setType(type_ Type, gm genericsMap, md *Metadata) (Expr
 	var inferredItems []Type
 	for i, itemType := range tuple.Items {
 		var inferredItemType Type
-		e.Items[i], inferredItemType, err = e.Items[i].setType(itemType, gm, md)
+		e.Items[i], inferredItemType, err = e.Items[i].setType(itemType, md)
 		inferredItems = append(inferredItems, inferredItemType)
 		if err != nil {
 			return nil, nil, err

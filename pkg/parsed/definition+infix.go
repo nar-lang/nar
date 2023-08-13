@@ -33,7 +33,15 @@ func (def definitionInfix) precondition(*Metadata) (Definition, error) {
 }
 
 func (def definitionInfix) getType(cursor misc.Cursor, generics GenericArgs, md *Metadata) (Type, GenericArgs, error) {
-	return typeInfix{definition: def}, def.GenericParams.toArgs(), nil
+	addr := def.Address
+	addr.definitionName = def.Alias
+	fn, ok := md.findDefinitionByAddress(addr)
+	if !ok {
+		return nil, nil, misc.NewError(
+			cursor, "cannot find `%s` infix function alias `%s`", def.Name(), addr.definitionName,
+		)
+	}
+	return typeInfix{definition: def}, fn.getGenerics().toArgs(), nil
 }
 
 func (def definitionInfix) nestedDefinitionNames() []string {

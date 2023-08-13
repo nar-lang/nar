@@ -15,7 +15,7 @@ type typeGenericName struct {
 	Name string
 }
 
-func (t typeGenericName) extractGenerics(other Type, gm genericsMap) {}
+func (t typeGenericName) extractGenerics(other Type) genericsMap { return nil }
 
 func (t typeGenericName) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool {
 	if ignoreGenerics {

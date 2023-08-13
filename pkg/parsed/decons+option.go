@@ -5,8 +5,8 @@ import (
 	"oak-compiler/pkg/resolved"
 )
 
-func NewOptionDecons(c misc.Cursor, option string, args GenericArgs, arg Decons, alias string) Decons {
-	return deconsOption{cursor: c, Option: option, GenericArgs: args, Arg: arg, Alias: alias}
+func NewOptionDecons(c misc.Cursor, option string, args GenericArgs, arg Decons) Decons {
+	return deconsOption{cursor: c, Option: option, GenericArgs: args, Arg: arg}
 }
 
 type deconsOption struct {
@@ -16,6 +16,11 @@ type deconsOption struct {
 	Arg            Decons
 	Alias          string
 	cursor         misc.Cursor
+}
+
+func (d deconsOption) SetAlias(alias string) (Decons, error) {
+	d.Alias = alias
+	return d, nil
 }
 
 func (d deconsOption) extractLocals(type_ Type, md *Metadata) error {

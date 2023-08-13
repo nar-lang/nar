@@ -28,7 +28,7 @@ func (e expressionOption) precondition(md *Metadata) (Expression, error) {
 	return e, nil
 }
 
-func (e expressionOption) setType(type_ Type, gm genericsMap, md *Metadata) (Expression, Type, error) {
+func (e expressionOption) setType(type_ Type, md *Metadata) (Expression, Type, error) {
 	dt, err := type_.dereference(md)
 	if err != nil {
 		return nil, nil, err
@@ -38,10 +38,12 @@ func (e expressionOption) setType(type_ Type, gm genericsMap, md *Metadata) (Exp
 		return nil, nil, misc.NewError(e.cursor, "expected union type, got %s", type_)
 	}
 
+	gm := e.Type.extractGenerics(unionType)
+
 	for i, o := range unionType.Options {
 		if o.name == e.Option {
 			var err error
-			e.Value, o.valueType, err = e.Value.setType(o.valueType, gm, md)
+			e.Value, o.valueType, err = e.Value.setType(o.valueType, md)
 			if err != nil {
 				return nil, nil, err
 			}

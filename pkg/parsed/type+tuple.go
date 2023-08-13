@@ -16,14 +16,16 @@ type typeTuple struct {
 	Items []Type
 }
 
-func (t typeTuple) extractGenerics(other Type, gm genericsMap) {
+func (t typeTuple) extractGenerics(other Type) genericsMap {
+	var gm genericsMap
 	if tt, ok := other.(typeTuple); ok {
 		if len(tt.Items) == len(t.Items) {
 			for i, item := range t.Items {
-				item.extractGenerics(tt.Items[i], gm)
+				gm = mergeGenericMaps(gm, item.extractGenerics(tt.Items[i]))
 			}
 		}
 	}
+	return gm
 }
 
 func (t typeTuple) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool {
@@ -53,10 +55,6 @@ func (t typeTuple) String() string {
 	}
 	sb.WriteString("}")
 	return sb.String()
-}
-
-func (t typeTuple) getCursor() misc.Cursor {
-	return t.cursor
 }
 
 func (t typeTuple) getGenerics() GenericArgs {

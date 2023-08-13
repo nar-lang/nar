@@ -46,12 +46,12 @@ func (e expressionSelect) precondition(md *Metadata) (Expression, error) {
 	return e, nil
 }
 
-func (e expressionSelect) setType(type_ Type, gm genericsMap, md *Metadata) (Expression, Type, error) {
+func (e expressionSelect) setType(type_ Type, md *Metadata) (Expression, Type, error) {
 	t, err := e.Condition.getType(md)
 	if err != nil {
 		return nil, nil, err
 	}
-	e.Condition, t, err = e.Condition.setType(t, gm, md)
+	e.Condition, t, err = e.Condition.setType(t, md)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -63,7 +63,7 @@ func (e expressionSelect) setType(type_ Type, gm genericsMap, md *Metadata) (Exp
 			return nil, nil, err
 		}
 		var inferredType Type
-		cs.Expression, inferredType, err = cs.Expression.setType(type_, gm, md)
+		cs.Expression, inferredType, err = cs.Expression.setType(type_, md)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -122,6 +122,9 @@ func (e expressionSelect) resolve(md *Metadata) (resolved.Expression, error) {
 			return nil, err
 		}
 		resolvedExpression, err := cs.Expression.resolve(md)
+		if err != nil {
+			return nil, err
+		}
 		resolvedCases = append(resolvedCases, resolved.NewExpressionSelectCase(resolvedDecons, resolvedExpression))
 		md.LocalVars = locals
 	}

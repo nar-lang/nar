@@ -38,18 +38,18 @@ func (e expressionIf) precondition(md *Metadata) (Expression, error) {
 	return e, nil
 }
 
-func (e expressionIf) setType(type_ Type, gm genericsMap, md *Metadata) (Expression, Type, error) {
+func (e expressionIf) setType(type_ Type, md *Metadata) (Expression, Type, error) {
 	var err error
 	var positiveType, negativeType Type
-	e.Condition, _, err = e.Condition.setType(TypeBuiltinBool(e.cursor, md.currentModuleName()), gm, md)
+	e.Condition, _, err = e.Condition.setType(TypeBuiltinBool(e.cursor, md.currentModuleName()), md)
 	if err != nil {
 		return nil, nil, err
 	}
-	e.Positive, positiveType, err = e.Positive.setType(type_, gm, md)
+	e.Positive, positiveType, err = e.Positive.setType(type_, md)
 	if err != nil {
 		return nil, nil, err
 	}
-	e.Negative, negativeType, err = e.Negative.setType(type_, gm, md)
+	e.Negative, negativeType, err = e.Negative.setType(type_, md)
 	if err != nil {
 		return nil, nil, err
 	}

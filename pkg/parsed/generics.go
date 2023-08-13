@@ -1,7 +1,7 @@
 package parsed
 
 import (
-	"fmt"
+	"golang.org/x/exp/maps"
 	"oak-compiler/pkg/misc"
 	"oak-compiler/pkg/resolved"
 	"strings"
@@ -23,7 +23,7 @@ func (p GenericParam) Name() string {
 }
 
 func (p GenericParam) Resolve(md *Metadata) (resolved.GenericParam, error) {
-	resolvedConstraint, err := p.constraint.Resolve(p.cursor, md)
+	resolvedConstraint, err := p.constraint.resolve(p.cursor, md)
 	if err != nil {
 		return resolved.GenericParam{}, err
 	}
@@ -41,7 +41,7 @@ func (gs GenericParams) toArgs() GenericArgs {
 	return args
 }
 
-func (gs GenericParams) Resolve(md *Metadata) (resolved.GenericParams, error) {
+func (gs GenericParams) resolve(md *Metadata) (resolved.GenericParams, error) {
 	var params resolved.GenericParams
 	for _, p := range gs {
 		resolvedParam, err := p.Resolve(md)
@@ -51,6 +51,15 @@ func (gs GenericParams) Resolve(md *Metadata) (resolved.GenericParams, error) {
 		params = append(params, resolvedParam)
 	}
 	return params, nil
+}
+
+func (gs GenericParams) byName(name string) (GenericParam, bool) {
+	for _, p := range gs {
+		if p.name == name {
+			return p, true
+		}
+	}
+	return GenericParam{}, false
 }
 
 type GenericArgs []Type
@@ -104,83 +113,49 @@ func (a GenericArgs) String() string {
 	return sb.String()
 }
 
-func (a GenericArgs) extractGenerics(other GenericArgs, gm genericsMap) {
+func (a GenericArgs) extractGenerics(other GenericArgs) genericsMap {
+	gm := genericsMap{}
 	if len(a) == len(other) {
 		for i, g := range a {
 			if n, ok := g.(typeGenericNotResolved); ok {
-				gm[n.Name] = other[i]
+				if _, ok := other[i].(typeGenericNotResolved); !ok {
+					gm[n.Name] = other[i]
+				}
 			}
 		}
 	}
-}
-
-type GenericConstraint interface {
-	Resolve(cursor misc.Cursor, md *Metadata) (resolved.GenericConstraint, error)
-}
-
-type GenericConstraintAny struct {
-	GenericConstraintAny__ int
-}
-
-func (g GenericConstraintAny) Resolve(cursor misc.Cursor, md *Metadata) (resolved.GenericConstraint, error) {
-	return resolved.GenericConstraintAny{}, nil
-}
-
-type GenericConstraintType struct {
-	GenericConstraintType__ int
-	Name                    string
-	GenericArgs             GenericArgs
-}
-
-func (g GenericConstraintType) Resolve(cursor misc.Cursor, md *Metadata) (resolved.GenericConstraint, error) {
-	resolvedArgs, err := g.GenericArgs.resolve(cursor, md)
-	if err != nil {
-		return nil, err
-	}
-	return resolved.NewTypeGenericConstraint(g.Name, resolvedArgs), nil
-}
-
-type GenericConstraintComparable struct {
-	GenericConstraintComparable__ int
-}
-
-func (g GenericConstraintComparable) Resolve(cursor misc.Cursor, md *Metadata) (resolved.GenericConstraint, error) {
-	return resolved.NewComparableGenericConstraint(makeSpecialGenericName("runtime.Comparable", md)), nil
-}
-
-type GenericConstraintEquatable struct {
-	GenericConstraintEquatable__ int
-}
-
-func (g GenericConstraintEquatable) Resolve(cursor misc.Cursor, md *Metadata) (resolved.GenericConstraint, error) {
-	return resolved.NewEquatableGenericConstraint(makeSpecialGenericName("runtime.Equatable", md)), nil
-}
-
-type GenericConstraintCombined struct {
-	GenericConstraintCombined__ int
-	Constraints                 []GenericConstraint
-}
-
-func (g GenericConstraintCombined) Resolve(cursor misc.Cursor, md *Metadata) (resolved.GenericConstraint, error) {
-	var gs resolved.GenericConstraintCombined
-
-	for _, x := range g.Constraints {
-		resolvedConstraint, err := x.Resolve(cursor, md)
-		if err != nil {
-			return nil, err
-		}
-		gs = append(gs, resolvedConstraint)
-	}
-
-	return gs, nil
-}
-
-func makeSpecialGenericName(name string, md *Metadata) string {
-	basicsModule := ModuleFullName{packageName: kCoreFullPackageName, moduleName: kBasicsModuleName}
-	if md.currentModuleName() == basicsModule {
-		return name
-	}
-	return fmt.Sprintf("%s.%s", md.ImportModuleAliases[basicsModule], kCoreFullPackageName)
+	return gm
 }
 
 type genericsMap map[string]Type
+
+func mergeGenericMaps(dst genericsMap, src genericsMap) genericsMap {
+	if len(src) == 0 {
+		return dst
+	}
+	if len(dst) == 0 {
+		return src
+	}
+	res := genericsMap{}
+	maps.Copy(res, dst)
+	for name, type_ := range src {
+		if existing, ok := res[name]; ok {
+			gm := type_.extractGenerics(existing)
+			type_ = type_.mapGenerics(gm)
+			gm = existing.extractGenerics(type_)
+			type_ = existing.mapGenerics(gm)
+		}
+		res[name] = type_
+	}
+
+	return res
+}
+
+func (gm genericsMap) mapSelf() genericsMap {
+	for n, g := range gm {
+		if _, ok := g.(typeGenericNotResolved); ok {
+			gm[n] = g.mapGenerics(gm)
+		}
+	}
+	return gm
+}

@@ -17,7 +17,7 @@ var kGoReserved = []string{
 	"for", "func", "go", "goto", "if", "import", "interface", "map", "package",
 	"range", "rF_False(struct{}{})urn", "select", "struct", "switch", "type", "var",
 }
-var kNotInfix = []string{"(", ")", "[", "]", "{", "}", ",", ".", ";", "\"", "'"}
+var kNotInfix = []string{"(", ")", "[", "]", "{", "}", ",", ".", ";", "\"", "'", "\\"}
 
 func NewCursor(fileName string, text []rune) Cursor {
 	return Cursor{FileName: fileName, text: text}
@@ -130,9 +130,9 @@ func isIdent(first bool, c rune) bool {
 	return false
 }
 
-func (c *Cursor) Identifier() string {
+func (c *Cursor) Identifier() (id string, whiteSpaceAfter bool) {
 	if !c.IsOk() {
-		return ""
+		return
 	}
 	start := c.Pos
 	first := true
@@ -141,23 +141,25 @@ func (c *Cursor) Identifier() string {
 		first = false
 	}
 	ident := c.text[start:c.Pos]
+	pos := c.Pos
 	c.SkipComment()
-	sIdent := string(ident)
+	whiteSpaceAfter = pos != c.Pos
+	id = string(ident)
 
 	for _, r := range kGoReserved {
-		if sIdent == r {
-			sIdent = "_" + sIdent
+		if id == r {
+			id = "_" + id
 			break
 		}
 	}
-	return sIdent
+	return
 }
 
-func (c *Cursor) QualifiedIdentifier() string {
-	var id string
+func (c *Cursor) QualifiedIdentifier() (id string, whiteSpaceAfter bool) {
 	start := c.Pos
 	for {
-		p := c.Identifier()
+		var p string
+		p, whiteSpaceAfter = c.Identifier()
 		if p == "" {
 			break
 		}
@@ -169,10 +171,9 @@ func (c *Cursor) QualifiedIdentifier() string {
 	}
 	if len(id) == 0 || id[len(id)-1] == '.' {
 		c.Pos = start
-		return ""
+		return
 	}
-	c.SkipComment()
-	return id
+	return
 }
 
 func (c *Cursor) Exact(s string) bool {
@@ -463,7 +464,6 @@ func (c *Cursor) InfixName() (whiteSpaceBefore bool, name string, whitespaceAfte
 }
 
 func (c *Cursor) infix() string {
-	pos := c.Pos
 	var runes []rune
 	for {
 		if !c.IsOk() {
@@ -471,17 +471,12 @@ func (c *Cursor) infix() string {
 		}
 		r := c.text[c.Pos]
 
-		if unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsSpace(r) || r == ')' {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsSpace(r) || slices.Contains(kNotInfix, string(r)) {
 			break
 		}
 
 		runes = append(runes, r)
 		c.Pos++
-	}
-
-	if slices.Contains(kNotInfix, string(runes)) {
-		c.Pos = pos
-		return ""
 	}
 
 	return string(runes)

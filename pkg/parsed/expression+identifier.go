@@ -24,7 +24,7 @@ func (e expressionIdentifier) precondition(md *Metadata) (Expression, error) {
 	return expressionChain{Args: Expressions{e}}.precondition(md)
 }
 
-func (e expressionIdentifier) setType(type_ Type, gm genericsMap, md *Metadata) (Expression, Type, error) {
+func (e expressionIdentifier) setType(type_ Type, md *Metadata) (Expression, Type, error) {
 	return nil, nil, misc.NewError(e.cursor, "trying to set type of identifier (this is a compiler error)")
 }
 

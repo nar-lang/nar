@@ -5,8 +5,8 @@ import (
 	"oak-compiler/pkg/resolved"
 )
 
-func NewTupleDecons(c misc.Cursor, items []Decons, alias string) Decons {
-	return deconsTuple{cursor: c, Items: items, Alias: alias}
+func NewTupleDecons(c misc.Cursor, items []Decons) Decons {
+	return deconsTuple{cursor: c, Items: items}
 }
 
 type deconsTuple struct {
@@ -14,6 +14,11 @@ type deconsTuple struct {
 	Items         []Decons
 	Alias         string
 	cursor        misc.Cursor
+}
+
+func (d deconsTuple) SetAlias(alias string) (Decons, error) {
+	d.Alias = alias
+	return d, nil
 }
 
 func (d deconsTuple) extractLocals(type_ Type, md *Metadata) error {

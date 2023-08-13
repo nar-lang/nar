@@ -21,7 +21,7 @@ func (e expressionValue) precondition(md *Metadata) (Expression, error) {
 	return e, nil
 }
 
-func (e expressionValue) setType(type_ Type, gm genericsMap, md *Metadata) (Expression, Type, error) {
+func (e expressionValue) setType(type_ Type, md *Metadata) (Expression, Type, error) {
 	dt, err := type_.dereference(md)
 	if err != nil {
 		return nil, nil, err
@@ -31,18 +31,17 @@ func (e expressionValue) setType(type_ Type, gm genericsMap, md *Metadata) (Expr
 		return nil, nil, err
 	}
 
-	//gm = genericsMap{}
-	valueType.extractGenerics(type_, gm)
+	gm := valueType.extractGenerics(type_)
 	valueType = valueType.mapGenerics(gm)
 	generics = generics.mapGenerics(gm)
 
 	if !typesEqual(dt, valueType, false, md) {
-		if g, ok := dt.(typeGenericNotResolved); ok {
+		/*if g, ok := dt.(typeGenericNotResolved); ok {
 			type_ = valueType
 			gm[g.Name] = type_
 		} else {
-			return nil, nil, misc.NewError(e.cursor, "types do not match, expected %s got %s", dt, valueType)
-		}
+		}*/
+		return nil, nil, misc.NewError(e.cursor, "types do not match, expected %s got %s", dt, valueType)
 	}
 	e.InferredType = type_
 	e.InferredGenerics = generics
@@ -50,9 +49,9 @@ func (e expressionValue) setType(type_ Type, gm genericsMap, md *Metadata) (Expr
 }
 
 func (e expressionValue) getType(md *Metadata) (Type, error) {
-	type_, ok := md.findLocalType(e.Name)
-	if !ok {
-		return nil, misc.NewError(e.cursor, "unknown identifier")
+	type_, _, err := md.getTypeByName(md.currentModuleName(), e.Name, e.InferredGenerics, e.cursor)
+	if err != nil {
+		return nil, err
 	}
 	return type_, nil
 }

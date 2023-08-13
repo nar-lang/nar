@@ -2,6 +2,8 @@ package resolved
 
 import "strings"
 
+const kTargetRuntimeVersion string = "v0.0.4"
+
 type PackageFullName string
 
 func (n PackageFullName) SafeName() string {

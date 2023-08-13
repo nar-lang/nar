@@ -17,8 +17,8 @@ type typeNamed struct {
 	Generics GenericArgs
 }
 
-func (t typeNamed) extractGenerics(other Type, gm genericsMap) {
-	t.getGenerics().extractGenerics(other.getGenerics(), gm)
+func (t typeNamed) extractGenerics(other Type) genericsMap {
+	return t.getGenerics().extractGenerics(other.getGenerics())
 }
 
 func (t typeNamed) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool {
@@ -47,6 +47,10 @@ func (t typeNamed) dereference(md *Metadata) (Type, error) {
 	type_, _, err := md.getTypeByName(t.moduleName, t.Name, t.Generics, t.cursor)
 	if err != nil {
 		return nil, err
+	}
+
+	if _, ok := type_.(typeNamed); ok {
+		return type_, nil
 	}
 
 	return type_.dereference(md)

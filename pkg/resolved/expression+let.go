@@ -24,22 +24,30 @@ func (e expressionLet) write(sb *strings.Builder) {
 	e.Type().write(sb)
 	sb.WriteString("{\n")
 	for _, def := range e.definitions {
-		sb.WriteString("var ")
-		sb.WriteString(def.name)
-		sb.WriteString(" = ")
-		def.expression.write(sb)
+		def.param.writeName(sb)
+		sb.WriteString(" := ")
+
+		if signature, isSignature := def.type_.(TypeSignature); isSignature {
+			signature.writeAsDefinition(sb, def.expression, "", nil)
+		} else {
+			def.expression.write(sb)
+		}
+
 		sb.WriteString("\n")
+
+		def.param.writeHeader(sb)
 	}
 	sb.WriteString("return ")
 	e.expression.write(sb)
 	sb.WriteString("\n})()\n")
 }
 
-func NewLetDefinition(name string, expression Expression) LetDefinition {
-	return LetDefinition{name: name, expression: expression}
+func NewLetDefinition(param Parameter, type_ Type, expression Expression) LetDefinition {
+	return LetDefinition{param: param, type_: type_, expression: expression}
 }
 
 type LetDefinition struct {
-	name       string
+	param      Parameter
+	type_      Type
 	expression Expression
 }

@@ -42,9 +42,6 @@ func (md *Metadata) getAddressByName(enclosingModuleName ModuleFullName, name st
 	}
 
 	var address DefinitionAddress
-	{
-	}
-
 	if _, ok := module.definitions[name]; ok {
 		address = DefinitionAddress{
 			moduleFullName: enclosingModuleName,

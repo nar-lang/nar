@@ -12,8 +12,8 @@ type typeGenericNotResolved struct {
 	Name string
 }
 
-func (t typeGenericNotResolved) extractGenerics(other Type, gm genericsMap) {
-	gm[t.Name] = other
+func (t typeGenericNotResolved) extractGenerics(other Type) genericsMap {
+	return genericsMap{t.Name: other}
 }
 
 func (t typeGenericNotResolved) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool {

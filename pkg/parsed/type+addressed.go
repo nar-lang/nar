@@ -25,8 +25,8 @@ type typeAddressed struct {
 	Extern   bool
 }
 
-func (t typeAddressed) extractGenerics(other Type, gm genericsMap) {
-	t.Generics.extractGenerics(other.getGenerics(), gm)
+func (t typeAddressed) extractGenerics(other Type) genericsMap {
+	return t.Generics.extractGenerics(other.getGenerics())
 }
 
 func (t typeAddressed) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool {
@@ -42,10 +42,6 @@ func (t typeAddressed) String() string {
 		t.Address.moduleFullName.moduleName,
 		t.Address.definitionName,
 		t.Generics)
-}
-
-func (t typeAddressed) getCursor() misc.Cursor {
-	return t.cursor
 }
 
 func (t typeAddressed) getGenerics() GenericArgs {
