@@ -6,13 +6,12 @@ import (
 )
 
 type expressionApply struct {
-	ExpressionApply__ int
-	Name              string
-	Args              Expressions
-	ArgTypes          []Type
-	RetType           Type
-	GenericArgs       GenericArgs
-	cursor            misc.Cursor
+	Name        string
+	Args        Expressions
+	ArgTypes    []Type
+	RetType     Type
+	GenericArgs GenericArgs
+	cursor      misc.Cursor
 }
 
 func (e expressionApply) getCursor() misc.Cursor {

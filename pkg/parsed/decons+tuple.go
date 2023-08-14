@@ -10,10 +10,9 @@ func NewTupleDecons(c misc.Cursor, items []Decons) Decons {
 }
 
 type deconsTuple struct {
-	DeconsTuple__ int
-	Items         []Decons
-	Alias         string
-	cursor        misc.Cursor
+	Items  []Decons
+	Alias  string
+	cursor misc.Cursor
 }
 
 func (d deconsTuple) SetAlias(alias string) (Decons, error) {

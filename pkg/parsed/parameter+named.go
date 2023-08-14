@@ -10,9 +10,8 @@ func NewNamedParameter(c misc.Cursor, name string) Parameter {
 }
 
 type parameterNamed struct {
-	ParameterNamed__ int
-	cursor           misc.Cursor
-	name             string
+	cursor misc.Cursor
+	name   string
 }
 
 func (p parameterNamed) resolve(type_ Type, md *Metadata) (resolved.Parameter, error) {

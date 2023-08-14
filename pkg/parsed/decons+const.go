@@ -10,10 +10,9 @@ func NewConstDecons(c misc.Cursor, kind ConstKind, value string) Decons {
 }
 
 type deconsConst struct {
-	DeconsConst__ int
-	ConstKind     ConstKind
-	Value         string
-	cursor        misc.Cursor
+	ConstKind ConstKind
+	Value     string
+	cursor    misc.Cursor
 }
 
 func (d deconsConst) SetAlias(alias string) (Decons, error) {

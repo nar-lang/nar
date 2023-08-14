@@ -1,7 +1,6 @@
 package parsed
 
 import (
-	"encoding/json"
 	"oak-compiler/pkg/misc"
 	"oak-compiler/pkg/resolved"
 	"strings"
@@ -12,7 +11,6 @@ func NewUnionType(c misc.Cursor, modName ModuleFullName, defName string, options
 }
 
 type typeUnion struct {
-	TypeUnion__ int
 	typeBase
 	defName string
 	Options []UnionOption
@@ -169,14 +167,4 @@ type UnionOption struct {
 
 func (o UnionOption) Name() string {
 	return o.name
-}
-
-func (o UnionOption) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Name      string
-		ValueType Type
-	}{
-		Name:      o.name,
-		ValueType: o.valueType,
-	})
 }

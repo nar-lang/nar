@@ -10,7 +10,6 @@ func NewVoidType(c misc.Cursor, modName ModuleFullName) Type {
 }
 
 type typeVoid struct {
-	TypeVoid__ int
 	typeBase
 }
 

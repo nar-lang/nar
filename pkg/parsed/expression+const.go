@@ -10,10 +10,9 @@ func NewConstExpression(c misc.Cursor, constKind ConstKind, value string) Expres
 }
 
 type expressionConst struct {
-	ExpressionConst__ int
-	Kind              ConstKind
-	Value             string
-	cursor            misc.Cursor
+	Kind   ConstKind
+	Value  string
+	cursor misc.Cursor
 }
 
 func (e expressionConst) getCursor() misc.Cursor {

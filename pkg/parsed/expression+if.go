@@ -10,11 +10,10 @@ func NewIfExpression(c misc.Cursor, condition, positive, negative Expression) Ex
 }
 
 type expressionIf struct {
-	ExpressionIf__ int
-	Condition      Expression
-	Positive       Expression
-	Negative       Expression
-	cursor         misc.Cursor
+	Condition Expression
+	Positive  Expression
+	Negative  Expression
+	cursor    misc.Cursor
 }
 
 func (e expressionIf) getCursor() misc.Cursor {

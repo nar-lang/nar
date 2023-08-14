@@ -1,7 +1,6 @@
 package parsed
 
 import (
-	"encoding/json"
 	"golang.org/x/exp/slices"
 	"oak-compiler/pkg/misc"
 )
@@ -67,22 +66,6 @@ func (imp StatementImport) inject(imports map[string]DefinitionAddress, md *Meta
 		}
 	}
 	return imp, nil
-}
-
-func (imp StatementImport) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		PackageName PackageFullName
-		ModuleName  string
-		Alias       string
-		Exposing    []string
-		ExposingAll bool
-	}{
-		PackageName: imp.packageName,
-		ModuleName:  imp.moduleName,
-		Alias:       imp.alias,
-		Exposing:    imp.exposing,
-		ExposingAll: imp.exposingAll,
-	})
 }
 
 func addImport(

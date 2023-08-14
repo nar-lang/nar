@@ -1,7 +1,6 @@
 package parsed
 
 import (
-	"encoding/json"
 	"oak-compiler/pkg/misc"
 	"oak-compiler/pkg/resolved"
 	"strings"
@@ -12,7 +11,6 @@ func NewRecordType(c misc.Cursor, modName ModuleFullName, fields []RecordField) 
 }
 
 type typeRecord struct {
-	RecordField__ int
 	typeBase
 	Fields []RecordField
 }
@@ -121,16 +119,6 @@ type RecordField struct {
 	name   string
 	type_  Type
 	cursor misc.Cursor
-}
-
-func (f RecordField) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Name string
-		Type Type
-	}{
-		Name: f.name,
-		Type: f.type_,
-	})
 }
 
 func (f RecordField) Name() string {

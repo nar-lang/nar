@@ -10,9 +10,8 @@ func NewChainExpression(c misc.Cursor, args []Expression) Expression {
 }
 
 type expressionChain struct {
-	ExpressionChain__ int
-	Args              []Expression
-	cursor            misc.Cursor
+	Args   []Expression
+	cursor misc.Cursor
 }
 
 func (e expressionChain) getCursor() misc.Cursor {

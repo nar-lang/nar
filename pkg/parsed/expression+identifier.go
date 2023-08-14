@@ -10,10 +10,9 @@ func NewIdentifierExpression(c misc.Cursor, name string, args GenericArgs) Expre
 }
 
 type expressionIdentifier struct {
-	ExpressionIdentifier__ int
-	cursor                 misc.Cursor
-	Name                   string
-	GenericArgs            GenericArgs
+	cursor      misc.Cursor
+	Name        string
+	GenericArgs GenericArgs
 }
 
 func (e expressionIdentifier) getCursor() misc.Cursor {

@@ -11,7 +11,6 @@ type GenericConstraint interface {
 }
 
 type GenericConstraintAny struct {
-	GenericConstraintAny__ int
 }
 
 func (g GenericConstraintAny) canHandle(type_ Type, cursor misc.Cursor, md *Metadata) (bool, error) {
@@ -23,9 +22,8 @@ func (g GenericConstraintAny) resolve(cursor misc.Cursor, md *Metadata) (resolve
 }
 
 type GenericConstraintType struct {
-	GenericConstraintType__ int
-	Name                    string
-	GenericArgs             GenericArgs
+	Name        string
+	GenericArgs GenericArgs
 }
 
 func (g GenericConstraintType) resolve(cursor misc.Cursor, md *Metadata) (resolved.GenericConstraint, error) {
@@ -45,7 +43,6 @@ func (g GenericConstraintType) canHandle(type_ Type, cursor misc.Cursor, md *Met
 }
 
 type GenericConstraintComparable struct {
-	GenericConstraintComparable__ int
 }
 
 func (g GenericConstraintComparable) canHandle(type_ Type, cursor misc.Cursor, md *Metadata) (bool, error) {
@@ -58,7 +55,6 @@ func (g GenericConstraintComparable) resolve(cursor misc.Cursor, md *Metadata) (
 }
 
 type GenericConstraintEquatable struct {
-	GenericConstraintEquatable__ int
 }
 
 func (g GenericConstraintEquatable) canHandle(type_ Type, cursor misc.Cursor, md *Metadata) (bool, error) {
@@ -75,7 +71,6 @@ func (g GenericConstraintEquatable) resolve(cursor misc.Cursor, md *Metadata) (r
 }
 
 type GenericConstraintNumber struct {
-	GenericConstraintEquatable__ int
 }
 
 func (g GenericConstraintNumber) canHandle(type_ Type, cursor misc.Cursor, md *Metadata) (bool, error) {

@@ -10,9 +10,8 @@ func NewTupleExpression(c misc.Cursor, items []Expression) Expression {
 }
 
 type expressionTuple struct {
-	ExpressionTuple__ int
-	Items             []Expression
-	cursor            misc.Cursor
+	Items  []Expression
+	cursor misc.Cursor
 }
 
 func (e expressionTuple) getCursor() misc.Cursor {

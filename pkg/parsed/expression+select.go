@@ -10,10 +10,9 @@ func NewSelectExpression(c misc.Cursor, condition Expression, cases []Expression
 }
 
 type expressionSelect struct {
-	ExpressionSelect__ int
-	Condition          Expression
-	Cases              []ExpressionSelectCase
-	cursor             misc.Cursor
+	Condition Expression
+	Cases     []ExpressionSelectCase
+	cursor    misc.Cursor
 }
 
 func (e expressionSelect) getCursor() misc.Cursor {

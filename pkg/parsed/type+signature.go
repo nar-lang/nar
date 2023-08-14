@@ -16,7 +16,6 @@ func NewSignatureType(c misc.Cursor, modName ModuleFullName, paramType, ret Type
 }
 
 type typeSignature struct {
-	TypeSignature__ int
 	typeBase
 	Param      Parameter
 	ParamType  Type

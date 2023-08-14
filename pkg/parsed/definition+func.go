@@ -24,7 +24,6 @@ func NewFuncDefinition(
 }
 
 type definitionFunc struct {
-	DefinitionFunc__ int
 	definitionBase
 	Expression Expression
 	Type       Type

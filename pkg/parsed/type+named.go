@@ -11,7 +11,6 @@ func NewNamedType(c misc.Cursor, modName ModuleFullName, name string, generics G
 }
 
 type typeNamed struct {
-	TypeNamed__ int
 	typeBase
 	Name     string
 	Generics GenericArgs

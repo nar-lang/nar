@@ -18,7 +18,6 @@ func NewAddressedType(
 }
 
 type typeAddressed struct {
-	TypeAddressed__ int
 	typeBase
 	Address  DefinitionAddress
 	Generics GenericArgs

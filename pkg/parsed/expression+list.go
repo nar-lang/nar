@@ -10,10 +10,9 @@ func NewListExpression(c misc.Cursor, items []Expression) Expression {
 }
 
 type expressionList struct {
-	ExpressionList__ int
-	Items            []Expression
-	ItemType         Type
-	cursor           misc.Cursor
+	Items    []Expression
+	ItemType Type
+	cursor   misc.Cursor
 }
 
 func (e expressionList) getCursor() misc.Cursor {

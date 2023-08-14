@@ -10,7 +10,6 @@ func NewGenericNameType(c misc.Cursor, moduleName ModuleFullName, name string) T
 }
 
 type typeGenericName struct {
-	TypeGenericName__ int
 	typeBase
 	Name string
 }

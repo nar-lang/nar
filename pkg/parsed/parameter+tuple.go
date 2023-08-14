@@ -11,11 +11,10 @@ func NewTupleParameter(c misc.Cursor, index int, items []Parameter) Parameter {
 }
 
 type parameterTuple struct {
-	ParameterNamed__ int
-	cursor           misc.Cursor
-	alias            string
-	index            int
-	items            []Parameter
+	cursor misc.Cursor
+	alias  string
+	index  int
+	items  []Parameter
 }
 
 func (p parameterTuple) resolve(type_ Type, md *Metadata) (resolved.Parameter, error) {

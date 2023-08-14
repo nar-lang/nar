@@ -7,7 +7,6 @@ import (
 )
 
 type typeGenericNotResolved struct {
-	TypeGenericNotResolved__ int
 	typeBase
 	Name string
 }

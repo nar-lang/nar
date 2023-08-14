@@ -1,7 +1,6 @@
 package parsed
 
 import (
-	"encoding/json"
 	"oak-compiler/pkg/misc"
 	"oak-compiler/pkg/resolved"
 )
@@ -118,12 +117,6 @@ func (es Expressions) resolve(md *Metadata) ([]resolved.Expression, error) {
 		result = append(result, re)
 	}
 	return result, nil
-}
-
-func (d DefinitionAddress) MarshalJSON() ([]byte, error) {
-	return json.Marshal(
-		string(d.moduleFullName.packageName) + ":" + d.moduleFullName.moduleName + "." + d.definitionName,
-	)
 }
 
 func (d DefinitionAddress) equalsTo(other DefinitionAddress) bool {

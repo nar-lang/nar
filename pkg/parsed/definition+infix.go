@@ -21,7 +21,6 @@ func NewInfixDefinition(
 }
 
 type definitionInfix struct {
-	DefinitionInfix__ int
 	definitionBase
 	Associativity InfixAssociativity
 	Priority      int

@@ -10,8 +10,7 @@ func NewAnyDecons(c misc.Cursor) Decons {
 }
 
 type deconsAny struct {
-	DeconsAny__ int
-	cursor      misc.Cursor
+	cursor misc.Cursor
 }
 
 func (d deconsAny) extractLocals(type_ Type, md *Metadata) error { return nil }

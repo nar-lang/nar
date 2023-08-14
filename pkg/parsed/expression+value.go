@@ -6,11 +6,10 @@ import (
 )
 
 type expressionValue struct {
-	ExpressionValue__ int
-	Name              string
-	InferredType      Type
-	InferredGenerics  GenericArgs
-	cursor            misc.Cursor
+	Name             string
+	InferredType     Type
+	InferredGenerics GenericArgs
+	cursor           misc.Cursor
 }
 
 func (e expressionValue) getCursor() misc.Cursor {

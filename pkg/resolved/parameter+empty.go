@@ -7,7 +7,6 @@ func NewEmptyParameter() Parameter {
 }
 
 type parameterEmpty struct {
-	ParameterEmpty__ int
 }
 
 func (p parameterEmpty) writeName(sb *strings.Builder) {

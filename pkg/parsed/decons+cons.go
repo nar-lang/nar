@@ -1,7 +1,6 @@
 package parsed
 
 import (
-	"encoding/json"
 	"oak-compiler/pkg/misc"
 	"oak-compiler/pkg/resolved"
 )
@@ -11,25 +10,10 @@ func NewConsDecons(c misc.Cursor, head Decons, tail Decons) Decons {
 }
 
 type deconsCons struct {
-	DeconsNamed__ int
-	alias         string
-	cursor        misc.Cursor
-	head          Decons
-	tail          Decons
-}
-
-func (d deconsCons) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Kind  string
-		Alias string
-		Head  Decons
-		Tail  Decons
-	}{
-		Kind:  "named",
-		Alias: d.alias,
-		Head:  d.head,
-		Tail:  d.tail,
-	})
+	alias  string
+	cursor misc.Cursor
+	head   Decons
+	tail   Decons
 }
 
 func (d deconsCons) SetAlias(alias string) (Decons, error) {

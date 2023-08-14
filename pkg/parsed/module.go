@@ -1,10 +1,7 @@
 package parsed
 
 import (
-	"encoding/json"
 	"oak-compiler/pkg/resolved"
-	"os"
-	"path"
 )
 
 func NewModule(statement StatementModule, imports []StatementImport, definitions []Definition) Module {
@@ -97,36 +94,4 @@ func (m Module) Resolve(md *Metadata) (resolved.Module, error) {
 
 func (m Module) Name() string {
 	return m.header.Name()
-}
-
-func (m Module) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Header      StatementModule
-		Imports     []StatementImport
-		Definitions map[string]Definition
-		Order       []string
-	}{
-		Header:      m.header,
-		Imports:     m.imports,
-		Definitions: m.definitions,
-		Order:       m.order,
-	})
-}
-
-func (m Module) dump(point string, md *Metadata) {
-	j, err := json.MarshalIndent(m, "", "  ")
-	if err != nil {
-		panic(err.Error())
-	}
-	err = os.MkdirAll(path.Join("tmp", string(md.CurrentPackage.FullName())), 0777)
-	if err != nil {
-		panic(err.Error())
-	}
-	err = os.WriteFile(
-		path.Join("tmp", string(md.CurrentPackage.FullName()), m.Name()+"-"+point+".json"),
-		j, 0666,
-	)
-	if err != nil {
-		panic(err.Error())
-	}
 }

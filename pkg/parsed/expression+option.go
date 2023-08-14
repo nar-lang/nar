@@ -6,13 +6,12 @@ import (
 )
 
 type expressionOption struct {
-	ExpressionOption__ int
-	Type               Type
-	Address            DefinitionAddress
-	Generics           GenericArgs
-	Option             string
-	Value              Expression
-	cursor             misc.Cursor
+	Type     Type
+	Address  DefinitionAddress
+	Generics GenericArgs
+	Option   string
+	Value    Expression
+	cursor   misc.Cursor
 }
 
 func (e expressionOption) getCursor() misc.Cursor {

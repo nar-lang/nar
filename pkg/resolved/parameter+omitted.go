@@ -7,7 +7,6 @@ func NewOmittedParameter() Parameter {
 }
 
 type parameterOmitted struct {
-	ParameterOmitted__ int
 }
 
 func (p parameterOmitted) writeName(sb *strings.Builder) {

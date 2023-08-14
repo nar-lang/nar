@@ -1,7 +1,6 @@
 package parsed
 
 import (
-	"encoding/json"
 	"oak-compiler/pkg/misc"
 	"oak-compiler/pkg/resolved"
 )
@@ -11,10 +10,9 @@ func NewLetExpression(c misc.Cursor, definitions []LetDefinition, expression Exp
 }
 
 type expressionLet struct {
-	ExpressionLet__ int
-	Definitions     []LetDefinition
-	Expression      Expression
-	cursor          misc.Cursor
+	Definitions []LetDefinition
+	Expression  Expression
+	cursor      misc.Cursor
 }
 
 func (e expressionLet) getCursor() misc.Cursor {
@@ -140,16 +138,4 @@ type LetDefinition struct {
 	param      Parameter
 	type_      Type
 	expression Expression
-}
-
-func (d LetDefinition) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Param      Parameter
-		Type       Type
-		Expression Expression
-	}{
-		Param:      d.param,
-		Type:       d.type_,
-		Expression: d.expression,
-	})
 }

@@ -10,12 +10,11 @@ func NewOptionDecons(c misc.Cursor, option string, args GenericArgs, arg Decons)
 }
 
 type deconsOption struct {
-	DeconsOption__ int
-	Option         string
-	GenericArgs    GenericArgs
-	Arg            Decons
-	Alias          string
-	cursor         misc.Cursor
+	Option      string
+	GenericArgs GenericArgs
+	Arg         Decons
+	Alias       string
+	cursor      misc.Cursor
 }
 
 func (d deconsOption) SetAlias(alias string) (Decons, error) {

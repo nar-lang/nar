@@ -10,12 +10,11 @@ func NewInfixExpression(c misc.Cursor, spaceBefore bool, name string, spaceAfter
 }
 
 type ExpressionInfix struct {
-	ExpressionInfix__ int
-	name              string
-	cursor            misc.Cursor
-	spaceBefore       bool
-	spaceAfter        bool
-	asParameter       bool
+	name        string
+	cursor      misc.Cursor
+	spaceBefore bool
+	spaceAfter  bool
+	asParameter bool
 }
 
 func (e ExpressionInfix) getCursor() misc.Cursor {

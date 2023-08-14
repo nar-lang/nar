@@ -1,13 +1,11 @@
 package parsed
 
 import (
-	"encoding/json"
 	"oak-compiler/pkg/misc"
 	"oak-compiler/pkg/resolved"
 )
 
 type typeInfix struct {
-	TypeInfix__ int
 	typeBase
 	definition definitionInfix
 }
@@ -62,8 +60,4 @@ func (t typeInfix) nestedDefinitionNames() []string {
 
 func (t typeInfix) unpackNestedDefinitions(def Definition) []Definition {
 	panic("not supported")
-}
-
-func (t typeInfix) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.definition.Name())
 }

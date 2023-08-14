@@ -21,7 +21,6 @@ func NewTypeDefinition(
 }
 
 type definitionType struct {
-	DefinitionType__ int
 	definitionBase
 	Type Type
 }

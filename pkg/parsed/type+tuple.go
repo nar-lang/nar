@@ -11,7 +11,6 @@ func NewTupleType(c misc.Cursor, modName ModuleFullName, items []Type) Type {
 }
 
 type typeTuple struct {
-	TypeTuple__ int
 	typeBase
 	Items []Type
 }

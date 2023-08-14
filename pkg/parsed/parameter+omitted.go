@@ -10,8 +10,7 @@ func NewOmittedParameter(c misc.Cursor) Parameter {
 }
 
 type parameterOmitted struct {
-	parameterOmitted__ int
-	cursor             misc.Cursor
+	cursor misc.Cursor
 }
 
 func (p parameterOmitted) resolve(type_ Type, md *Metadata) (resolved.Parameter, error) {

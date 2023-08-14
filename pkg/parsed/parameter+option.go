@@ -11,12 +11,11 @@ func NewOptionParameter(c misc.Cursor, index int, optionName string, value Param
 }
 
 type parameterOption struct {
-	ParameterOption__ int
-	cursor            misc.Cursor
-	optionName        string
-	value             Parameter
-	index             int
-	alias             string
+	cursor     misc.Cursor
+	optionName string
+	value      Parameter
+	index      int
+	alias      string
 }
 
 func (p parameterOption) resolve(type_ Type, md *Metadata) (resolved.Parameter, error) {
