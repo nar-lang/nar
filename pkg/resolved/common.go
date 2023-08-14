@@ -2,7 +2,7 @@ package resolved
 
 import "strings"
 
-const kTargetRuntimeVersion string = "v0.0.5"
+const kTargetRuntimeVersion string = "v0.0.6"
 
 type PackageFullName string
 
