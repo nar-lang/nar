@@ -34,9 +34,7 @@ func (d deconsOption) writeHeader(sb *strings.Builder, name string) {
 		sb.WriteString(" = ")
 		sb.WriteString(name)
 		sb.WriteString("\n")
-		sb.WriteString("runtime.UseVar(")
-		sb.WriteString(d.alias)
-		sb.WriteString(")\n")
+		writeUseVar(sb, d.alias)
 	}
 
 	tsb := &strings.Builder{}

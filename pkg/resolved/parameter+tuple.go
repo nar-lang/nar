@@ -28,9 +28,7 @@ func (p parameterTuple) writeHeader(sb *strings.Builder) {
 		sb.WriteString(".P")
 		sb.WriteString(strconv.Itoa(i))
 		sb.WriteString("\n")
-		sb.WriteString("runtime.UseVar(")
-		sb.WriteString(item.getName())
-		sb.WriteString(")\n")
+		writeUseVar(sb, item.getName())
 
 		item.writeHeader(sb)
 	}

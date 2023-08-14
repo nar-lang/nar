@@ -28,9 +28,7 @@ func (p parameterOption) writeHeader(sb *strings.Builder) {
 	sb.WriteString(".(")
 	sb.WriteString(p.name)
 	sb.WriteString(".Value)\n")
-	sb.WriteString("runtime.UseVar(")
-	sb.WriteString(p.value.getName())
-	sb.WriteString(")\n")
+	writeUseVar(sb, p.value.getName())
 
 	p.value.writeHeader(sb)
 }
