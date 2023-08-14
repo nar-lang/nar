@@ -183,7 +183,7 @@ func parseDefinition(c *misc.Cursor, modName parsed.ModuleFullName) (parsed.Defi
 				startCursor, modName, parsed.NewDefinitionAddress(modName, name), nil, false,
 			)
 		} else {
-			type_, err = parseType(c, modName, true, false, true, gps)
+			type_, err = parseType(c, modName, name, false, true, gps)
 			if err != nil {
 				return nil, err
 			}
@@ -236,7 +236,7 @@ func parseDefinition(c *misc.Cursor, modName parsed.ModuleFullName) (parsed.Defi
 				startCursor, parsed.NewDefinitionAddress(modName, name), hidden, assoc, int(priority), alias,
 			), nil
 		} else {
-			type_, err := parseType(c, modName, false, false, false, gps)
+			type_, err := parseType(c, modName, "", false, false, gps)
 			if err != nil {
 				return nil, err
 			}
@@ -323,19 +323,21 @@ var uniqueIndex = 0
 func parseType(
 	c *misc.Cursor,
 	modName parsed.ModuleFullName,
-	definition bool,
+	defName string,
 	optional bool,
 	allowSignature bool,
 	genericParams parsed.GenericParams,
 ) (parsed.Type, error) {
 	startCursor := *c
 
-	if definition {
+	if defName != "" {
 		var options []parsed.UnionOption
 		for {
 			if !c.Exact("|") {
 				break
 			}
+
+			hidden := c.Exact(kwHidden)
 
 			optionStart := *c
 			pos := c.Pos
@@ -354,17 +356,17 @@ func parseType(
 				}
 			}
 
-			type_, err := parseType(c, modName, false, true, false, genericParams)
-			if err != nil && err != errNotAType {
+			type_, err := parseType(c, modName, "", true, false, genericParams)
+			if err != nil && !errors.Is(err, errNotAType) {
 				return nil, err
 			}
 			if type_ == nil {
 				type_ = parsed.NewVoidType(*c, modName)
 			}
-			options = append(options, parsed.NewUnionOption(optionStart, name, type_))
+			options = append(options, parsed.NewUnionOption(optionStart, name, type_, hidden))
 		}
 		if len(options) > 0 {
-			return parsed.NewUnionType(startCursor, modName, options), nil
+			return parsed.NewUnionType(startCursor, modName, defName, options), nil
 		}
 	}
 
@@ -380,19 +382,19 @@ func parseType(
 			if param == nil {
 				return nil, misc.NewError(startCursor, "expected parameter here")
 			}
-			paramType, err = parseType(c, modName, false, false, false, genericParams)
+			paramType, err = parseType(c, modName, "", false, false, genericParams)
 			if err != nil {
 				return nil, err
 			}
 		} else {
 			*c = startCursor
-			paramType, err = parseType(c, modName, false, true, false, genericParams)
+			paramType, err = parseType(c, modName, "", true, false, genericParams)
 			noType = errors.Is(err, errNotAType)
 		}
 
 		if !noType {
 			if c.Exact("->") {
-				returnType, err := parseType(c, modName, false, false, true, genericParams)
+				returnType, err := parseType(c, modName, "", false, true, genericParams)
 				if err != nil {
 					return nil, err
 				}
@@ -426,7 +428,7 @@ func parseType(
 				if !c.Exact(":") {
 					return nil, misc.NewError(*c, "failed to read record, expected `:` here")
 				}
-				type_, err := parseType(c, modName, false, false, false, genericParams)
+				type_, err := parseType(c, modName, "", false, false, genericParams)
 				if err != nil {
 					return nil, err
 				}
@@ -445,7 +447,7 @@ func parseType(
 			c.Pos = start
 
 			for {
-				item, err := parseType(c, modName, false, false, true, genericParams)
+				item, err := parseType(c, modName, "", false, true, genericParams)
 				if err != nil {
 					return nil, misc.NewError(*c, "failed to read tuple type")
 				}
@@ -465,7 +467,7 @@ func parseType(
 	}
 
 	if c.OpenParenthesis() {
-		type_, err := parseType(c, modName, false, false, true, genericParams)
+		type_, err := parseType(c, modName, "", false, true, genericParams)
 		if err != nil {
 			return nil, err
 		}
@@ -517,7 +519,7 @@ func parseGenericArgs(
 	var genericArgs parsed.GenericArgs
 	if c.OpenBrackets() {
 		for {
-			genericArg, err := parseType(c, modName, false, false, true, generics)
+			genericArg, err := parseType(c, modName, "", false, true, generics)
 			if err != nil {
 				return nil, err
 			}
@@ -622,11 +624,13 @@ func parseExpression(
 				if !c.Exact(kwCase) {
 					break
 				}
-				ds, err := parseDecons(c, modName, generics)
+				ds, err := parseDecons(c, modName, generics, false)
 				if err != nil {
 					return nil, err
 				}
-				c.Exact("->")
+				if !c.Exact("->") {
+					return nil, misc.NewError(*c, "expected `->` here")
+				}
 				ex, err := parseExpression(c, modName, generics)
 				if err != nil {
 					return nil, err
@@ -651,7 +655,7 @@ func parseExpression(
 				if !c.Exact(":") {
 					return nil, misc.NewError(*c, "expected `:` here")
 				}
-				protoType, err := parseType(c, modName, false, false, false, generics)
+				protoType, err := parseType(c, modName, "", false, false, generics)
 				if err != nil {
 					return nil, err
 				}
@@ -764,7 +768,7 @@ func parseExpression(
 }
 
 func parseDecons(
-	c *misc.Cursor, modName parsed.ModuleFullName, generics parsed.GenericParams,
+	c *misc.Cursor, modName parsed.ModuleFullName, generics parsed.GenericParams, optional bool,
 ) (parsed.Decons, error) {
 	startCursor := *c
 	// any
@@ -802,7 +806,7 @@ func parseDecons(
 	if c.OpenBraces() {
 		var items []parsed.Decons
 		for {
-			item, err := parseDecons(c, modName, generics)
+			item, err := parseDecons(c, modName, generics, false)
 			if err != nil {
 				return nil, err
 			}
@@ -828,7 +832,7 @@ func parseDecons(
 		var items []parsed.Decons
 		if !c.CloseBrackets() {
 			for {
-				item, err := parseDecons(c, modName, generics)
+				item, err := parseDecons(c, modName, generics, false)
 				if err != nil {
 					return nil, err
 				}
@@ -860,17 +864,13 @@ func parseDecons(
 				}
 			}
 
-			pos := c.Pos
 			var arg parsed.Decons
-			if c.Exact("->") {
-				c.Pos = pos
-			} else {
-				var err error
-				arg, err = parseDecons(c, modName, generics)
-				if err != nil {
-					return nil, err
-				}
+			var err error
+			arg, err = parseDecons(c, modName, generics, true)
+			if err != nil {
+				return nil, err
 			}
+
 			if arg == nil {
 				var err error
 				arg, err = finishParseDecons(c, modName, generics, parsed.NewAnyDecons(cs))
@@ -884,6 +884,10 @@ func parseDecons(
 		}
 	}
 
+	if optional {
+		return nil, nil
+	}
+
 	return nil, misc.NewError(*c, "expected case value here")
 }
 
@@ -892,7 +896,7 @@ func finishParseDecons(
 ) (parsed.Decons, error) {
 	cs := *c
 	if c.Exact("::") {
-		second, err := parseDecons(c, modName, generics)
+		second, err := parseDecons(c, modName, generics, false)
 		if err != nil {
 			return nil, err
 		}

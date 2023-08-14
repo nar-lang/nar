@@ -7,13 +7,14 @@ import (
 	"strings"
 )
 
-func NewUnionType(c misc.Cursor, modName ModuleFullName, options []UnionOption) Type {
-	return typeUnion{typeBase: typeBase{cursor: c, moduleName: modName}, Options: options}
+func NewUnionType(c misc.Cursor, modName ModuleFullName, defName string, options []UnionOption) Type {
+	return typeUnion{typeBase: typeBase{cursor: c, moduleName: modName}, defName: defName, Options: options}
 }
 
 type typeUnion struct {
 	TypeUnion__ int
 	typeBase
+	defName string
 	Options []UnionOption
 }
 
@@ -34,16 +35,12 @@ func (t typeUnion) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool 
 	if !ok {
 		return false
 	}
-	if len(o.Options) != len(t.Options) {
-		return false
+	if o.moduleName.packageName == t.moduleName.packageName &&
+		o.moduleName.moduleName == t.moduleName.moduleName &&
+		o.defName == t.defName {
+		return true
 	}
-	for i, x := range t.Options {
-		if !x.equalsTo(o.Options[i], ignoreGenerics, md) {
-			return false
-		}
-	}
-
-	return true
+	return false
 }
 
 func (t typeUnion) String() string {
@@ -82,7 +79,9 @@ func (t typeUnion) dereference(md *Metadata) (Type, error) {
 func (t typeUnion) nestedDefinitionNames() []string {
 	var names []string
 	for _, o := range t.Options {
-		names = append(names, o.name)
+		if !o.hidden {
+			names = append(names, o.name)
+		}
 	}
 	return names
 }
@@ -130,15 +129,11 @@ func (t typeUnion) unpackNestedDefinitions(def Definition) []Definition {
 }
 
 func (t typeUnion) resolveWithRefName(cursor misc.Cursor, refName string, generics GenericArgs, md *Metadata) (resolved.Type, error) {
-	resolvedOptions, err := t.resolveOptions(md)
-	if err != nil {
-		return nil, err
-	}
 	resolvedGenerics, err := generics.resolve(cursor, md)
 	if err != nil {
 		return nil, err
 	}
-	return resolved.NewRefUnionType(refName, resolvedGenerics, resolvedOptions), nil
+	return resolved.NewRefUnionType(refName, resolvedGenerics), nil
 }
 
 func (t typeUnion) resolve(cursor misc.Cursor, md *Metadata) (resolved.Type, error) {
@@ -161,14 +156,15 @@ func (t typeUnion) resolveOptions(md *Metadata) ([]resolved.UnionOption, error) 
 	return options, nil
 }
 
-func NewUnionOption(c misc.Cursor, name string, type_ Type) UnionOption {
-	return UnionOption{cursor: c, name: name, valueType: type_}
+func NewUnionOption(c misc.Cursor, name string, type_ Type, hidden bool) UnionOption {
+	return UnionOption{cursor: c, name: name, valueType: type_, hidden: hidden}
 }
 
 type UnionOption struct {
 	name      string
 	valueType Type
 	cursor    misc.Cursor
+	hidden    bool
 }
 
 func (o UnionOption) Name() string {
@@ -183,8 +179,4 @@ func (o UnionOption) MarshalJSON() ([]byte, error) {
 		Name:      o.name,
 		ValueType: o.valueType,
 	})
-}
-
-func (o UnionOption) equalsTo(other UnionOption, ignoreGenerics bool, md *Metadata) bool {
-	return o.name == other.name && typesEqual(o.valueType, other.valueType, ignoreGenerics, md)
 }

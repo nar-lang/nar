@@ -8,10 +8,9 @@ func NewUnionType(options []UnionOption) Type {
 	return TypeUnion{options: options}
 }
 
-func NewRefUnionType(refName string, args GenericArgs, options []UnionOption) TypeUnion {
+func NewRefUnionType(refName string, args GenericArgs) TypeUnion {
 	return TypeUnion{
 		typeBase: typeBase{refName: refName, genericArgs: args},
-		options:  options,
 	}
 }
 
