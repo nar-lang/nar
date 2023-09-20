@@ -4,7 +4,7 @@ import "strings"
 
 const kTargetRuntimeVersion string = "v0.0.6"
 
-type PackageFullName string
+definedType PackageFullName string
 
 func (n PackageFullName) SafeName() string {
 	s := string(n)

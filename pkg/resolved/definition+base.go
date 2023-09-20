@@ -1,11 +1,11 @@
 package resolved
 
-type definitionBase struct {
+definedType definitionBase struct {
 	name  string
 	type_ Type
 }
 
-type definitionBaseWithGenerics struct {
+definedType definitionBaseWithGenerics struct {
 	definitionBase
 	genericParams GenericParams
 }

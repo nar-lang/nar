@@ -1,34 +1,25 @@
 package parsed
 
 import (
-	"oak-compiler/pkg/misc"
-	"oak-compiler/pkg/resolved"
+	"oak-compiler/pkg/a"
 )
 
-type expressionVoid struct {
-	cursor misc.Cursor
+func NewVoidExpression(c a.Cursor) Expression {
+	return expressionVoid{expressionBase: expressionBase{cursor: c}}
+}
+
+definedType expressionVoid struct {
+	expressionBase
 }
 
 func (e expressionVoid) precondition(md *Metadata) (Expression, error) {
 	return e, nil
 }
 
-func (e expressionVoid) setType(type_ Type, md *Metadata) (Expression, Type, error) {
-	_, ok := type_.(typeVoid)
-	if !ok {
-		return nil, nil, misc.NewError(e.cursor, "expecting void type here")
+func (e expressionVoid) inferType(mbType a.Maybe[Type], locals *LocalVars, typeVars TypeVars, md *Metadata) (Expression, Type, error) {
+	t, err := mergeTypes(e.cursor, mbType, a.Just(NewVoidType(e.cursor)), typeVars, md)
+	if err != nil {
+		return nil, nil, err
 	}
-	return e, type_, nil
-}
-
-func (e expressionVoid) getType(md *Metadata) (Type, error) {
-	return NewVoidType(e.cursor, md.currentModuleName()), nil
-}
-
-func (e expressionVoid) resolve(md *Metadata) (resolved.Expression, error) {
-	return resolved.NewVoidExpression(), nil
-}
-
-func (e expressionVoid) getCursor() misc.Cursor {
-	return e.cursor
+	return e, t, nil
 }

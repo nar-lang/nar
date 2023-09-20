@@ -2,36 +2,36 @@ package resolved
 
 import "strings"
 
-type Writer interface {
+definedType Writer interface {
 	write(sb *strings.Builder)
 }
 
-type Definition interface {
+definedType Definition interface {
 	Writer
 }
 
-type DefinitionWithGenerics interface {
+definedType DefinitionWithGenerics interface {
 	getGenerics() GenericParams
 }
 
-type Type interface {
+definedType Type interface {
 	RefName() string
 
 	Writer
 }
 
-type Expression interface {
+definedType Expression interface {
 	Type() Type
 
 	Writer
 }
 
-type Decons interface {
+definedType Decons interface {
 	writeComparison(sb *strings.Builder, name string)
 	writeHeader(sb *strings.Builder, name string)
 }
 
-type Parameter interface {
+definedType Parameter interface {
 	writeName(sb *strings.Builder)
 	writeHeader(sb *strings.Builder)
 	getName() string

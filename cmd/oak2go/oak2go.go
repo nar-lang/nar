@@ -3,8 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"oak-compiler/pkg/compiler"
+	"oak-compiler/pkg/parser"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -16,9 +17,9 @@ func main() {
 }
 
 func mainWithError() error {
-	outDir := flag.String("out", "build", "output directory")
-	inDir := flag.String("in", "", "package directory to compile")
-	mainName := flag.String("main", "", "main function to compile executable")
+	inDir := flag.String("packages", "", "package directories to compile, separated with `;`")
+	cache := flag.String("cache", "./oak-cache", "cache directory")
+	offline := flag.Bool("offline", false, "disable packages downloading")
 
 	flag.Parse()
 
@@ -27,7 +28,20 @@ func mainWithError() error {
 		return fmt.Errorf("no input package provided")
 	}
 
-	err := compiler.Translate(*inDir, *outDir, *mainName)
+	dirs := strings.Split(*inDir, ";")
+
+	packages, err := parser.ParsePackagesFromFs(
+		parser.ParseOptions{
+			CacheDirectory:   *cache,
+			DownloadPackages: !*offline,
+		},
+		dirs...,
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = packages.Compile()
 	if err != nil {
 		return err
 	}

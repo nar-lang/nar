@@ -8,7 +8,7 @@ func NewSelectExpression(condition Expression, cases []ExpressionSelectCase) Exp
 	return expressionSelect{condition: condition, cases: cases}
 }
 
-type expressionSelect struct {
+definedType expressionSelect struct {
 	condition Expression
 	cases     []ExpressionSelectCase
 }
@@ -41,7 +41,7 @@ func NewExpressionSelectCase(decons Decons, expression Expression) ExpressionSel
 	return ExpressionSelectCase{decons: decons, expression: expression}
 }
 
-type ExpressionSelectCase struct {
+definedType ExpressionSelectCase struct {
 	decons     Decons
 	expression Expression
 }

@@ -16,7 +16,7 @@ func NewApplyExpression(
 	}
 }
 
-type expressionApply struct {
+definedType expressionApply struct {
 	type_       Type
 	name        string
 	genericArgs GenericArgs

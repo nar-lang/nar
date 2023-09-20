@@ -6,7 +6,7 @@ func NewConstExpression(type_ Type, value string) Expression {
 	return expressionConst{type_: type_, value: value}
 }
 
-type expressionConst struct {
+definedType expressionConst struct {
 	type_ Type
 	value string
 }

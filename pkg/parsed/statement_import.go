@@ -2,13 +2,14 @@ package parsed
 
 import (
 	"golang.org/x/exp/slices"
-	"oak-compiler/pkg/misc"
+	"oak-compiler/pkg/a"
+	"oak-compiler/pkg/ast"
 )
 
-func NewImportStatement(
-	c misc.Cursor, packageName PackageFullName, module, alias string, exposingAll bool, exposing []string,
-) StatementImport {
-	return StatementImport{
+func NewImport(
+	c a.Cursor, packageName ast.PackageFullName, module, alias string, exposingAll bool, exposing []string,
+) Import {
+	return Import{
 		cursor:      c,
 		packageName: packageName,
 		moduleName:  module,
@@ -18,38 +19,53 @@ func NewImportStatement(
 	}
 }
 
-type StatementImport struct {
-	packageName PackageFullName
+definedType Import struct {
+	packageName ast.PackageFullName
 	moduleName  string
 	alias       string
 	exposing    []string
 	exposingAll bool
-	cursor      misc.Cursor
+	cursor      a.Cursor
 }
 
-func (imp StatementImport) inject(imports map[string]DefinitionAddress, md *Metadata) (StatementImport, error) {
+func (imp Import) inject(imports map[string]DefinitionAddress, md *Metadata) (Import, error) {
 	packageName := imp.packageName
 	if packageName == "" {
-		var availablePackageNames []PackageFullName
-		for name, pkg := range md.Packages {
-			if _, ok := pkg.Modules[imp.moduleName]; ok {
-				_, ok := md.CurrentPackage.Info.Dependencies[string(name)]
-				if ok || name == md.CurrentPackage.FullName() {
-					availablePackageNames = append(availablePackageNames, name)
-					break
+		currentPackage, ok := md.Packages[md.CurrentPackage]
+		if !ok {
+			panic("current package is not set")
+		}
+
+		var availablePackageNames []ast.PackageFullName
+
+		for name := range currentPackage.Modules {
+			if name == imp.moduleName {
+				availablePackageNames = append(availablePackageNames, md.CurrentPackage)
+			}
+		}
+
+		for depName, depVersion := range currentPackage.Info.Dependencies {
+			pkgName := ast.MakePackageName(depName, depVersion)
+			pkg, ok := md.Packages[pkgName]
+			if !ok {
+				panic("package not loaded")
+			}
+			for name := range pkg.Modules {
+				if name == imp.moduleName {
+					availablePackageNames = append(availablePackageNames, pkgName)
 				}
 			}
 		}
 		if len(availablePackageNames) > 1 {
-			return StatementImport{},
-				misc.NewError(
+			return Import{},
+				a.NewError(
 					imp.cursor,
 					"several packages has module %s, use `from` to determinate which one should be used",
 				)
 		}
 		if len(availablePackageNames) == 0 {
-			return StatementImport{},
-				misc.NewError(imp.cursor, "cannot find module, is package added to dependencies on oak.json?")
+			return Import{},
+				a.NewError(imp.cursor, "cannot find module, is package added to dependencies on oak.json?")
 		}
 		packageName = availablePackageNames[0]
 	}
@@ -69,7 +85,7 @@ func (imp StatementImport) inject(imports map[string]DefinitionAddress, md *Meta
 }
 
 func addImport(
-	packageName PackageFullName, module, alias, name string, exposing bool, imports map[string]DefinitionAddress,
+	packageName ast.PackageFullName, module, alias, name string, exposing bool, imports map[string]DefinitionAddress,
 ) {
 	var identifier string
 	if !exposing {

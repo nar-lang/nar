@@ -15,7 +15,7 @@ func NewRefRecordType(refName string, args GenericArgs, fields []RecordField) Ty
 	}
 }
 
-type typeRecord struct {
+definedType typeRecord struct {
 	typeBase
 	fields []RecordField
 }
@@ -31,7 +31,7 @@ func NewRecordField(name string, type_ Type) RecordField {
 	return RecordField{name: name, type_: type_}
 }
 
-type RecordField struct {
+definedType RecordField struct {
 	name  string
 	type_ Type
 }

@@ -6,7 +6,7 @@ func NewVoidExpression() expressionVoid {
 	return expressionVoid{}
 }
 
-type expressionVoid struct {
+definedType expressionVoid struct {
 }
 
 func (e expressionVoid) Type() Type {

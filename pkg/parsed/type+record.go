@@ -1,47 +1,71 @@
 package parsed
 
 import (
-	"oak-compiler/pkg/misc"
-	"oak-compiler/pkg/resolved"
+	"oak-compiler/pkg/a"
 	"strings"
 )
 
-func NewRecordType(c misc.Cursor, modName ModuleFullName, fields []RecordField) Type {
-	return typeRecord{typeBase: typeBase{cursor: c, moduleName: modName}, Fields: fields}
+func NewRecordType(c a.Cursor, fields []RecordField, ext a.Maybe[string]) Type {
+	return typeRecord{typeBase: typeBase{cursor: c}, fields: fields, ext: ext}
 }
 
-type typeRecord struct {
+definedType typeRecord struct {
 	typeBase
-	Fields []RecordField
+	fields []RecordField
+	ext    a.Maybe[string]
 }
 
-func (t typeRecord) extractGenerics(other Type) genericsMap {
-	//TODO implement me
-	panic("implement me")
-	return nil
+func (t typeRecord) dereference(typeVars TypeVars, md *Metadata) (Type, error) {
+	return t, nil
 }
 
-func (t typeRecord) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool {
+func (t typeRecord) mergeWith(cursor a.Cursor, other Type, typeVars TypeVars, md *Metadata) (Type, error) {
+	if _, hasExt := t.ext.Unwrap(); hasExt {
+		panic("typeRecord should should be dereferenced before it can be compared to another definedType")
+	}
+
 	o, ok := other.(typeRecord)
 	if !ok {
-		return false
-	}
-	if len(o.Fields) != len(t.Fields) {
-		return false
-	}
-	for i, f := range t.Fields {
-		if !f.equalsTo(o.Fields[i], ignoreGenerics, md) {
-			return false
-		}
+		return nil, a.NewError(cursor, "expected %d got %d", t, other)
 	}
 
-	return true
+	if _, hasExt := o.ext.Unwrap(); hasExt {
+		panic("typeRecord should should be dereferenced before it can be compared to another definedType")
+	}
+
+	if len(o.fields) != len(t.fields) {
+		return nil, a.NewError(cursor, "expected record with %d fields, got %d", len(t.fields), len(o.fields))
+	}
+	var fields []RecordField
+	for _, ft := range t.fields {
+		found := false
+		for _, fo := range o.fields {
+			if ft.name == fo.name {
+				x, err := ft.mergeWith(fo, typeVars, md)
+				if err != nil {
+					return nil, err
+				}
+				fields = append(fields, x)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, a.NewError(cursor, "expected record `%s` has `%s` field", other, ft.name)
+		}
+	}
+	t.fields = fields
+	return t, nil
 }
 
 func (t typeRecord) String() string {
 	sb := strings.Builder{}
 	sb.WriteString("{")
-	for i, f := range t.Fields {
+	if ext, ok := t.ext.Unwrap(); ok {
+		sb.WriteString(ext)
+		sb.WriteString(" | ")
+	}
+	for i, f := range t.fields {
 		if i > 0 {
 			sb.WriteString(", ")
 		}
@@ -53,78 +77,25 @@ func (t typeRecord) String() string {
 	return sb.String()
 }
 
-func (t typeRecord) getGenerics() GenericArgs {
-	return nil
-}
-
-func (t typeRecord) mapGenerics(gm genericsMap) Type {
-	var fields []RecordField
-	for _, f := range t.Fields {
-		f.type_ = f.type_.mapGenerics(gm)
-		fields = append(fields, f)
-	}
-	t.Fields = fields
-	return t
-}
-
-func (t typeRecord) dereference(md *Metadata) (Type, error) {
-	return t, nil
-}
-
-func (t typeRecord) nestedDefinitionNames() []string {
-	return nil
-}
-
-func (t typeRecord) unpackNestedDefinitions(def Definition) []Definition {
-	return nil
-}
-
-func (t typeRecord) resolveWithRefName(cursor misc.Cursor, refName string, generics GenericArgs, md *Metadata) (resolved.Type, error) {
-	resolvedGenerics, err := generics.resolve(cursor, md)
-	if err != nil {
-		return nil, err
-	}
-	resolvedFields, err := t.resolveFields(md)
-	if err != nil {
-		return nil, err
-	}
-	return resolved.NewRefRecordType(refName, resolvedGenerics, resolvedFields), nil
-}
-
-func (t typeRecord) resolve(cursor misc.Cursor, md *Metadata) (resolved.Type, error) {
-	resolvedFields, err := t.resolveFields(md)
-	if err != nil {
-		return nil, err
-	}
-	return resolved.NewRecordType(resolvedFields), nil
-}
-
-func (t typeRecord) resolveFields(md *Metadata) ([]resolved.RecordField, error) {
-	var fields []resolved.RecordField
-	for _, field := range t.Fields {
-		resolvedField, err := field.type_.resolve(field.cursor, md)
-		if err != nil {
-			return nil, err
-		}
-		fields = append(fields, resolved.NewRecordField(field.name, resolvedField))
-	}
-	return fields, nil
-}
-
-func NewRecordField(c misc.Cursor, name string, type_ Type) RecordField {
+func NewRecordField(c a.Cursor, name string, type_ Type) RecordField {
 	return RecordField{cursor: c, name: name, type_: type_}
 }
 
-type RecordField struct {
+definedType RecordField struct {
 	name   string
 	type_  Type
-	cursor misc.Cursor
+	cursor a.Cursor
 }
 
 func (f RecordField) Name() string {
 	return f.name
 }
 
-func (f RecordField) equalsTo(other RecordField, ignoreGenerics bool, md *Metadata) bool {
-	return f.name == other.name && typesEqual(f.type_, other.type_, ignoreGenerics, md)
+func (f RecordField) mergeWith(field RecordField, vars TypeVars, md *Metadata) (RecordField, error) {
+	var err error
+	f.type_, err = mergeTypes(field.cursor, a.Just(f.type_), a.Just(field.type_), vars, md)
+	if err != nil {
+		return RecordField{}, err
+	}
+	return f, nil
 }

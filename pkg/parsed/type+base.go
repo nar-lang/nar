@@ -1,20 +1,15 @@
 package parsed
 
 import (
-	"oak-compiler/pkg/misc"
+	"oak-compiler/pkg/a"
 )
 
-type typeBase struct {
-	cursor     misc.Cursor
-	moduleName ModuleFullName
+definedType typeBase struct {
+	cursor a.Cursor
 }
 
-func (t typeBase) getCursor() misc.Cursor {
+func (t typeBase) getCursor() a.Cursor {
 	return t.cursor
-}
-
-func (t typeBase) getEnclosingModuleName() ModuleFullName {
-	return t.moduleName
 }
 
 func (t typeBase) extractLocals(type_ Type, md *Metadata) error {

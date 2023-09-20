@@ -6,7 +6,7 @@ func NewOptionDecons(option string, valueType Type, arg Decons, alias string) De
 	return deconsOption{option: option, valueType: valueType, arg: arg, alias: alias}
 }
 
-type deconsOption struct {
+definedType deconsOption struct {
 	option    string
 	valueType Type
 	arg       Decons

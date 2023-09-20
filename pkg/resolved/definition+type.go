@@ -13,7 +13,7 @@ func NewTypeDefinition(name string, generics GenericParams, type_ Type) Definiti
 	}
 }
 
-type definitionType struct {
+definedType definitionType struct {
 	definitionBaseWithGenerics
 }
 
@@ -22,7 +22,7 @@ func (def definitionType) inferGenerics() Definition {
 }
 
 func (def definitionType) write(sb *strings.Builder) {
-	sb.WriteString("type ")
+	sb.WriteString("definedType ")
 	sb.WriteString(def.name)
 	def.getGenerics().writeFull(sb)
 	sb.WriteString(" ")

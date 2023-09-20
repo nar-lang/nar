@@ -2,7 +2,7 @@ package resolved
 
 import "strings"
 
-type typeBase struct {
+definedType typeBase struct {
 	refName     string
 	genericArgs GenericArgs
 }

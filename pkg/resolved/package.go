@@ -19,7 +19,7 @@ func NewPackage(name PackageFullName, sourceDir string, modules map[string]Modul
 	}
 }
 
-type Package struct {
+definedType Package struct {
 	name      PackageFullName
 	sourceDir string
 	modules   map[string]Module

@@ -14,7 +14,7 @@ func NewOptionExpression(
 	}
 }
 
-type expressionOption struct {
+definedType expressionOption struct {
 	type_       Type
 	genericArgs GenericArgs
 	typeName    string

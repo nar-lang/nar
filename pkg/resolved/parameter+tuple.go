@@ -9,7 +9,7 @@ func NewTupleParameter(name string, type_ Type, items []Parameter) Parameter {
 	return parameterTuple{items: items, name: name, type_: type_}
 }
 
-type parameterTuple struct {
+definedType parameterTuple struct {
 	name  string
 	type_ Type
 	items []Parameter

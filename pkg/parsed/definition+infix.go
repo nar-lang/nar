@@ -1,76 +1,68 @@
 package parsed
 
 import (
-	"oak-compiler/pkg/misc"
-	"oak-compiler/pkg/resolved"
+	"oak-compiler/pkg/a"
+	"oak-compiler/pkg/ast"
 )
 
 func NewInfixDefinition(
-	c misc.Cursor, address DefinitionAddress, hidden bool, assoc InfixAssociativity, priority int, alias string,
+	c a.Cursor,
+	name string,
+	moduleName ModuleFullName,
+	hidden bool,
+	assoc ast.InfixAssociativity,
+	priority int,
+	alias string,
 ) Definition {
-	return definitionInfix{
+	return &definitionInfix{
 		definitionBase: definitionBase{
-			Address: address,
-			Hidden:  hidden,
-			cursor:  c,
+			cursor: c,
+			name:   name,
+			hidden: hidden,
 		},
-		Associativity: assoc,
-		Priority:      priority,
-		Alias:         alias,
+		assoc:      assoc,
+		priority:   priority,
+		alias:      alias,
+		moduleName: moduleName,
 	}
 }
 
-type definitionInfix struct {
+definedType definitionInfix struct {
 	definitionBase
-	Associativity InfixAssociativity
-	Priority      int
-	Alias         string
+	assoc      ast.InfixAssociativity
+	priority   int
+	alias      string
+	moduleName ModuleFullName
 }
 
-func (def definitionInfix) precondition(*Metadata) (Definition, error) {
-	return def, nil
-}
-
-func (def definitionInfix) getType(cursor misc.Cursor, generics GenericArgs, md *Metadata) (Type, GenericArgs, error) {
-	addr := def.Address
-	addr.definitionName = def.Alias
-	fn, ok := md.findDefinitionByAddress(addr)
-	if !ok {
-		return nil, nil, misc.NewError(
-			cursor, "cannot find `%s` infix function alias `%s`", def.Name(), addr.definitionName,
-		)
-	}
-	return typeInfix{definition: def}, fn.getGenerics().toArgs(), nil
-}
-
-func (def definitionInfix) nestedDefinitionNames() []string {
+func (def *definitionInfix) unpackNestedDefinitions() []Definition {
 	return nil
 }
 
-func (def definitionInfix) unpackNestedDefinitions() []Definition {
+func (def *definitionInfix) nestedDefinitionNames() []string {
 	return nil
 }
 
-func (def definitionInfix) resolveName(cursor misc.Cursor, md *Metadata) (string, error) {
-	addr := def.Address
-	addr.definitionName = def.Alias
-	fn, ok := md.findDefinitionByAddress(addr)
-	if !ok {
-		return "", misc.NewError(
-			cursor, "cannot find `%s` infix function alias `%s`", def.Name(), addr.definitionName,
-		)
+func (def *definitionInfix) precondition(md *Metadata) error {
+	return nil
+}
+
+func (def *definitionInfix) inferType(md *Metadata) (Type, error) {
+	if def._type != nil {
+		return def._type, nil
 	}
-	return fn.resolveName(cursor, md)
+	fn, ok := md.findDefinitionByAddress(NewDefinitionAddress(def.moduleName, def.alias))
+	if !ok {
+		return nil, a.NewError(def.cursor, "cannot find alias function")
+	}
+	var err error
+	def._type, err = fn.inferType(md)
+	if err != nil {
+		return nil, err
+	}
+	return def._type, nil
 }
 
-func (def definitionInfix) resolve(md *Metadata) (resolved.Definition, bool, error) {
-	return nil, false, nil
+func (def *definitionInfix) getTypeWithParameters(typeParameters []Type, md *Metadata) (Type, error) {
+	panic("??")
 }
-
-type InfixAssociativity string
-
-const (
-	InfixAssociativityLeft  InfixAssociativity = "left"
-	InfixAssociativityRight                    = "right"
-	InfixAssociativityNon                      = "non"
-)

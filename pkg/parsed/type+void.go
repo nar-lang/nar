@@ -1,55 +1,29 @@
 package parsed
 
 import (
-	"oak-compiler/pkg/misc"
-	"oak-compiler/pkg/resolved"
+	"oak-compiler/pkg/a"
 )
 
-func NewVoidType(c misc.Cursor, modName ModuleFullName) Type {
-	return typeVoid{typeBase: typeBase{cursor: c, moduleName: modName}}
+func NewVoidType(c a.Cursor) Type {
+	return typeVoid{typeBase: typeBase{cursor: c}}
 }
 
-type typeVoid struct {
+definedType typeVoid struct {
 	typeBase
 }
 
-func (t typeVoid) extractGenerics(other Type) genericsMap {
-	return nil
-}
-
-func (t typeVoid) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool {
+func (t typeVoid) mergeWith(cursor a.Cursor, other Type, typeVars TypeVars, md *Metadata) (Type, error) {
 	_, ok := other.(typeVoid)
-	return ok
+	if !ok {
+		return nil, a.NewError(cursor, "expected unit definedType, got `%s`", other)
+	}
+	return t, nil
 }
 
 func (t typeVoid) String() string {
 	return "()"
 }
 
-func (t typeVoid) getGenerics() GenericArgs {
-	return nil
-}
-
-func (t typeVoid) mapGenerics(gm genericsMap) Type {
-	return t
-}
-
-func (t typeVoid) resolve(cursor misc.Cursor, md *Metadata) (resolved.Type, error) {
-	return resolved.NewVoidType(), nil
-}
-
-func (t typeVoid) dereference(md *Metadata) (Type, error) {
+func (t typeVoid) dereference(typeVars TypeVars, md *Metadata) (Type, error) {
 	return t, nil
-}
-
-func (t typeVoid) resolveWithRefName(cursor misc.Cursor, refName string, generics GenericArgs, md *Metadata) (resolved.Type, error) {
-	return t.resolve(cursor, md)
-}
-
-func (t typeVoid) nestedDefinitionNames() []string {
-	return nil
-}
-
-func (t typeVoid) unpackNestedDefinitions(def Definition) []Definition {
-	return nil
 }

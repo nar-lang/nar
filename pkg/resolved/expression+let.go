@@ -10,7 +10,7 @@ func NewLetExpression(definitions []LetDefinition, expression Expression) Expres
 	}
 }
 
-type expressionLet struct {
+definedType expressionLet struct {
 	definitions []LetDefinition
 	expression  Expression
 }
@@ -47,7 +47,7 @@ func NewLetDefinition(param Parameter, type_ Type, expression Expression) LetDef
 	return LetDefinition{param: param, type_: type_, expression: expression}
 }
 
-type LetDefinition struct {
+definedType LetDefinition struct {
 	param      Parameter
 	type_      Type
 	expression Expression

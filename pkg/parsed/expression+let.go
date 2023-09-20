@@ -1,141 +1,158 @@
 package parsed
 
 import (
-	"oak-compiler/pkg/misc"
-	"oak-compiler/pkg/resolved"
+	"fmt"
+	"oak-compiler/pkg/a"
 )
 
-func NewLetExpression(c misc.Cursor, definitions []LetDefinition, expression Expression) Expression {
-	return expressionLet{cursor: c, Definitions: definitions, Expression: expression}
+func NewLetExpression(c a.Cursor, definitions []LetDefinition, expression Expression) Expression {
+	return expressionLet{expressionBase: expressionBase{cursor: c}, Definitions: definitions, Expression: expression}
 }
 
-type expressionLet struct {
+definedType expressionLet struct {
+	expressionBase
 	Definitions []LetDefinition
 	Expression  Expression
-	cursor      misc.Cursor
-}
 
-func (e expressionLet) getCursor() misc.Cursor {
-	return e.cursor
+	_type Type
 }
 
 func (e expressionLet) precondition(md *Metadata) (Expression, error) {
 	var err error
-	locals := md.cloneLocalVars()
 	for i, def := range e.Definitions {
-		err = def.param.extractLocals(def.type_, md)
+		e.Definitions[i], err = def.precondition(md)
 		if err != nil {
 			return nil, err
 		}
-		innerLocals := md.cloneLocalVars()
-		err = def.type_.extractLocals(def.type_, md)
-		if err != nil {
-			return nil, err
-		}
-		def.expression, err = def.expression.precondition(md)
-		if err != nil {
-			return nil, err
-		}
-		e.Definitions[i] = def
-		md.LocalVars = innerLocals
 	}
+
 	e.Expression, err = e.Expression.precondition(md)
 	if err != nil {
 		return nil, err
 	}
-	md.LocalVars = locals
 	return e, nil
 }
 
-func (e expressionLet) setType(type_ Type, md *Metadata) (Expression, Type, error) {
+func (e expressionLet) inferType(mbType a.Maybe[Type], locals *LocalVars, typeVars TypeVars, md *Metadata) (Expression, Type, error) {
 	var err error
-	locals := md.cloneLocalVars()
+	locals = NewLocalVars(locals)
 	for i, def := range e.Definitions {
-
-		innerLocals := md.cloneLocalVars()
-		err = def.type_.extractLocals(def.type_, md)
-		if err != nil {
-			return nil, nil, err
-		}
-		exprType := def.type_
-
-		dt, err := def.type_.dereference(md)
-		if err != nil {
-			return nil, nil, err
-		}
-		signature, ok := dt.(typeSignature)
-		if ok {
-			_, exprType = signature.flattenDefinition()
-		}
-
-		def.expression, _, err = def.expression.setType(exprType, md)
-		if err != nil {
-			return nil, nil, err
-		}
-		e.Definitions[i] = def
-		md.LocalVars = innerLocals
-
-		err = def.param.extractLocals(def.type_, md)
+		e.Definitions[i], err = def.inferType(locals, typeVars, md)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
-	var inferredType Type
-	e.Expression, inferredType, err = e.Expression.setType(type_, md)
+
+	e.Expression, e._type, err = e.Expression.inferType(mbType, locals, typeVars, md)
 	if err != nil {
 		return nil, nil, err
 	}
-	md.LocalVars = locals
-	return e, inferredType, nil
+
+	return e, e._type, nil
 }
 
-func (e expressionLet) getType(md *Metadata) (Type, error) {
-	return e.Expression.getType(md)
+definedType LetDefinition interface {
+	precondition(md *Metadata) (LetDefinition, error)
+	inferType(locals *LocalVars, typeVars TypeVars, md *Metadata) (LetDefinition, error)
 }
 
-func (e expressionLet) resolve(md *Metadata) (resolved.Expression, error) {
-	locals := md.cloneLocalVars()
-	var resolvedLets []resolved.LetDefinition
-	for _, def := range e.Definitions {
-		innerLocals := md.cloneLocalVars()
-		err := def.type_.extractLocals(def.type_, md)
-		if err != nil {
-			return nil, err
-		}
-		resolvedExpression, err := def.expression.resolve(md)
-		if err != nil {
-			return nil, err
-		}
-		resolvedParam, err := def.param.resolve(def.type_, md)
-		if err != nil {
-			return nil, err
-		}
-		resolvedType, err := def.type_.resolve(e.cursor, md)
-		if err != nil {
-			return nil, err
-		}
-		resolvedLets = append(resolvedLets, resolved.NewLetDefinition(resolvedParam, resolvedType, resolvedExpression))
-		md.LocalVars = innerLocals
-		err = def.param.extractLocals(def.type_, md)
-		if err != nil {
-			return nil, err
-		}
+func NewLetDefine(name string, params []Pattern, mbSignature a.Maybe[TypeSignature], body Expression) LetDefinition {
+	return letDefine{
+		name:        name,
+		params:      params,
+		mbSignature: mbSignature,
+		body:        body,
 	}
-	resolvedExpression, err := e.Expression.resolve(md)
+}
+
+definedType letDefine struct {
+	name        string
+	params      []Pattern
+	mbSignature a.Maybe[TypeSignature]
+	body        Expression
+}
+
+func (l letDefine) precondition(md *Metadata) (LetDefinition, error) {
+	var err error
+	l.body, err = l.body.precondition(md)
 	if err != nil {
 		return nil, err
 	}
-	result := resolved.NewLetExpression(resolvedLets, resolvedExpression)
-	md.LocalVars = locals
-	return result, nil
+	return l, nil
 }
 
-func NewLetDefinition(param Parameter, type_ Type, expression Expression) LetDefinition {
-	return LetDefinition{param: param, type_: type_, expression: expression}
+func (l letDefine) inferType(locals *LocalVars, typeVars TypeVars, md *Metadata) (LetDefinition, error) {
+	var signature TypeSignature
+	var err error
+	mbReturnType := a.Nothing[Type]()
+	var paramTypes []Type
+	signature, ok := l.mbSignature.Unwrap()
+	if ok {
+		paramTypes = signature.paramTypes
+		mbReturnType = a.Just(signature.returnType)
+	} else {
+		for i, p := range l.params {
+			signature.paramTypes = append(signature.paramTypes, NewVariableType(p.getCursor(), fmt.Sprintf("@%d", i)))
+		}
+		signature.returnType = NewVariableType(l.body.getCursor(), "@@")
+	}
+
+	fnLocals := NewLocalVars(locals)
+	for i, p := range l.params {
+		err = p.populateLocals(paramTypes[i], fnLocals, typeVars, md)
+		if err != nil {
+			return nil, err
+		}
+	}
+	locals.Populate(l.name, signature)
+
+	l.body, signature.returnType, err = l.body.inferType(mbReturnType, fnLocals, typeVars, md)
+	if err != nil {
+		return nil, err
+	}
+	locals.Populate(l.name, signature)
+
+	return l, nil
 }
 
-type LetDefinition struct {
-	param      Parameter
-	type_      Type
-	expression Expression
+func NewLetDestruct(definedType Pattern, value Expression) LetDefinition {
+	return letDestruct{
+		definedType: definedType,
+		value:   value,
+	}
+}
+
+definedType letDestruct struct {
+	definedType Pattern
+	value   Expression
+}
+
+func (l letDestruct) precondition(md *Metadata) (LetDefinition, error) {
+	var err error
+	l.value, err = l.value.precondition(md)
+	if err != nil {
+		return nil, err
+	}
+	return l, nil
+}
+
+func (l letDestruct) inferType(locals *LocalVars, typeVars TypeVars, md *Metadata) (LetDefinition, error) {
+	type_ := NewVariableType(l.definedType.getCursor(), "@@")
+
+	err := l.definedType.populateLocals(type_, locals, typeVars, md)
+	if err != nil {
+		return nil, err
+	}
+
+	l.value, type_, err = l.value.inferType(a.Just(type_), locals, typeVars, md)
+	if err != nil {
+		return nil, err
+	}
+
+	err = l.definedType.populateLocals(type_, locals, typeVars, md)
+	if err != nil {
+		return nil, err
+	}
+
+	return l, nil
 }

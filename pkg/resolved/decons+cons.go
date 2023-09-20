@@ -8,7 +8,7 @@ func NewConsDecons(head Decons, tail Decons, alias string) Decons {
 	return deconsCons{head: head, tail: tail, alias: alias}
 }
 
-type deconsCons struct {
+definedType deconsCons struct {
 	head  Decons
 	tail  Decons
 	alias string

@@ -8,7 +8,7 @@ func NewIfExpression(condition, positive, negative Expression) Expression {
 	return expressionIf{condition: condition, positive: positive, negative: negative}
 }
 
-type expressionIf struct {
+definedType expressionIf struct {
 	condition Expression
 	positive  Expression
 	negative  Expression

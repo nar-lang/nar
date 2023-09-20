@@ -9,7 +9,7 @@ func NewTupleExpression(type_ TypeTuple, items []Expression) Expression {
 	return expressionTuple{type_: type_, items: items}
 }
 
-type expressionTuple struct {
+definedType expressionTuple struct {
 	type_ TypeTuple
 	items []Expression
 }

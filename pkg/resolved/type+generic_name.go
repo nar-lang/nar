@@ -8,7 +8,7 @@ func NewGenericNameType(name string) Type {
 	return typeGenericName{name: name}
 }
 
-type typeGenericName struct {
+definedType typeGenericName struct {
 	name string
 }
 

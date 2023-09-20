@@ -1,52 +1,38 @@
 package parsed
 
 import (
-	"oak-compiler/pkg/misc"
-	"oak-compiler/pkg/resolved"
+	"oak-compiler/pkg/a"
 	"strings"
 )
 
-func NewTupleType(c misc.Cursor, modName ModuleFullName, items []Type) Type {
-	return typeTuple{typeBase: typeBase{cursor: c, moduleName: modName}, Items: items}
+func NewTupleType(c a.Cursor, items []Type) Type {
+	return typeTuple{typeBase: typeBase{cursor: c}, items: items}
 }
 
-type typeTuple struct {
+definedType typeTuple struct {
 	typeBase
-	Items []Type
+	items []Type
 }
 
-func (t typeTuple) extractGenerics(other Type) genericsMap {
-	var gm genericsMap
-	if tt, ok := other.(typeTuple); ok {
-		if len(tt.Items) == len(t.Items) {
-			for i, item := range t.Items {
-				gm = mergeGenericMaps(gm, item.extractGenerics(tt.Items[i]))
-			}
-		}
-	}
-	return gm
-}
-
-func (t typeTuple) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool {
+func (t typeTuple) mergeWith(cursor a.Cursor, other Type, typeVars TypeVars, md *Metadata) (Type, error) {
 	o, ok := other.(typeTuple)
 	if !ok {
-		return false
+		return nil, a.NewError(cursor, "expected tuple, got `%s`", other)
 	}
-	if len(o.Items) != len(t.Items) {
-		return false
+
+	var err error
+	t.items, err = mergeTypesAll(cursor, t.items, o.items, typeVars, md)
+	if err != nil {
+		return nil, err
 	}
-	for i, x := range t.Items {
-		if !typesEqual(x, o.Items[i], ignoreGenerics, md) {
-			return false
-		}
-	}
-	return true
+
+	return t, nil
 }
 
 func (t typeTuple) String() string {
 	sb := strings.Builder{}
 	sb.WriteString("{")
-	for i, x := range t.Items {
+	for i, x := range t.items {
 		if i > 0 {
 			sb.WriteString(", ")
 		}
@@ -56,59 +42,6 @@ func (t typeTuple) String() string {
 	return sb.String()
 }
 
-func (t typeTuple) getGenerics() GenericArgs {
-	return nil
-}
-
-func (t typeTuple) mapGenerics(gm genericsMap) Type {
-	var items []Type
-	for _, item := range t.Items {
-		items = append(items, item.mapGenerics(gm))
-	}
-	t.Items = items
-	return t
-}
-
-func (t typeTuple) dereference(md *Metadata) (Type, error) {
+func (t typeTuple) dereference(typeVars TypeVars, md *Metadata) (Type, error) {
 	return t, nil
-}
-
-func (t typeTuple) nestedDefinitionNames() []string {
-	return nil
-}
-
-func (t typeTuple) unpackNestedDefinitions(def Definition) []Definition {
-	return nil
-}
-
-func (t typeTuple) resolveWithRefName(cursor misc.Cursor, refName string, generics GenericArgs, md *Metadata) (resolved.Type, error) {
-	resolvedItems, err := t.resolveItems(md)
-	if err != nil {
-		return nil, err
-	}
-	resolvedGenerics, err := generics.resolve(cursor, md)
-	if err != nil {
-		return nil, err
-	}
-	return resolved.NewRefTupleType(refName, resolvedGenerics, resolvedItems), nil
-}
-
-func (t typeTuple) resolve(cursor misc.Cursor, md *Metadata) (resolved.Type, error) {
-	resolvedItems, err := t.resolveItems(md)
-	if err != nil {
-		return nil, err
-	}
-	return resolved.NewTupleType(resolvedItems), nil
-}
-
-func (t typeTuple) resolveItems(md *Metadata) ([]resolved.Type, error) {
-	var items []resolved.Type
-	for _, item := range t.Items {
-		resolvedItem, err := item.resolve(item.getCursor(), md)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, resolvedItem)
-	}
-	return items, nil
 }

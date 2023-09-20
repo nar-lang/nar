@@ -1,28 +1,25 @@
 package parsed
 
 import (
-	"oak-compiler/pkg/misc"
-	"oak-compiler/pkg/resolved"
+	"oak-compiler/pkg/a"
 )
 
-func NewListExpression(c misc.Cursor, items []Expression) Expression {
-	return expressionList{cursor: c, Items: items}
+func NewListExpression(c a.Cursor, items []Expression) Expression {
+	return expressionList{expressionBase: expressionBase{cursor: c}, items: items}
 }
 
-type expressionList struct {
-	Items    []Expression
-	ItemType Type
-	cursor   misc.Cursor
-}
+definedType expressionList struct {
+	expressionBase
+	items []Expression
 
-func (e expressionList) getCursor() misc.Cursor {
-	return e.cursor
+	_type     Type
+	_itemType Type
 }
 
 func (e expressionList) precondition(md *Metadata) (Expression, error) {
 	var err error
-	for i, item := range e.Items {
-		e.Items[i], err = item.precondition(md)
+	for i, item := range e.items {
+		e.items[i], err = item.precondition(md)
 		if err != nil {
 			return nil, err
 		}
@@ -30,70 +27,29 @@ func (e expressionList) precondition(md *Metadata) (Expression, error) {
 	return e, nil
 }
 
-func (e expressionList) setType(type_ Type, md *Metadata) (Expression, Type, error) {
-	gs := type_.getGenerics()
-	if len(gs) != 1 {
-		return nil, nil, misc.NewError(e.cursor, "expected list type here")
-	}
-	e.ItemType = gs[0]
-	inferredType := TypeBuiltinList(e.cursor, md.currentModuleName(), e.ItemType)
-	if !typesEqual(type_, inferredType, false, md) {
-		return nil, nil, misc.NewError(e.cursor, "types do not match, expected %s got % s", inferredType, type_)
+func (e expressionList) inferType(mbType a.Maybe[Type], locals *LocalVars, typeVars TypeVars, md *Metadata) (Expression, Type, error) {
+	if t, ok := mbType.Unwrap(); ok {
+		var err error
+		e._type, e._itemType, err = ExtractListTypeAndItemType(e.cursor, t, typeVars, md)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		e._itemType = typeVariable{typeBase: typeBase{cursor: e.cursor}, name: "?0"}
+		e._type = TypeBuiltinList(e.cursor, e._itemType)
 	}
 
-	var err error
-	for i, item := range e.Items {
-		e.Items[i], e.ItemType, err = item.setType(e.ItemType, md)
+	for i, ex := range e.items {
+		var itemType Type
+		var err error
+		e.items[i], itemType, err = ex.inferType(a.Just(e._itemType), locals, typeVars, md)
+		if err != nil {
+			return nil, nil, err
+		}
+		itemType, err = mergeTypes(ex.getCursor(), a.Just(e._itemType), a.Just(itemType), typeVars, md)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
-	for i, item := range e.Items {
-		e.Items[i], _, err = item.setType(e.ItemType, md)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-
-	return e, TypeBuiltinList(e.cursor, md.currentModuleName(), e.ItemType), nil
-}
-
-func (e expressionList) getType(md *Metadata) (Type, error) {
-	if e.ItemType != nil {
-		return TypeBuiltinList(e.cursor, md.currentModuleName(), e.ItemType), nil
-	}
-	for _, ex := range e.Items {
-		itemType, err := ex.getType(md)
-		if err != nil {
-			return nil, err
-		}
-		return TypeBuiltinList(e.cursor, md.currentModuleName(), itemType), nil
-	}
-	return TypeBuiltinList(e.cursor, md.currentModuleName(), typeGenericNotResolved{Name: "__empty_list"}), nil
-}
-
-func (e expressionList) resolve(md *Metadata) (resolved.Expression, error) {
-	var expressions []resolved.Expression
-	for _, ex := range e.Items {
-		resolvedExpression, err := ex.resolve(md)
-		if err != nil {
-			return nil, err
-		}
-		expressions = append(expressions, resolvedExpression)
-	}
-
-	var types []resolved.Type
-	for _, e := range expressions {
-		types = append(types, e.Type())
-	}
-
-	resolvedList, err := TypeBuiltinList(e.cursor, md.currentModuleName(), e.ItemType).resolve(e.cursor, md)
-	if err != nil {
-		return nil, err
-	}
-	resolvedItemType, err := e.ItemType.resolve(e.cursor, md)
-	if err != nil {
-		return nil, err
-	}
-	return resolved.NewListExpression(resolvedList, resolvedItemType, expressions), nil
+	return e, e._type, nil
 }

@@ -14,7 +14,7 @@ func NewFuncDefinition(name string, generics GenericParams, type_ Type, expressi
 	}
 }
 
-type definitionFunc struct {
+definedType definitionFunc struct {
 	definitionBaseWithGenerics
 	expression Expression
 }

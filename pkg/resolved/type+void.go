@@ -8,7 +8,7 @@ func NewVoidType() Type {
 	return typeVoid{}
 }
 
-type typeVoid struct {
+definedType typeVoid struct {
 }
 
 func (t typeVoid) RefName() string {

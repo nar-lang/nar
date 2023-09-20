@@ -1,94 +1,54 @@
 package parsed
 
 import (
-	"oak-compiler/pkg/misc"
-	"oak-compiler/pkg/resolved"
+	"oak-compiler/pkg/a"
 )
 
-func NewConstExpression(c misc.Cursor, constKind ConstKind, value string) Expression {
-	return expressionConst{cursor: c, Kind: constKind, Value: value}
+func NewConstExpression(c a.Cursor, const_kind ConstKind, value string) Expression {
+	return expressionConst{expressionBase: expressionBase{cursor: c}, kind: const_kind, value: value}
 }
 
-type expressionConst struct {
-	Kind   ConstKind
-	Value  string
-	cursor misc.Cursor
-}
+definedType expressionConst struct {
+	expressionBase
+	kind  ConstKind
+	value string
 
-func (e expressionConst) getCursor() misc.Cursor {
-	return e.cursor
+	_type Type
 }
 
 func (e expressionConst) precondition(md *Metadata) (Expression, error) {
 	return e, nil
 }
 
-func (e expressionConst) setType(type_ Type, md *Metadata) (Expression, Type, error) {
-	dt, err := type_.dereference(md)
-	if err != nil {
-		return nil, nil, err
-	}
-	constType, err := e.getType(md)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if !typesEqual(dt, constType, false, md) {
-		if gn, ok := dt.(typeGenericName); ok {
-			if param, ok := md.CurrentDefinition.getGenerics().byName(gn.Name); ok {
-				canHandle, err := param.constraint.canHandle(constType, e.cursor, md)
-				if err != nil {
-					return nil, nil, err
-				}
-				if canHandle {
-					return e, constType, nil
-				}
-			}
-		}
-
-		return nil, nil, misc.NewError(e.cursor, "types do not match, expected %s got %s", dt, constType)
-	}
-
-	return e, constType, nil
-}
-
-func (e expressionConst) getType(md *Metadata) (Type, error) {
-	var type_ Type
-	switch e.Kind {
+func (e expressionConst) inferType(mbType a.Maybe[Type], locals *LocalVars, typeVars TypeVars, md *Metadata) (Expression, Type, error) {
+	switch e.kind {
 	case ConstKindChar:
-		type_ = TypeBuiltinChar(e.cursor, md.currentModuleName())
+		e._type = TypeBuiltinChar(e.cursor)
 		break
 	case ConstKindInt:
-		type_ = TypeBuiltinInt(e.cursor, md.currentModuleName())
+		e._type = TypeBuiltinInt(e.cursor)
 		break
 	case ConstKindFloat:
-		type_ = TypeBuiltinFloat(e.cursor, md.currentModuleName())
+		e._type = TypeBuiltinFloat(e.cursor)
 		break
 	case ConstKindString:
-		type_ = TypeBuiltinString(e.cursor, md.currentModuleName())
+		e._type = TypeBuiltinString(e.cursor)
 		break
 	case ConstKindVoid:
-		type_ = typeVoid{}
+		e._type = typeVoid{}
 		break
 	default:
-		return nil, misc.NewError(e.cursor, "unknown constant type (this is a compiler error)")
+		panic("unknown constant definedType")
 	}
-	return type_, nil
+	var err error
+	e._type, err = mergeTypes(e.cursor, mbType, a.Just(e._type), typeVars, md)
+	if err != nil {
+		return nil, nil, err
+	}
+	return e, e._type, nil
 }
 
-func (e expressionConst) resolve(md *Metadata) (resolved.Expression, error) {
-	t, err := e.getType(md)
-	if err != nil {
-		return nil, err
-	}
-	resolvedType, err := t.resolve(e.cursor, md)
-	if err != nil {
-		return nil, err
-	}
-	return resolved.NewConstExpression(resolvedType, e.Value), nil
-}
-
-type ConstKind string
+definedType ConstKind string
 
 const (
 	ConstKindChar   ConstKind = "char"

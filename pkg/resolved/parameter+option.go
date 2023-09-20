@@ -6,7 +6,7 @@ func NewOptionParameter(name string, valueType Type, value Parameter) Parameter 
 	return parameterOption{name: name, valueType: valueType, value: value}
 }
 
-type parameterOption struct {
+definedType parameterOption struct {
 	name      string
 	valueType Type
 	value     Parameter

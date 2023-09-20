@@ -19,7 +19,7 @@
 
 ## v0.0.4
 * [ ] Type interference
-* [ ] Optional type declarations
+* [ ] Optional definedType declarations
 
 ## v0.1.0
 * [ ] ???

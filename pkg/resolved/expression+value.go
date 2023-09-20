@@ -6,7 +6,7 @@ func NewValueExpression(type_ Type, name string, generics GenericArgs) Expressio
 	return ExpressionValue{type_: type_, name: name, generics: generics}
 }
 
-type ExpressionValue struct {
+definedType ExpressionValue struct {
 	type_    Type
 	name     string
 	generics GenericArgs

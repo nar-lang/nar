@@ -13,7 +13,7 @@ func NewRefTupleType(refName string, args GenericArgs, items []Type) Type {
 	return TypeTuple{typeBase: typeBase{refName: refName, genericArgs: args}, items: items}
 }
 
-type TypeTuple struct {
+definedType TypeTuple struct {
 	typeBase
 	items []Type
 }

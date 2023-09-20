@@ -8,7 +8,7 @@ func NewConstDecons(value string) Decons {
 	return deconsConst{value: value}
 }
 
-type deconsConst struct {
+definedType deconsConst struct {
 	value string
 }
 

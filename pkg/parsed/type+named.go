@@ -1,82 +1,51 @@
 package parsed
 
 import (
-	"fmt"
-	"oak-compiler/pkg/misc"
-	"oak-compiler/pkg/resolved"
+	"oak-compiler/pkg/a"
+	"strings"
 )
 
-func NewNamedType(c misc.Cursor, modName ModuleFullName, name string, generics GenericArgs) Type {
-	return typeNamed{typeBase: typeBase{cursor: c, moduleName: modName}, Name: name, Generics: generics}
+func NewNamedType(c a.Cursor, name string, typeParams []Type, enclosingModule ModuleFullName) Type {
+	return typeNamed{
+		typeBase: typeBase{cursor: c}, name: name, typeParams: typeParams, enclosingModule: enclosingModule,
+	}
 }
 
-type typeNamed struct {
+definedType typeNamed struct {
 	typeBase
-	Name     string
-	Generics GenericArgs
+	name            string
+	typeParams      []Type
+	enclosingModule ModuleFullName
 }
 
-func (t typeNamed) extractGenerics(other Type) genericsMap {
-	return t.getGenerics().extractGenerics(other.getGenerics())
+func (t typeNamed) dereference(typeVars TypeVars, md *Metadata) (Type, error) {
+	address, err := md.getAddressByName(t.cursor, t.enclosingModule, t.name)
+	if err != nil {
+		return nil, err
+	}
+	return NewAddressedType(t.cursor, address, t.typeParams).dereference(typeVars, md)
 }
 
-func (t typeNamed) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool {
-	o, ok := other.(typeNamed)
-	return ok && o.Name == t.Name && o.Generics.equalsTo(t.Generics, ignoreGenerics, md)
+func (t typeNamed) mergeWith(cursor a.Cursor, other Type, typeVars TypeVars, md *Metadata) (Type, error) {
+	address, err := md.getAddressByName(t.cursor, t.enclosingModule, t.name)
+	if err != nil {
+		return nil, err
+	}
+	return other.mergeWith(cursor, NewAddressedType(t.cursor, address, t.typeParams), typeVars, md)
 }
 
 func (t typeNamed) String() string {
-	return fmt.Sprintf("%s%s", t.Name, t.Generics)
-}
-
-func (t typeNamed) getGenerics() GenericArgs {
-	return t.Generics
-}
-
-func (t typeNamed) mapGenerics(gm genericsMap) Type {
-	var gens GenericArgs
-	for _, g := range t.Generics {
-		gens = append(gens, g.mapGenerics(gm))
+	sb := strings.Builder{}
+	sb.WriteString(t.name)
+	if len(t.typeParams) > 0 {
+		sb.WriteString("[")
+		for i, tp := range t.typeParams {
+			if i > 0 {
+				sb.WriteString(",")
+			}
+			sb.WriteString(tp.String())
+		}
+		sb.WriteString("]")
 	}
-	t.Generics = gens
-	return t
-}
-
-func (t typeNamed) dereference(md *Metadata) (Type, error) {
-	type_, _, err := md.getTypeByName(t.moduleName, t.Name, t.Generics, t.cursor)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, ok := type_.(typeNamed); ok {
-		return type_, nil
-	}
-
-	return type_.dereference(md)
-}
-
-func (t typeNamed) nestedDefinitionNames() []string {
-	return nil
-}
-
-func (t typeNamed) unpackNestedDefinitions(def Definition) []Definition {
-	return nil
-}
-
-func (t typeNamed) resolveWithRefName(cursor misc.Cursor, refName string, generics GenericArgs, md *Metadata) (resolved.Type, error) {
-	return nil, misc.NewError(
-		t.cursor, "trying to resolve named type with reference name (this is a compiler error)",
-	)
-}
-
-func (t typeNamed) resolve(cursor misc.Cursor, md *Metadata) (resolved.Type, error) {
-	def, _, err := md.getTypeByName(t.moduleName, t.Name, t.Generics, t.cursor)
-	if err != nil {
-		return nil, err
-	}
-	refName, err := md.makeRefNameByName(t.moduleName, t.Name, t.cursor)
-	if err != nil {
-		return nil, err
-	}
-	return def.resolveWithRefName(cursor, refName, t.Generics, md)
+	return sb.String()
 }

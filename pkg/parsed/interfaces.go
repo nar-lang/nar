@@ -2,57 +2,39 @@ package parsed
 
 import (
 	"fmt"
-	"oak-compiler/pkg/misc"
-	"oak-compiler/pkg/resolved"
+	"oak-compiler/pkg/a"
 )
 
-type Definition interface {
+definedType Definition interface {
 	Name() string
-	getGenerics() GenericParams
+	isHidden() bool
 	unpackNestedDefinitions() []Definition
 	nestedDefinitionNames() []string
-	resolve(md *Metadata) (resolvedDefinition resolved.Definition, keepIt bool, err error)
-	resolveName(cursor misc.Cursor, md *Metadata) (string, error)
-	isHidden() bool
-	getAddress() DefinitionAddress
-	getType(cursor misc.Cursor, generics GenericArgs, md *Metadata) (Type, GenericArgs, error)
-	isExtern() bool
-	precondition(md *Metadata) (Definition, error)
+	precondition(md *Metadata) error
+	inferType(md *Metadata) (Type, error)
+	getTypeWithParameters(typeParameters []Type, md *Metadata) (Type, error)
 }
 
-type Type interface {
-	resolve(cursor misc.Cursor, md *Metadata) (resolved.Type, error)
-	resolveWithRefName(cursor misc.Cursor, refName string, generics GenericArgs, md *Metadata) (resolved.Type, error)
-	dereference(md *Metadata) (Type, error)
-	nestedDefinitionNames() []string
-	unpackNestedDefinitions(def Definition) []Definition
-	mapGenerics(gm genericsMap) Type
-	getGenerics() GenericArgs
-	equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool
-	extractGenerics(other Type) genericsMap
-	getCursor() misc.Cursor
-	getEnclosingModuleName() ModuleFullName
-	extractLocals(type_ Type, md *Metadata) error
+definedType Type struct {
+	constraint TypeConstraint
+}
 
+definedType TypeConstraint interface {
+	dereference(typeVars TypeVars, md *Metadata) (Type, error)
+	mergeWith(cursor a.Cursor, other Type, typeVars TypeVars, md *Metadata) (Type, error)
 	fmt.Stringer
 }
 
-type Expression interface {
+definedType Expression interface {
 	precondition(md *Metadata) (Expression, error)
-	setType(type_ Type, md *Metadata) (Expression, Type, error)
-	getType(md *Metadata) (Type, error)
-	resolve(md *Metadata) (resolved.Expression, error)
-	getCursor() misc.Cursor
+	inferType(mbType a.Maybe[Type], locals *LocalVars, typeVars TypeVars, md *Metadata) (Expression, Type, error)
+	inferFuncType(args []Type, ret a.Maybe[Type], locals *LocalVars, md *Metadata) (Expression, TypeSignature, error)
+	getCursor() a.Cursor
 }
 
-type Decons interface {
-	resolve(type_ Type, md *Metadata) (resolved.Decons, error)
-	extractLocals(type_ Type, md *Metadata) error
-	SetAlias(alias string) (Decons, error)
-}
-
-type Parameter interface {
-	resolve(type_ Type, md *Metadata) (resolved.Parameter, error)
-	extractLocals(type_ Type, md *Metadata) error
-	SetAlias(alias string) (Parameter, error)
+definedType Pattern interface {
+	populateLocals(type_ Type, locals *LocalVars, typeVars TypeVars, md *Metadata) error //TODO: check inner types
+	getCursor() a.Cursor
+	SetType(cursor a.Cursor, type_ Type) (Pattern, error)
+	GetType() a.Maybe[Type]
 }

@@ -14,7 +14,7 @@ func NewRefUnionType(refName string, args GenericArgs) TypeUnion {
 	}
 }
 
-type TypeUnion struct {
+definedType TypeUnion struct {
 	typeBase
 	options []UnionOption
 }
@@ -33,7 +33,7 @@ func NewUnionOption(name string, type_ Type) UnionOption {
 	}
 }
 
-type UnionOption struct {
+definedType UnionOption struct {
 	name      string
 	valueType Type
 }

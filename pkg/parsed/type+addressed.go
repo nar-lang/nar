@@ -1,101 +1,61 @@
 package parsed
 
 import (
-	"fmt"
-	"oak-compiler/pkg/misc"
-	"oak-compiler/pkg/resolved"
+	"oak-compiler/pkg/a"
+	"strings"
 )
 
 func NewAddressedType(
-	c misc.Cursor, modName ModuleFullName, address DefinitionAddress, generics GenericArgs, extern bool,
+	c a.Cursor, address DefinitionAddress, typeParams []Type,
 ) Type {
 	return typeAddressed{
-		typeBase: typeBase{cursor: c, moduleName: modName},
-		Address:  address,
-		Generics: generics,
-		Extern:   extern,
+		typeBase:   typeBase{cursor: c},
+		address:    address,
+		typeParams: typeParams,
 	}
 }
 
-type typeAddressed struct {
+definedType typeAddressed struct {
 	typeBase
-	Address  DefinitionAddress
-	Generics GenericArgs
-	Extern   bool
+	address    DefinitionAddress
+	typeParams []Type
 }
 
-func (t typeAddressed) extractGenerics(other Type) genericsMap {
-	return t.Generics.extractGenerics(other.getGenerics())
+func (t typeAddressed) dereference(typeVars TypeVars, md *Metadata) (Type, error) {
+	def, ok := md.findDefinitionByAddress(t.address)
+	if !ok {
+		return nil, a.NewError(t.cursor, "definedType definition not found: %s", t.address)
+	}
+	return def.getTypeWithParameters(t.typeParams, md)
 }
 
-func (t typeAddressed) equalsTo(other Type, ignoreGenerics bool, md *Metadata) bool {
+func (t typeAddressed) mergeWith(cursor a.Cursor, other Type, typeVars TypeVars, md *Metadata) (Type, error) {
 	o, ok := other.(typeAddressed)
+	if !ok || !o.address.equalsTo(t.address) {
+		return nil, a.NewError(cursor, "expected %s got %s", t, other)
+	}
 
-	return ok && o.Address.equalsTo(t.Address) && o.Generics.equalsTo(t.Generics, ignoreGenerics, md)
+	var err error
+	t.typeParams, err = mergeTypesAll(cursor, o.typeParams, t.typeParams, typeVars, md)
+	if err != nil {
+		return nil, err
+	}
+
+	return t, nil
 }
 
 func (t typeAddressed) String() string {
-	return fmt.Sprintf(
-		"%s:%s.%s%s",
-		t.Address.moduleFullName.packageName,
-		t.Address.moduleFullName.moduleName,
-		t.Address.definitionName,
-		t.Generics)
-}
-
-func (t typeAddressed) getGenerics() GenericArgs {
-	return t.Generics
-}
-
-func (t typeAddressed) mapGenerics(gm genericsMap) Type {
-	var gens GenericArgs
-	for _, g := range t.Generics {
-		gens = append(gens, g.mapGenerics(gm))
-	}
-	t.Generics = gens
-	return t
-}
-
-func (t typeAddressed) dereference(md *Metadata) (Type, error) {
-	if t.Extern {
-		return t, nil
-	}
-
-	type_, _, err := md.getTypeByAddress(t.Address, t.Generics, t.cursor)
-	if err != nil {
-		return nil, err
-	}
-
-	return type_.dereference(md)
-}
-
-func (t typeAddressed) nestedDefinitionNames() []string {
-	return nil
-}
-
-func (t typeAddressed) unpackNestedDefinitions(def Definition) []Definition {
-	return nil
-}
-
-func (t typeAddressed) resolveWithRefName(cursor misc.Cursor, refName string, generics GenericArgs, md *Metadata) (resolved.Type, error) {
-	if t.Extern {
-		resolvedGenerics, err := generics.resolve(cursor, md)
-		if err != nil {
-			return nil, err
+	sb := strings.Builder{}
+	sb.WriteString(t.address.String())
+	if len(t.typeParams) > 0 {
+		sb.WriteString("[")
+		for i, tp := range t.typeParams {
+			if i > 0 {
+				sb.WriteString(",")
+			}
+			sb.WriteString(tp.String())
 		}
-		return resolved.NewExternType(refName, resolvedGenerics), nil
+		sb.WriteString("]")
 	}
-	return t.resolve(cursor, md)
-}
-
-func (t typeAddressed) resolve(cursor misc.Cursor, md *Metadata) (resolved.Type, error) {
-	type_, _, err := md.getTypeByAddress(t.Address, t.Generics, t.cursor)
-	if err != nil {
-		return nil, err
-	}
-	refName, err := md.makeRefNameByAddress(t.Address, t.cursor)
-	if err != nil {
-		return nil, err
-	}
-	return type_.resolveWithRefName(cursor, refName, t.Generics, md)
+	return sb.String()
 }

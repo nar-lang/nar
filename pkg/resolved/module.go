@@ -10,7 +10,7 @@ func NewModule(
 	return Module{name: name, packageName: packageName, definitions: definitions, order: order, imports: imports}
 }
 
-type Module struct {
+definedType Module struct {
 	name        string
 	packageName string
 	imports     []PackageFullName

@@ -1,27 +1,24 @@
 package parsed
 
 import (
-	"oak-compiler/pkg/misc"
-	"oak-compiler/pkg/resolved"
+	"oak-compiler/pkg/a"
 )
 
-func NewTupleExpression(c misc.Cursor, items []Expression) Expression {
-	return expressionTuple{cursor: c, Items: items}
+func NewTupleExpression(c a.Cursor, items []Expression) Expression {
+	return expressionTuple{expressionBase: expressionBase{cursor: c}, items: items}
 }
 
-type expressionTuple struct {
-	Items  []Expression
-	cursor misc.Cursor
-}
+definedType expressionTuple struct {
+	expressionBase
+	items []Expression
 
-func (e expressionTuple) getCursor() misc.Cursor {
-	return e.cursor
+	_type typeTuple
 }
 
 func (e expressionTuple) precondition(md *Metadata) (Expression, error) {
 	var err error
-	for i, item := range e.Items {
-		e.Items[i], err = item.precondition(md)
+	for i, item := range e.items {
+		e.items[i], err = item.precondition(md)
 		if err != nil {
 			return nil, err
 		}
@@ -29,51 +26,43 @@ func (e expressionTuple) precondition(md *Metadata) (Expression, error) {
 	return e, nil
 }
 
-func (e expressionTuple) setType(type_ Type, md *Metadata) (Expression, Type, error) {
-	tuple, ok := type_.(typeTuple)
-	if !ok {
-		return nil, nil, misc.NewError(e.cursor, "expected tuple type here")
-	}
+func (e expressionTuple) inferType(mbType a.Maybe[Type], locals *LocalVars, typeVars TypeVars, md *Metadata) (Expression, Type, error) {
+	var itemTypes []a.Maybe[Type]
 	var err error
-	var inferredItems []Type
-	for i, itemType := range tuple.Items {
-		var inferredItemType Type
-		e.Items[i], inferredItemType, err = e.Items[i].setType(itemType, md)
-		inferredItems = append(inferredItems, inferredItemType)
+	if t, ok := mbType.Unwrap(); ok {
+		e._type, ok = t.(typeTuple)
+		if !ok {
+			return nil, nil, a.NewError(e.cursor, "expected tuple")
+		}
+		if len(e._type.items) != len(e.items) {
+			return nil, nil,
+				a.NewError(e.cursor, "expected %d-tuple, got %d-tuple", len(e._type.items), len(e.items))
+		}
+		for _, itemType := range e._type.items {
+			itemTypes = append(itemTypes, a.Just(itemType))
+		}
+	} else {
+		for range e.items {
+			itemTypes = append(itemTypes, a.Nothing[Type]())
+		}
+	}
+
+	for i, ex := range e.items {
+		var itemType Type
+		e.items[i], itemType, err = ex.inferType(itemTypes[i], locals, typeVars, md)
 		if err != nil {
 			return nil, nil, err
 		}
+		e._type.items[i], err = mergeTypes(e.cursor, itemTypes[i], a.Just(itemType), typeVars, md)
 	}
-	tuple.Items = inferredItems
-	return e, tuple, nil
-}
-
-func (e expressionTuple) getType(md *Metadata) (Type, error) {
-	var types []Type
-	for _, ex := range e.Items {
-		t, err := ex.getType(md)
-		if err != nil {
-			return nil, err
-		}
-		types = append(types, t)
+	t, err := mergeTypes(e.cursor, mbType, a.Just[Type](e._type), typeVars, md)
+	if err != nil {
+		return nil, nil, err
 	}
-	return typeTuple{Items: types}, nil
-}
-
-func (e expressionTuple) resolve(md *Metadata) (resolved.Expression, error) {
-	var expressions []resolved.Expression
-	for _, ex := range e.Items {
-		resolvedExpression, err := ex.resolve(md)
-		if err != nil {
-			return nil, err
-		}
-		expressions = append(expressions, resolvedExpression)
+	var ok bool
+	e._type, ok = t.(typeTuple)
+	if !ok {
+		return nil, nil, a.NewError(e.cursor, "expected tuple")
 	}
-
-	var types []resolved.Type
-	for _, e := range expressions {
-		types = append(types, e.Type())
-	}
-
-	return resolved.NewTupleExpression(resolved.NewTupleType(types), expressions), nil
+	return e, e._type, nil
 }

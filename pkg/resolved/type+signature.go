@@ -17,7 +17,7 @@ func NewRefSignatureType(
 	}
 }
 
-type TypeSignature struct {
+definedType TypeSignature struct {
 	typeBase
 	param      Parameter
 	paramType  Type
@@ -75,7 +75,7 @@ func (t TypeSignature) writeAsDefinition(sb *strings.Builder, body Expression, n
 	}
 }
 
-type SignatureParam struct {
+definedType SignatureParam struct {
 	Name string
 	Type Type
 }

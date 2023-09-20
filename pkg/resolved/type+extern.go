@@ -9,7 +9,7 @@ func NewExternType(name string, args GenericArgs) typeExtern {
 	}}
 }
 
-type typeExtern struct {
+definedType typeExtern struct {
 	typeBase
 }
 

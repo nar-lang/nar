@@ -1,136 +1,75 @@
 package parsed
 
 import (
-	"oak-compiler/pkg/misc"
-	"oak-compiler/pkg/resolved"
+	"oak-compiler/pkg/a"
 )
 
-func NewSelectExpression(c misc.Cursor, condition Expression, cases []ExpressionSelectCase) Expression {
-	return expressionSelect{cursor: c, Condition: condition, Cases: cases}
+func NewSelectExpression(c a.Cursor, condition Expression, cases []ExpressionSelectCase) Expression {
+	return expressionSelect{expressionBase: expressionBase{cursor: c}, condition: condition, cases: cases}
 }
 
-type expressionSelect struct {
-	Condition Expression
-	Cases     []ExpressionSelectCase
-	cursor    misc.Cursor
-}
+definedType expressionSelect struct {
+	expressionBase
+	condition Expression
+	cases     []ExpressionSelectCase
 
-func (e expressionSelect) getCursor() misc.Cursor {
-	return e.cursor
+	_conditionType Type
+	_type          Type
 }
 
 func (e expressionSelect) precondition(md *Metadata) (Expression, error) {
-	var err error
-	e.Condition, err = e.Condition.precondition(md)
-	if err != nil {
-		return nil, err
+	if len(e.cases) == 0 {
+		return nil, a.NewError(e.cursor, "select expression should have at least one case")
 	}
-	for i, cs := range e.Cases {
-		locals := md.cloneLocalVars()
-		t, err := e.Condition.getType(md)
+
+	for _, cs := range e.cases {
+		var err error
+		cs.expression, err = cs.expression.precondition(md)
 		if err != nil {
 			return nil, err
 		}
-		err = cs.Decons.extractLocals(t, md)
-		if err != nil {
-			return nil, err
-		}
-		cs.Expression, err = cs.Expression.precondition(md)
-		if err != nil {
-			return nil, err
-		}
-		md.LocalVars = locals
-		e.Cases[i] = cs
 	}
 	return e, nil
 }
 
-func (e expressionSelect) setType(type_ Type, md *Metadata) (Expression, Type, error) {
-	t, err := e.Condition.getType(md)
+func (e expressionSelect) inferType(mbType a.Maybe[Type], locals *LocalVars, typeVars TypeVars, md *Metadata) (Expression, Type, error) {
+	var err error
+	e.condition, e._conditionType, err = e.condition.inferType(a.Nothing[Type](), locals, typeVars, md)
 	if err != nil {
 		return nil, nil, err
 	}
-	e.Condition, t, err = e.Condition.setType(t, md)
-	if err != nil {
-		return nil, nil, err
-	}
-	var exprType Type
-	for i, cs := range e.Cases {
-		locals := md.cloneLocalVars()
-		err = cs.Decons.extractLocals(t, md)
+
+	mergedType := mbType
+	for i, cs := range e.cases {
+		csLocals := NewLocalVars(locals)
+		err = cs.definedType.populateLocals(e._conditionType, csLocals, typeVars, md)
 		if err != nil {
 			return nil, nil, err
 		}
-		var inferredType Type
-		cs.Expression, inferredType, err = cs.Expression.setType(type_, md)
+		var t Type
+		cs.expression, t, err = cs.expression.inferType(mergedType, csLocals, typeVars, md)
 		if err != nil {
 			return nil, nil, err
 		}
-		if i == 0 {
-			exprType, err = inferredType.dereference(md)
-		} else {
-			if !typesEqual(exprType, inferredType, false, md) {
-				return nil, nil, misc.NewError(
-					cs.Expression.getCursor(),
-					"case expression types do not match, expected %s got %s",
-					exprType,
-					inferredType,
-				)
-			}
-		}
-		if err != nil {
-			return nil, nil, err
-		}
-		e.Cases[i] = cs
-		md.LocalVars = locals
+		mergedType = a.Just(t)
+		e.cases[i] = cs
 	}
 
-	return e, exprType, nil
+	e._type, _ = mergedType.Unwrap()
+
+	return e, e._type, nil
 }
 
-func (e expressionSelect) getType(md *Metadata) (Type, error) {
-	locals := md.cloneLocalVars()
-	t, err := e.Condition.getType(md)
-	if err != nil {
-		return nil, err
+func NewSelectExpressionCase(cursor a.Cursor, definedType Pattern, expr Expression) ExpressionSelectCase {
+	return ExpressionSelectCase{
+		cursor:     cursor,
+		definedType:    definedType,
+		expression: expr,
 	}
-	_, err = e.Cases[0].Decons.resolve(t, md)
-	if err != nil {
-		return nil, err
-	}
-	_type, _ := e.Cases[0].Expression.getType(md)
-	md.LocalVars = locals
-	return _type, nil
 }
 
-func (e expressionSelect) resolve(md *Metadata) (resolved.Expression, error) {
-	resolvedCondition, err := e.Condition.resolve(md)
-	if err != nil {
-		return nil, err
-	}
-
-	var resolvedCases []resolved.ExpressionSelectCase
-	for _, cs := range e.Cases {
-		locals := md.cloneLocalVars()
-		t, err := e.Condition.getType(md)
-		if err != nil {
-			return nil, err
-		}
-		resolvedDecons, err := cs.Decons.resolve(t, md)
-		if err != nil {
-			return nil, err
-		}
-		resolvedExpression, err := cs.Expression.resolve(md)
-		if err != nil {
-			return nil, err
-		}
-		resolvedCases = append(resolvedCases, resolved.NewExpressionSelectCase(resolvedDecons, resolvedExpression))
-		md.LocalVars = locals
-	}
-	return resolved.NewSelectExpression(resolvedCondition, resolvedCases), nil
-}
-
-type ExpressionSelectCase struct {
-	Decons     Decons
-	Expression Expression
+definedType ExpressionSelectCase struct {
+	cursor     a.Cursor
+	definedType    Pattern
+	expression Expression
 }

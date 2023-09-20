@@ -8,7 +8,7 @@ func NewListExpression(type_ Type, itemType Type, items []Expression) Expression
 	return expressionList{type_: type_, itemType: itemType, items: items}
 }
 
-type expressionList struct {
+definedType expressionList struct {
 	type_    Type
 	itemType Type
 	items    []Expression

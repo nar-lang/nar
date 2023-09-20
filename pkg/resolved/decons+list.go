@@ -12,7 +12,7 @@ func NewListDecons(itemType Type, items []Decons, alias string) Decons {
 	return deconsList{itemType: itemType, items: items, alias: alias}
 }
 
-type deconsList struct {
+definedType deconsList struct {
 	itemType Type
 	items    []Decons
 	alias    string

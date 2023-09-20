@@ -8,12 +8,12 @@ func NewGenericParam(name string, constraint GenericConstraint) GenericParam {
 	return GenericParam{name: name, constraint: constraint}
 }
 
-type GenericParam struct {
+definedType GenericParam struct {
 	name       string
 	constraint GenericConstraint
 }
 
-type GenericParams []GenericParam
+definedType GenericParams []GenericParam
 
 func (gs GenericParams) writeFull(sb *strings.Builder) {
 	if len(gs) > 0 {
@@ -43,7 +43,7 @@ func (gs GenericParams) writeShort(sb *strings.Builder) {
 	}
 }
 
-type GenericArgs []Type
+definedType GenericArgs []Type
 
 func (ga GenericArgs) Write(sb *strings.Builder) {
 	if len(ga) > 0 {
@@ -58,11 +58,11 @@ func (ga GenericArgs) Write(sb *strings.Builder) {
 	}
 }
 
-type GenericConstraint interface {
+definedType GenericConstraint interface {
 	Writer
 }
 
-type GenericConstraintAny struct{}
+definedType GenericConstraintAny struct{}
 
 func (g GenericConstraintAny) write(sb *strings.Builder) {
 	sb.WriteString("any")
@@ -72,7 +72,7 @@ func NewTypeGenericConstraint(name string, genericArgs GenericArgs) GenericConst
 	return GenericConstraintType{name: name, genericArgs: genericArgs}
 }
 
-type GenericConstraintType struct {
+definedType GenericConstraintType struct {
 	name        string
 	genericArgs GenericArgs
 }
@@ -85,7 +85,7 @@ func NewComparableGenericConstraint(name string) GenericConstraint {
 	return genericConstraintComparable{name: name}
 }
 
-type genericConstraintComparable struct {
+definedType genericConstraintComparable struct {
 	name string
 }
 
@@ -97,7 +97,7 @@ func NewEquatableGenericConstraint(name string) GenericConstraint {
 	return genericConstraintEquatable{name: name}
 }
 
-type genericConstraintEquatable struct {
+definedType genericConstraintEquatable struct {
 	name string
 }
 
@@ -109,7 +109,7 @@ func NewNumberGenericConstraint(name string) GenericConstraint {
 	return genericConstraintNumber{name: name}
 }
 
-type genericConstraintNumber struct {
+definedType genericConstraintNumber struct {
 	name string
 }
 

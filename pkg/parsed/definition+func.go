@@ -1,153 +1,107 @@
 package parsed
 
 import (
-	"oak-compiler/pkg/misc"
-	"oak-compiler/pkg/resolved"
+	"fmt"
+	"oak-compiler/pkg/a"
 )
 
 func NewFuncDefinition(
-	c misc.Cursor,
-	address DefinitionAddress, genericParams GenericParams,
-	hidden, extern bool, type_ Type, expression Expression,
+	c a.Cursor,
+	name string,
+	hidden, extern bool,
+	mbSignature a.Maybe[TypeSignature],
+	params []Pattern,
+	expression Expression,
 ) Definition {
-	return definitionFunc{
+	return &definitionFunc{
 		definitionBase: definitionBase{
-			Address:       address,
-			GenericParams: genericParams,
-			Hidden:        hidden,
-			Extern:        extern,
-			cursor:        c,
+			cursor: c,
+			name:   name,
+			hidden: hidden,
 		},
-		Expression: expression,
-		Type:       type_,
+		expression:  expression,
+		mbSignature: mbSignature,
+		params:      params,
+		extern:      extern,
 	}
 }
 
-type definitionFunc struct {
+definedType definitionFunc struct {
 	definitionBase
-	Expression Expression
-	Type       Type
+	expression  Expression
+	mbSignature a.Maybe[TypeSignature]
+	params      []Pattern
+	extern      bool //TODO: make call expression
 }
 
-func (def definitionFunc) precondition(md *Metadata) (Definition, error) {
-	if def.Extern {
-		return def, nil
+func (def *definitionFunc) precondition(md *Metadata) error {
+	if def.extern {
+		return nil
 	}
 
-	gm, err := def.getGenericsMap(def.cursor, def.GenericParams.toArgs(), true)
+	var err error
+	def.expression, err = def.expression.precondition(md)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	_, err = def.injectParameters(gm, md)
-	if err != nil {
-		return nil, err
-	}
-	def.Expression, err = def.Expression.precondition(md)
-	if err != nil {
-		return nil, err
-	}
-	return def, nil
-}
 
-func (def definitionFunc) getType(cursor misc.Cursor, generics GenericArgs, md *Metadata) (Type, GenericArgs, error) {
-	gm, err := def.getGenericsMap(cursor, generics, false)
-	if err != nil {
-		return nil, nil, err
-	}
-	return def.Type.mapGenerics(gm), def.GenericParams.toArgs().mapGenerics(gm), nil
-}
-
-func (def definitionFunc) nestedDefinitionNames() []string {
 	return nil
 }
 
-func (def definitionFunc) unpackNestedDefinitions() []Definition {
-	return nil
-}
-
-func (def definitionFunc) resolveName(misc.Cursor, *Metadata) (string, error) {
-	return def.Address.moduleFullName.moduleName + "_" + def.Name(), nil
-}
-
-func (def definitionFunc) resolve(md *Metadata) (resolved.Definition, bool, error) {
-	if def.Extern {
-		return nil, false, nil
+func (def *definitionFunc) inferType(md *Metadata) (Type, error) {
+	if def._type != nil {
+		return def._type, nil
 	}
 
-	gm, err := def.getGenericsMap(def.cursor, def.GenericParams.toArgs(), true)
-	if err != nil {
-		return nil, false, err
-	}
-
-	returnType, err := def.injectParameters(gm, md)
-	if err != nil {
-		return nil, false, err
-	}
-
-	def.Expression, _, err = def.Expression.setType(returnType, md)
-	if err != nil {
-		return nil, false, err
-	}
-
-	resolvedExpression, err := def.Expression.resolve(md)
-	if err != nil {
-		return nil, false, err
-	}
-
-	resolvedName, err := def.resolveName(def.cursor, md)
-	if err != nil {
-		return nil, false, err
-	}
-
-	fnType := def.Type.mapGenerics(gm)
-	if err != nil {
-		return nil, false, err
-	}
-	dt, err := fnType.dereference(md)
-	if err != nil {
-		return nil, false, err
-	}
-
-	if _, ok := dt.(typeSignature); !ok {
-		fnType = typeSignature{
-			Param:      NewNamedParameter(def.cursor, "x"),
-			ParamType:  typeVoid{},
-			ReturnType: fnType,
-			typeBase: typeBase{
-				cursor:     def.cursor,
-				moduleName: md.currentModuleName(),
-			},
+	var err error
+	mbReturnType := a.Nothing[Type]()
+	var paramTypes []Type
+	signature, ok := def.mbSignature.Unwrap()
+	if ok {
+		paramTypes = signature.paramTypes
+		mbReturnType = a.Just(signature.returnType)
+	} else {
+		for i, p := range def.params {
+			signature.paramTypes = append(signature.paramTypes, NewVariableType(p.getCursor(), fmt.Sprintf("@%d", i)))
 		}
+		signature.returnType = NewVariableType(def.cursor, "@@")
 	}
 
-	resolvedType, err := fnType.resolve(def.cursor, md)
+	def._type = signature //TODO: break recursive calls
 
-	resolvedParams, err := def.GenericParams.resolve(md)
-	if err != nil {
-		return nil, false, err
-	}
-
-	return resolved.NewFuncDefinition(resolvedName, resolvedParams, resolvedType, resolvedExpression), true, nil
-}
-
-func (def definitionFunc) injectParameters(gm genericsMap, md *Metadata) (Type, error) {
-	md.CurrentDefinition = def
-	md.LocalVars = map[string]Type{}
-	defType := def.Type.mapGenerics(gm)
-	for {
-		dt, err := defType.dereference(md)
+	locals := NewLocalVars(nil)
+	for i, p := range def.params {
+		err = p.populateLocals(paramTypes[i], locals, TypeVars{}, md)
 		if err != nil {
 			return nil, err
 		}
-		if signature, ok := dt.(typeSignature); ok && signature.Param != nil {
-			err := signature.Param.extractLocals(signature.ParamType, md)
-			if err != nil {
-				return nil, err
-			}
-			defType = signature.ReturnType
-		} else {
-			break
-		}
 	}
-	return defType, nil
+
+	if def.extern {
+		if s, ok := def.mbSignature.Unwrap(); ok {
+			def._type = s
+			return def._type, nil
+		}
+		return nil, a.NewError(def.cursor, "extern function requires definedType annotation")
+	}
+	typeVars := TypeVars{}
+	def.expression, signature.returnType, err = def.expression.inferType(mbReturnType, locals, typeVars, md)
+	//todo: merge definedType vars and replace in expression
+	if err != nil {
+		return nil, err
+	}
+	def._type = signature
+	return def._type, nil
+}
+
+func (def *definitionFunc) getTypeWithParameters(typeParameters []Type, md *Metadata) (Type, error) {
+	panic("??")
+}
+
+func (def *definitionFunc) nestedDefinitionNames() []string {
+	return nil
+}
+
+func (def *definitionFunc) unpackNestedDefinitions() []Definition {
+	return nil
 }

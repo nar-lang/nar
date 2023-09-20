@@ -9,7 +9,7 @@ func NewTupleDecons(items []Decons, alias string) Decons {
 	return deconsTuple{items: items, alias: alias}
 }
 
-type deconsTuple struct {
+definedType deconsTuple struct {
 	items []Decons
 	alias string
 }

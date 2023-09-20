@@ -1,26 +1,22 @@
 package parsed
 
 import (
-	"oak-compiler/pkg/misc"
-	"oak-compiler/pkg/resolved"
+	"oak-compiler/pkg/a"
 )
 
-func NewOmittedParameter(c misc.Cursor) Parameter {
-	return parameterOmitted{cursor: c}
+func NewOmittedPattern(c a.Cursor) Pattern {
+	return patternOmitted{patternBase: patternBase{cursor: c}}
 }
 
-type parameterOmitted struct {
-	cursor misc.Cursor
+definedType patternOmitted struct {
+	patternBase
 }
 
-func (p parameterOmitted) resolve(type_ Type, md *Metadata) (resolved.Parameter, error) {
-	return resolved.NewOmittedParameter(), nil
+func (p patternOmitted) SetType(cursor a.Cursor, type_ Type) (Pattern, error) {
+	p.type_ = a.Just(type_)
+	return p, nil
 }
 
-func (p parameterOmitted) extractLocals(type_ Type, md *Metadata) error {
+func (p patternOmitted) populateLocals(type_ Type, locals *LocalVars, typeVars TypeVars, md *Metadata) error {
 	return nil
-}
-
-func (p parameterOmitted) SetAlias(alias string) (Parameter, error) {
-	return nil, misc.NewError(p.cursor, "omitted parameter cannot have alias")
 }

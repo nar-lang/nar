@@ -6,7 +6,7 @@ func NewNamedParameter(name string) Parameter {
 	return parameterNamed{name: name}
 }
 
-type parameterNamed struct {
+definedType parameterNamed struct {
 	name string
 }
 

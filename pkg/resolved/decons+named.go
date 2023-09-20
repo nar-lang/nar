@@ -8,7 +8,7 @@ func NewNamedDecons(alias string) Decons {
 	return deconsNamed{alias: alias}
 }
 
-type deconsNamed struct {
+definedType deconsNamed struct {
 	alias string
 }
 
