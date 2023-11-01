@@ -161,12 +161,17 @@ func unwrapImports(module *parsed.Module, modules map[string]parsed.Module) {
 	}
 }
 
+var nextDefinitionId = uint64(0)
+
 func normalizeDefinition(modules map[string]parsed.Module, module parsed.Module, def parsed.Definition) normalized.Definition {
-	return normalized.Definition{
-		Pattern:    normalizePattern(modules, module, def.Pattern),
-		Expression: normalizeExpression(modules, module, def.Expression),
-		Type:       normalizeType(modules, module, def.Type),
+	nextDefinitionId++
+	o := normalized.Definition{
+		Id: nextDefinitionId,
 	}
+	o.Pattern = normalizePattern(modules, module, def.Pattern)
+	o.Expression = normalizeExpression(modules, module, def.Expression)
+	o.Type = normalizeType(modules, module, def.Type)
+	return o
 }
 
 func normalizePattern(modules map[string]parsed.Module, module parsed.Module, pattern parsed.Pattern) normalized.Pattern {

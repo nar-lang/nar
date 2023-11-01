@@ -5,6 +5,7 @@ import (
 )
 
 type Definition struct {
+	Id         uint64
 	Pattern    Pattern
 	Expression Expression
 	Type       Type

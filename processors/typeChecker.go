@@ -9,11 +9,14 @@ import (
 	"oak-compiler/common"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
 var unboundIndex = uint64(0)
 var typeMap map[fmt.Stringer]typed.Type
+var annotatedDefinitions map[uint64]*typed.Definition
+var equatizedDefinitions map[uint64]struct{}
 
 type symMap map[ast.Identifier]typed.Type
 type typeParamsMap map[ast.Identifier]uint64
@@ -56,28 +59,47 @@ func CheckTypes(
 
 	typedModules[o.Path] = &o
 
-	for name, def := range m.Definitions {
+	var names []ast.Identifier
+	for name := range m.Definitions {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	for _, name := range names {
+		def := m.Definitions[name]
 		if _, ok := o.Definitions[name]; !ok {
+			cwd, _ := os.Getwd()
+			rp, _ := filepath.Rel(cwd, m.Path[:len(m.Path)-4])
+			p := strings.Replace(rp, "../", "", -1)
+			fp := fmt.Sprintf(".oak-bin/%s/%s.md", p, def.Pattern.(normalized.PNamed).Name)
+			_ = os.MkdirAll(filepath.Dir(fp), 0700)
+
+			println(def.Pattern.(normalized.PNamed).Name)
+
 			unboundIndex = 0
 			typeMap = map[fmt.Stringer]typed.Type{}
+			annotatedDefinitions = map[uint64]*typed.Definition{}
+			equatizedDefinitions = map[uint64]struct{}{}
 			localTyped := map[string]*typed.Module{}
 			symtab := symMap{}
 			var eqs []equation
 
-			td := annotateDefinition(symtab, modules, localTyped, def)
-			eqs = equatizeDefinition(eqs, td)
-			o.Definitions[name] = td
-
 			sb := strings.Builder{}
+			td := annotateDefinition(symtab, modules, localTyped, def)
 			sb.WriteString(fmt.Sprintf("\n\nDefinition\n---\n`%s`", td))
-			sb.WriteString("\n\nAssignments\n---\n| Node | Type |\n|---|---|")
+			sb.WriteString("\n\nAnnotations\n---\n| Node | Type |\n|---|---|")
 			for n, t := range typeMap {
 				sb.WriteString(fmt.Sprintf("\n| `%v` | `%v` |", n, t))
 			}
+			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
+
+			eqs = equatizeDefinition(eqs, td)
+
 			sb.WriteString("\n\nEquations\n---\n| Left | Right | Node |\n|---|---|---|")
 			for _, eq := range eqs {
 				sb.WriteString(eq.String())
 			}
+			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
 
 			subst := unifyAll(eqs)
 
@@ -85,34 +107,37 @@ func CheckTypes(
 			for k, v := range subst {
 				sb.WriteString(fmt.Sprintf("\n | `%v` | `%v` |", &typed.TUnbound{Index: k}, v))
 			}
+			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
 
 			td = applyDefinition(td, subst)
 
 			sb.WriteString("\n\nSolved\n---\n")
 			sb.WriteString(fmt.Sprintf("\n `%v`", td.Type))
-
-			cwd, _ := os.Getwd()
-			rp, _ := filepath.Rel(cwd, m.Path[:len(m.Path)-4])
-			p := strings.Replace(rp, "../", "", -1)
-
-			fp := fmt.Sprintf(".oak-bin/%s/%s.md", p, td.Pattern.(*typed.PNamed).Name)
-			_ = os.MkdirAll(filepath.Dir(fp), 0700)
 			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
 
+			o.Definitions[def.Pattern.(normalized.PNamed).Name] = td
 		}
 	}
 }
 
 func equatizeDefinition(eqs []equation, td *typed.Definition) []equation {
+	eqs = equatizePattern(eqs, td.Pattern)
 	if td.Expression != nil {
 		eqs = append(eqs, equation{
 			left:  td.Type,
 			right: td.Expression.GetType(),
 			def:   td,
 		})
+	}
+
+	if _, ok := equatizedDefinitions[td.Id]; ok {
+		return eqs
+	}
+	equatizedDefinitions[td.Id] = struct{}{}
+
+	if td.Expression != nil {
 		eqs = equatizeExpression(eqs, td.Expression)
 	}
-	eqs = equatizePattern(eqs, td.Pattern)
 	return eqs
 }
 
@@ -163,26 +188,49 @@ func equatizePattern(eqs []equation, pattern typed.Pattern) []equation {
 	case *typed.PDataValue:
 		{
 			e := pattern.(*typed.PDataValue)
-			tf := e.Definition.Type.(*typed.TFunc)
-			eqs = append(eqs, equation{
-				left:    e.Type,
-				right:   tf.Return,
-				pattern: pattern,
-			})
-			if len(e.Values) != len(tf.Params) {
-				panic(common.Error{
-					Location: e.Location,
-					Message:  "number of arguments mismatch",
-				})
+			switch e.Definition.Type.(type) {
+			case *typed.TFunc:
+				{
+					tf := e.Definition.Type.(*typed.TFunc)
+					eqs = append(eqs, equation{
+						left:    e.Type,
+						right:   tf.Return,
+						pattern: pattern,
+					})
+					if len(e.Args) != len(tf.Params) {
+						panic(common.Error{
+							Location: e.Location,
+							Message:  "number of arguments mismatch",
+						})
+					}
+					for i, v := range e.Args {
+						eqs = append(eqs, equation{
+							left:    v.GetType(),
+							right:   tf.Params[i],
+							pattern: pattern,
+						})
+					}
+					break
+				}
+			case *typed.TExternal:
+				{
+					tf := e.Definition.Type.(*typed.TExternal)
+					eqs = append(eqs, equation{
+						left:    e.Type,
+						right:   tf,
+						pattern: pattern,
+					})
+					if len(e.Args) != 0 {
+						panic(common.Error{
+							Location: e.Location,
+							Message:  "number of arguments mismatch",
+						})
+					}
+					break
+				}
+			default:
+				panic(common.SystemError{Message: "invalid case"})
 			}
-			for i, v := range e.Values {
-				eqs = append(eqs, equation{
-					left:    v.GetType(),
-					right:   tf.Params[i],
-					pattern: pattern,
-				})
-			}
-
 			break
 		}
 	case *typed.PList:
@@ -488,7 +536,7 @@ func equatizeExpression(eqs []equation, expr typed.Expression) []equation {
 			for _, f := range e.Fields {
 				eqs = equatizeExpression(eqs, f.Value)
 			}
-			equatizeDefinition(eqs, e.Definition)
+			eqs = equatizeDefinition(eqs, e.Definition)
 			break
 		}
 	case *typed.Lambda:
@@ -543,7 +591,7 @@ func equatizeExpression(eqs []equation, expr typed.Expression) []equation {
 				right: e.Definition.Type,
 				expr:  e,
 			})
-			equatizeDefinition(eqs, e.Definition)
+			eqs = equatizeDefinition(eqs, e.Definition)
 		}
 	default:
 		panic(common.SystemError{Message: "invalid case"})
@@ -557,10 +605,18 @@ func annotateDefinition(
 	typedModules map[string]*typed.Module,
 	def normalized.Definition,
 ) *typed.Definition {
-	o := &typed.Definition{}
+	o := &typed.Definition{
+		Id: def.Id,
+	}
 
 	typeParams := typeParamsMap{}
 	o.Pattern = annotatePattern(symtab, typeParams, modules, typedModules, def.Pattern)
+	if rec, ok := annotatedDefinitions[def.Id]; ok {
+		return rec
+	}
+
+	annotatedDefinitions[def.Id] = o
+
 	o.Type = annotateType(typeParams, def.Type, def.Pattern.(normalized.PNamed).Location, true)
 	o.Expression = annotateExpression(symtab, typeParams, modules, typedModules, def.Expression)
 
@@ -627,12 +683,16 @@ func annotatePattern(symtab symMap,
 
 			t, def := getAnnotatedGlobal(e.ModulePath, e.DefinitionName, modules, typedModules)
 
+			if fn, ok := t.(*typed.TFunc); ok {
+				t = fn.Return
+			}
+
 			p = &typed.PDataValue{
 				Location:       e.Location,
 				Type:           t,
 				ModulePath:     e.ModulePath,
 				DefinitionName: e.DefinitionName,
-				Values:         common.Map(annotate, e.Values),
+				Args:           common.Map(annotate, e.Values),
 				Definition:     def,
 			}
 			break
@@ -973,8 +1033,7 @@ func getAnnotatedGlobal(
 	if !ok {
 		defSymtab := symMap{}
 
-		def = annotateDefinition(
-			defSymtab, modules, typedModules, modules[modulePath].Definitions[definitionName])
+		def = annotateDefinition(defSymtab, modules, typedModules, modules[modulePath].Definitions[definitionName])
 		typedModule.Definitions[definitionName] = def
 	}
 
@@ -1139,11 +1198,18 @@ func unify(x typed.Type, y typed.Type, loc ast.Location, subst map[uint64]typed.
 	if x.EqualsTo(y) {
 		return
 	}
-	if _, ub := x.(*typed.TUnbound); ub {
+
+	ux, ubx := x.(*typed.TUnbound)
+	uy, uby := y.(*typed.TUnbound)
+	if ubx && uby && uy.Index < ux.Index {
+		ubx = false
+	}
+
+	if ubx {
 		unifyUnbound(x.(*typed.TUnbound), y, loc, subst)
 		return
 	}
-	if _, ub := y.(*typed.TUnbound); ub {
+	if uby {
 		unifyUnbound(y.(*typed.TUnbound), x, loc, subst)
 		return
 	}
@@ -1354,7 +1420,7 @@ func applyPattern(pattern typed.Pattern, subst map[uint64]typed.Type) typed.Patt
 				ModulePath:     e.ModulePath,
 				DefinitionName: e.DefinitionName,
 				Definition:     e.Definition,
-				Values:         common.Map(apply, e.Values),
+				Args:           common.Map(apply, e.Args),
 			}
 			break
 		}

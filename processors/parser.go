@@ -770,7 +770,7 @@ func finishParsePattern(src *Source, pattern parsed.Pattern) parsed.Pattern {
 			setErrorSource(*src, "expected list tail pattern here")
 		}
 
-		return finishParsePattern(src, parsed.PCons{Location: loc(src, cursor), Head: pattern, Tail: pattern})
+		return finishParsePattern(src, parsed.PCons{Location: loc(src, cursor), Head: pattern, Tail: tail})
 	}
 
 	return pattern

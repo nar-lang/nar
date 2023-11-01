@@ -98,13 +98,13 @@ type PDataValue struct {
 	ModulePath     string
 	DefinitionName ast.Identifier
 	Definition     *Definition
-	Values         []Pattern
+	Args           []Pattern
 }
 
 func (*PDataValue) _pattern() {}
 
 func (p *PDataValue) String() string {
-	return fmt.Sprintf("PDataValue(%s:%s,%v)", p.ModulePath, p.DefinitionName, p.Values)
+	return fmt.Sprintf("PDataValue(%s:%s,%v)", p.ModulePath, p.DefinitionName, p.Args)
 }
 
 func (p *PDataValue) GetLocation() ast.Location {

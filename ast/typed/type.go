@@ -173,7 +173,7 @@ func (t *TUnbound) GetLocation() ast.Location {
 }
 
 func (t *TUnbound) String() string {
-	return fmt.Sprintf("?%c", 'a'+t.Index)
+	return fmt.Sprintf("u%d", t.Index)
 }
 
 func (t *TUnbound) EqualsTo(o Type) bool {
