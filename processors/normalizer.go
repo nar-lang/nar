@@ -437,52 +437,72 @@ func normalizeExpression(modules map[string]parsed.Module, module parsed.Module,
 	case parsed.BinOp:
 		{
 			e := expr.(parsed.BinOp)
-			if m, infixA, ok := findInfixFn(modules, module, e.Infix); !ok {
-				panic(common.Error{Location: e.Location, Message: "infix op not found"})
-			} else {
-				if right, ok := e.Right.(parsed.BinOp); ok {
-					if _, infixB, ok := findInfixFn(modules, module, e.Infix); !ok {
-						panic(common.Error{Location: right.Location, Message: "infix op not found"})
+			var output []parsed.BinOpItem
+			var operators []parsed.BinOpItem
+			for _, o1 := range e.Items {
+				if o1.Expression != nil {
+					output = append(output, o1)
+				} else {
+					if _, infixFn, ok := findInfixFn(modules, module, o1.Infix); !ok {
+						panic(common.Error{Location: e.Location, Message: "infix op not found"})
 					} else {
-						if infixA.Precedence > infixB.Precedence {
-							//                x * (y + z) -->    (x * y) + z
-							//
-							//                   *a       -->       +a`
-							//                  /  \               /   \
-							//                x     +b           *b`    z
-							//                     /  \         /  \
-							//                    y    z       x    y
-							x := e.Left
-							y := right.Left
-							z := right.Right
-							a := e.Infix
-							b := right.Infix
-
-							e.Left = parsed.BinOp{
-								Location: e.Location,
-								Left:     x,
-								Infix:    a,
-								Right:    y,
-							}
-							e.Infix = b
-							e.Right = z
-
-							return normalizeExpression(modules, module, e)
-						}
+						o1.Fn = infixFn
 					}
 
-				}
-				return normalized.Call{
-					Location: e.Location,
-					Func: normalized.Global{
-						Location:       e.Location,
-						ModulePath:     m.Path,
-						DefinitionName: infixA.Alias,
-					},
-					Args: []normalized.Expression{normalize(e.Left), normalize(e.Right)},
+					for i := len(operators) - 1; i >= 0; i-- {
+						o2 := operators[i]
+						if o2.Fn.Precedence > o1.Fn.Precedence || (o2.Fn.Precedence == o1.Fn.Precedence && o1.Fn.Associativity == parsed.Left) {
+							output = append(output, o2)
+							operators = operators[:len(operators)-1]
+						} else {
+							break
+						}
+					}
+					operators = append(operators, o1)
 				}
 			}
-			break
+			for i := len(operators) - 1; i >= 0; i-- {
+				output = append(output, operators[i])
+			}
+
+			var buildTree func() normalized.Expression
+			buildTree = func() normalized.Expression {
+				op := output[len(output)-1].Infix
+				output = output[:len(output)-1]
+
+				if m, infixA, ok := findInfixFn(modules, module, op); !ok {
+					panic(common.Error{Location: e.Location, Message: "infix op not found"})
+				} else {
+					var left, right normalized.Expression
+					r := output[len(output)-1]
+					if r.Expression != nil {
+						right = normalize(r.Expression)
+						output = output[:len(output)-1]
+					} else {
+						right = buildTree()
+					}
+
+					l := output[len(output)-1]
+					if l.Expression != nil {
+						left = normalize(l.Expression)
+						output = output[:len(output)-1]
+					} else {
+						left = buildTree()
+					}
+
+					return normalized.Call{
+						Location: e.Location,
+						Func: normalized.Global{
+							Location:       e.Location,
+							ModulePath:     m.Path,
+							DefinitionName: infixA.Alias,
+						},
+						Args: []normalized.Expression{left, right},
+					}
+				}
+			}
+
+			return buildTree()
 		}
 	case parsed.Negate:
 		{

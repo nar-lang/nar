@@ -847,6 +847,7 @@ func parseExpression(src *Source) parsed.Expression {
 		return finishParseExpression(src, parsed.InfixVar{Location: loc(src, cursor), Infix: *infix})
 	}
 
+	//TODO: make prefix operator like infix
 	//negate
 	if readExact(src, SeqMinus) {
 		nested := parseExpression(src)
@@ -1083,7 +1084,12 @@ func parseExpression(src *Source) parsed.Expression {
 		}
 
 		if 1 == len(items) {
-			return finishParseExpression(src, items[0])
+			expr := items[0]
+			if bop, ok := expr.(parsed.BinOp); ok {
+				bop.InParentheses = true
+				expr = bop
+			}
+			return finishParseExpression(src, expr)
 		} else {
 			return finishParseExpression(src, parsed.Tuple{Location: loc(src, cursor), Items: items})
 		}
@@ -1107,7 +1113,15 @@ func finishParseExpression(src *Source, expr parsed.Expression) parsed.Expressio
 			setErrorSource(*src, "expected second operand expression of binary expression here")
 		}
 
-		return parsed.BinOp{Location: loc(src, cursor), Infix: *infixOp, Left: expr, Right: final}
+		items := []parsed.BinOpItem{{Expression: expr}, {Infix: *infixOp}}
+
+		if bop, ok := final.(parsed.BinOp); ok && !bop.InParentheses {
+			items = append(items, bop.Items...)
+		} else {
+			items = append(items, parsed.BinOpItem{Expression: final})
+		}
+
+		return parsed.BinOp{Location: loc(src, cursor), Items: items}
 	}
 
 	if readExact(src, SeqParenthesisOpen) {

@@ -111,10 +111,16 @@ type Accessor struct {
 
 func (Accessor) _expression() {}
 
+type BinOpItem struct {
+	Expression Expression
+	Infix      ast.InfixIdentifier
+	Fn         Infix
+}
+
 type BinOp struct {
 	ast.Location
-	Infix       ast.InfixIdentifier
-	Left, Right Expression
+	Items         []BinOpItem
+	InParentheses bool
 }
 
 func (BinOp) _expression() {}
