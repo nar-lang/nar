@@ -129,17 +129,11 @@ type NativeCall struct {
 
 func (NativeCall) _expression() {}
 
-type Local struct {
+type Var struct {
 	ast.Location
-	Name ast.Identifier
-}
-
-func (Local) _expression() {}
-
-type Global struct {
-	ast.Location
+	Name           ast.QualifiedIdentifier
 	ModulePath     string
 	DefinitionName ast.Identifier
 }
 
-func (Global) _expression() {}
+func (Var) _expression() {}

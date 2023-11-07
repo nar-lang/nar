@@ -406,7 +406,7 @@ func parseNumber(src *Source) (iValue *int64, fValue *float64) {
 		return nil, fv
 	}
 
-	return iv, fv
+	return iv, nil
 }
 
 func parseConst(src *Source) ast.ConstValue {
@@ -910,7 +910,7 @@ func parseExpression(src *Source) parsed.Expression {
 		typeCursor := src.cursor
 		patterns, ret := parseSignature(src)
 		var def parsed.Definition
-		if nil != patterns {
+		if nil != name && nil != patterns {
 			if !readExact(src, SeqEqual) {
 				setErrorSource(*src, "expected `=` here")
 			}
@@ -993,13 +993,13 @@ func parseExpression(src *Source) parsed.Expression {
 
 			expr := parseExpression(src)
 			if nil == expr {
-				setErrorSource(*src, "expected case expression here here")
+				setErrorSource(*src, "expected case expression here")
 			}
 			cases = append(cases, parsed.SelectCase{Location: loc(src, caseCursor), Pattern: pattern, Expression: expr})
 		}
 
 		if 0 == len(cases) {
-			setErrorSource(*src, "expected case expression here here")
+			setErrorSource(*src, "expected case expression here")
 		}
 		return finishParseExpression(src, parsed.Select{Location: loc(src, cursor), Condition: condition, Cases: cases})
 	}
@@ -1169,6 +1169,11 @@ func parseDataValue(src *Source) parsed.DataTypeValue {
 	}
 	if readExact(src, SeqParenthesisOpen) {
 		for {
+			argCursor := src.cursor
+			if readIdentifier(src, false) == nil || !readExact(src, SeqColon) {
+				src.cursor = argCursor
+			}
+
 			type_ := parseType(src)
 			if nil == type_ {
 				setErrorSource(*src, "expected option value type here")

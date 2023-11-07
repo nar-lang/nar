@@ -56,3 +56,7 @@ type TTypeParameter struct {
 }
 
 func (TTypeParameter) _type() {}
+
+func (p TTypeParameter) String() string {
+	return string(p.Name)
+}

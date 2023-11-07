@@ -120,6 +120,11 @@ func unwrapImports(module *parsed.Module, modules map[string]parsed.Module) {
 		if imp.Alias != nil {
 			modName = ast.QualifiedIdentifier(*imp.Alias)
 		}
+		shortModName := ast.QualifiedIdentifier("")
+		lastDotIndex := strings.LastIndex(string(modName), ".")
+		if lastDotIndex >= 0 {
+			shortModName = modName[lastDotIndex+1:]
+		}
 
 		var exp []string
 
@@ -129,6 +134,9 @@ func unwrapImports(module *parsed.Module, modules map[string]parsed.Module) {
 				exp = append(exp, n)
 			}
 			exp = append(exp, fmt.Sprintf("%s.%s", modName, n))
+			if shortModName != "" {
+				exp = append(exp, fmt.Sprintf("%s.%s", shortModName, n))
+			}
 		}
 
 		for _, a := range m.Aliases {
@@ -145,6 +153,9 @@ func unwrapImports(module *parsed.Module, modules map[string]parsed.Module) {
 			if dt, ok := a.Type.(parsed.TData); ok {
 				for _, v := range dt.Values {
 					exp = append(exp, fmt.Sprintf("%s.%s", modName, v))
+					if shortModName != "" {
+						exp = append(exp, fmt.Sprintf("%s.%s", shortModName, v))
+					}
 				}
 			}
 		}
@@ -155,6 +166,9 @@ func unwrapImports(module *parsed.Module, modules map[string]parsed.Module) {
 				exp = append(exp, n)
 			}
 			exp = append(exp, fmt.Sprintf("%s.%s", modName, n))
+			if shortModName != "" {
+				exp = append(exp, fmt.Sprintf("%s.%s", shortModName, n))
+			}
 		}
 		imp.Exposing = exp
 		module.Imports[i] = imp
@@ -166,7 +180,8 @@ var nextDefinitionId = uint64(0)
 func normalizeDefinition(modules map[string]parsed.Module, module parsed.Module, def parsed.Definition) normalized.Definition {
 	nextDefinitionId++
 	o := normalized.Definition{
-		Id: nextDefinitionId,
+		Id:       nextDefinitionId,
+		Location: def.Location,
 	}
 	o.Pattern = normalizePattern(modules, module, def.Pattern)
 	o.Expression = normalizeExpression(modules, module, def.Expression)
@@ -497,7 +512,7 @@ func normalizeExpression(modules map[string]parsed.Module, module parsed.Module,
 
 					return normalized.Call{
 						Location: e.Location,
-						Func: normalized.Global{
+						Func: normalized.Var{
 							Location:       e.Location,
 							ModulePath:     m.Path,
 							DefinitionName: infixA.Alias,
@@ -521,17 +536,15 @@ func normalizeExpression(modules map[string]parsed.Module, module parsed.Module,
 	case parsed.Var:
 		{
 			e := expr.(parsed.Var)
-			if m, d, ok := findParsedDefinition(modules, module, e.Name); ok {
-				return normalized.Global{
-					Location:       e.Location,
-					ModulePath:     m.Path,
-					DefinitionName: d.Pattern.(parsed.PNamed).Name,
-				}
-			}
-			return normalized.Local{
+			o := normalized.Var{
 				Location: e.Location,
-				Name:     ast.Identifier(e.Name),
+				Name:     e.Name,
 			}
+			if m, d, ok := findParsedDefinition(modules, module, e.Name); ok {
+				o.ModulePath = m.Path
+				o.DefinitionName = d.Pattern.(parsed.PNamed).Name
+			}
+			return o
 		}
 	case parsed.InfixVar:
 		{
@@ -547,7 +560,7 @@ func normalizeExpression(modules map[string]parsed.Module, module parsed.Module,
 					Message:  "infix alias not found",
 				})
 			} else {
-				return normalized.Global{
+				return normalized.Var{
 					Location:       e.Location,
 					ModulePath:     m.Path,
 					DefinitionName: d.Pattern.(parsed.PNamed).Name,

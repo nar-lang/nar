@@ -14,11 +14,12 @@ import (
 )
 
 var unboundIndex = uint64(0)
-var typeMap map[fmt.Stringer]typed.Type
-var annotatedDefinitions map[uint64]*typed.Definition
-var equatizedDefinitions map[uint64]struct{}
+var annotations []struct {
+	fmt.Stringer
+	typed.Type
+}
 
-type symMap map[ast.Identifier]typed.Type
+type symbolsMap map[ast.Identifier]typed.Type
 type typeParamsMap map[ast.Identifier]uint64
 
 type equation struct {
@@ -28,7 +29,7 @@ type equation struct {
 	def         *typed.Definition
 }
 
-func (e equation) String() string {
+func (e equation) String(index int) string {
 	x := fmt.Stringer(e.expr)
 	if x == nil {
 		x = e.pattern
@@ -36,18 +37,28 @@ func (e equation) String() string {
 	if x == nil {
 		x = e.def
 	}
-	return fmt.Sprintf("\n| `%v` | `%v` | `%v` |", e.left, e.right, x)
+	return fmt.Sprintf("\n| %d | `%v` | `%v` | `%v` |", index, e.left, e.right, x)
 }
 
 func CheckTypes(
 	path string, modules map[string]normalized.Module, typedModules map[string]*typed.Module,
 ) {
+	var defName ast.Identifier
+	defer func() {
+		err := recover()
+		if err != nil {
+			if defName != "" {
+				println(fmt.Sprintf("in definition %v", defName))
+			}
+			panic(err)
+		}
+	}()
+
 	if _, ok := typedModules[path]; ok {
 		return
 	}
 
 	m := modules[path]
-
 	for _, dep := range m.DepPaths {
 		CheckTypes(dep, modules, typedModules)
 	}
@@ -66,6 +77,8 @@ func CheckTypes(
 	slices.Sort(names)
 
 	for _, name := range names {
+		defName = name
+
 		def := m.Definitions[name]
 		if _, ok := o.Definitions[name]; !ok {
 			cwd, _ := os.Getwd()
@@ -74,30 +87,28 @@ func CheckTypes(
 			fp := fmt.Sprintf(".oak-bin/%s/%s.md", p, def.Pattern.(normalized.PNamed).Name)
 			_ = os.MkdirAll(filepath.Dir(fp), 0700)
 
-			println(def.Pattern.(normalized.PNamed).Name)
-
 			unboundIndex = 0
-			typeMap = map[fmt.Stringer]typed.Type{}
-			annotatedDefinitions = map[uint64]*typed.Definition{}
-			equatizedDefinitions = map[uint64]struct{}{}
+			annotations = []struct {
+				fmt.Stringer
+				typed.Type
+			}{}
 			localTyped := map[string]*typed.Module{}
-			symtab := symMap{}
 			var eqs []equation
 
 			sb := strings.Builder{}
-			td := annotateDefinition(symtab, modules, localTyped, def)
+			td, _, _ := annotateDefinition(symbolsMap{}, typeParamsMap{}, modules, localTyped, def, nil)
 			sb.WriteString(fmt.Sprintf("\n\nDefinition\n---\n`%s`", td))
 			sb.WriteString("\n\nAnnotations\n---\n| Node | Type |\n|---|---|")
-			for n, t := range typeMap {
-				sb.WriteString(fmt.Sprintf("\n| `%v` | `%v` |", n, t))
+			for _, t := range annotations {
+				sb.WriteString(fmt.Sprintf("\n| `%v` | `%v` |", t.Stringer, t.Type))
 			}
 			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
 
-			eqs = equatizeDefinition(eqs, td)
+			eqs = equatizeDefinition(eqs, td, nil)
 
-			sb.WriteString("\n\nEquations\n---\n| Left | Right | Node |\n|---|---|---|")
-			for _, eq := range eqs {
-				sb.WriteString(eq.String())
+			sb.WriteString("\n\nEquations\n---\n| No | Left | Right | Node |\n|---|---|---|---|")
+			for i, eq := range eqs {
+				sb.WriteString(eq.String(i))
 			}
 			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
 
@@ -112,7 +123,7 @@ func CheckTypes(
 			td = applyDefinition(td, subst)
 
 			sb.WriteString("\n\nSolved\n---\n")
-			sb.WriteString(fmt.Sprintf("\n `%v`", td.Type))
+			sb.WriteString(fmt.Sprintf("\n `%v`", td.GetType()))
 			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
 
 			o.Definitions[def.Pattern.(normalized.PNamed).Name] = td
@@ -120,518 +131,60 @@ func CheckTypes(
 	}
 }
 
-func equatizeDefinition(eqs []equation, td *typed.Definition) []equation {
-	eqs = equatizePattern(eqs, td.Pattern)
-	if td.Expression != nil {
-		eqs = append(eqs, equation{
-			left:  td.Type,
-			right: td.Expression.GetType(),
-			def:   td,
-		})
-	}
-
-	if _, ok := equatizedDefinitions[td.Id]; ok {
-		return eqs
-	}
-	equatizedDefinitions[td.Id] = struct{}{}
-
-	if td.Expression != nil {
-		eqs = equatizeExpression(eqs, td.Expression)
-	}
-	return eqs
-}
-
-func equatizePattern(eqs []equation, pattern typed.Pattern) []equation {
-	switch pattern.(type) {
-	case *typed.PAlias:
-		{
-			e := pattern.(*typed.PAlias)
-			eqs = equatizePattern(eqs, e.Nested)
-			break
-		}
-	case *typed.PAny:
-		{
-			break
-		}
-	case *typed.PCons:
-		{
-			e := pattern.(*typed.PCons)
-			eqs = append(eqs,
-				equation{
-					left:    e.Type,
-					right:   e.Tail.GetType(),
-					pattern: pattern,
-				},
-				equation{
-					left: e.Type,
-					right: &typed.TExternal{
-						Location: e.Location,
-						Name:     common.OakCoreListList,
-						Args:     []typed.Type{e.Head.GetType()},
-					},
-					pattern: pattern,
-				})
-			eqs = equatizePattern(eqs, e.Head)
-			eqs = equatizePattern(eqs, e.Tail)
-			break
-		}
-	case *typed.PConst:
-		{
-			e := pattern.(*typed.PConst)
-			eqs = append(eqs, equation{
-				left:    e.Type,
-				right:   getConstType(e.Value, e.Location),
-				pattern: pattern,
-			})
-			break
-		}
-	case *typed.PDataValue:
-		{
-			e := pattern.(*typed.PDataValue)
-			switch e.Definition.Type.(type) {
-			case *typed.TFunc:
-				{
-					tf := e.Definition.Type.(*typed.TFunc)
-					eqs = append(eqs, equation{
-						left:    e.Type,
-						right:   tf.Return,
-						pattern: pattern,
-					})
-					if len(e.Args) != len(tf.Params) {
-						panic(common.Error{
-							Location: e.Location,
-							Message:  "number of arguments mismatch",
-						})
-					}
-					for i, v := range e.Args {
-						eqs = append(eqs, equation{
-							left:    v.GetType(),
-							right:   tf.Params[i],
-							pattern: pattern,
-						})
-					}
-					break
-				}
-			case *typed.TExternal:
-				{
-					tf := e.Definition.Type.(*typed.TExternal)
-					eqs = append(eqs, equation{
-						left:    e.Type,
-						right:   tf,
-						pattern: pattern,
-					})
-					if len(e.Args) != 0 {
-						panic(common.Error{
-							Location: e.Location,
-							Message:  "number of arguments mismatch",
-						})
-					}
-					break
-				}
-			default:
-				panic(common.SystemError{Message: "invalid case"})
-			}
-			break
-		}
-	case *typed.PList:
-		{
-			e := pattern.(*typed.PList)
-			var itemType typed.Type
-			for _, item := range e.Items {
-				if itemType == nil {
-					itemType = item.GetType()
-				} else {
-					eqs = append(eqs, equation{
-						left:    itemType,
-						right:   item.GetType(),
-						pattern: pattern,
-					})
-				}
-			}
-			if itemType == nil {
-				itemType = annotateType(nil, nil, e.Location, false)
-			}
-			eqs = append(eqs, equation{
-				left: e.Type,
-				right: &typed.TExternal{
-					Location: e.Location,
-					Name:     common.OakCoreListList,
-					Args:     []typed.Type{itemType},
-				},
-				pattern: pattern,
-			})
-			for _, item := range e.Items {
-				eqs = equatizePattern(eqs, item)
-			}
-
-			break
-		}
-	case *typed.PNamed:
-		{
-			break
-		}
-	case *typed.PRecord:
-		{
-			e := pattern.(*typed.PRecord)
-			fields := map[ast.Identifier]typed.Type{}
-			for _, f := range e.Fields {
-				fields[f.Name] = f.Type
-			}
-
-			eqs = append(eqs, equation{
-				left: e.Type,
-				right: &typed.TRecord{
-					Location: e.Location,
-					Fields:   fields,
-				},
-				pattern: pattern,
-			})
-
-			break
-		}
-	case *typed.PTuple:
-		{
-			e := pattern.(*typed.PTuple)
-			eqs = append(eqs, equation{
-				left: e.Type,
-				right: &typed.TTuple{
-					Location: e.Location,
-					Items:    common.Map(func(p typed.Pattern) typed.Type { return p.GetType() }, e.Items),
-				},
-				pattern: pattern,
-			})
-
-			for _, item := range e.Items {
-				eqs = equatizePattern(eqs, item)
-			}
-			break
-		}
-	default:
-		panic(common.SystemError{Message: "invalid case"})
-	}
-	return eqs
-}
-
-func equatizeExpression(eqs []equation, expr typed.Expression) []equation {
-	if expr == nil {
-		return eqs
-	}
-	switch expr.(type) {
-	case *typed.Access:
-		{
-			e := expr.(*typed.Access)
-
-			fields := map[ast.Identifier]typed.Type{}
-			fields[e.FieldName] = e.Type
-			eqs = append(eqs, equation{
-				left:  e.Record.GetType(),
-				right: &typed.TRecord{Location: e.Location, Fields: fields},
-				expr:  expr,
-			})
-			eqs = equatizeExpression(eqs, e.Record)
-			break
-		}
-	case *typed.Call:
-		{
-			e := expr.(*typed.Call)
-			eqs = append(eqs, equation{
-				left: e.Func.GetType(),
-				right: &typed.TFunc{
-					Location: e.Location,
-					Params:   common.Map(func(p typed.Expression) typed.Type { return p.GetType() }, e.Args),
-					Return:   e.Type,
-				},
-				expr: expr,
-			})
-			eqs = equatizeExpression(eqs, e.Func)
-			for _, a := range e.Args {
-				eqs = equatizeExpression(eqs, a)
-			}
-			break
-		}
-	case *typed.Const:
-		{
-			e := expr.(*typed.Const)
-			eqs = append(eqs, equation{
-				left:  e.Type,
-				right: getConstType(e.Value, e.Location),
-				expr:  e,
-			})
-			break
-		}
-	case *typed.If:
-		{
-			e := expr.(*typed.If)
-			eqs = append(eqs,
-				equation{
-					left:  e.Condition.GetType(),
-					right: &typed.TExternal{Location: e.Location, Name: common.OakCoreBasicsBool},
-					expr:  expr,
-				},
-				equation{
-					left:  e.Type,
-					right: e.Positive.GetType(),
-					expr:  expr,
-				},
-				equation{
-					left:  e.Type,
-					right: e.Negative.GetType(),
-					expr:  expr,
-				})
-			eqs = equatizeExpression(eqs, e.Condition)
-			eqs = equatizeExpression(eqs, e.Positive)
-			eqs = equatizeExpression(eqs, e.Negative)
-			break
-		}
-	case *typed.Let:
-		{
-			e := expr.(*typed.Let)
-			eqs = append(eqs,
-				equation{
-					left:  e.Type,
-					right: e.Body.GetType(),
-					expr:  expr,
-				})
-			eqs = equatizeExpression(eqs, e.Body)
-			break
-		}
-	case *typed.List:
-		{
-			e := expr.(*typed.List)
-			var listItemType typed.Type
-
-			for _, item := range e.Items {
-				if listItemType == nil {
-					listItemType = item.GetType()
-				} else {
-					eqs = append(eqs, equation{
-						left:  listItemType,
-						right: item.GetType(),
-						expr:  expr,
-					})
-					listItemType = item.GetType()
-				}
-			}
-
-			if listItemType != nil {
-				listItemType = annotateType(nil, nil, e.Location, false)
-			}
-			eqs = append(eqs, equation{
-				left: e.Type,
-				right: &typed.TExternal{
-					Location: e.Location,
-					Name:     common.OakCoreListList,
-					Args:     []typed.Type{listItemType},
-				},
-				expr: expr,
-			})
-
-			for _, item := range e.Items {
-				eqs = equatizeExpression(eqs, item)
-			}
-			break
-		}
-	case *typed.Record:
-		{
-			e := expr.(*typed.Record)
-			fieldTypes := map[ast.Identifier]typed.Type{}
-			for _, f := range e.Fields {
-				fieldTypes[f.Name] = f.Type
-			}
-
-			eqs = append(eqs, equation{
-				left: e.Type,
-				right: &typed.TRecord{
-					Location: e.Location,
-					Fields:   fieldTypes,
-				},
-				expr: expr,
-			})
-
-			for _, f := range e.Fields {
-				eqs = equatizeExpression(eqs, f.Value)
-			}
-			break
-		}
-	case *typed.Select:
-		{
-			e := expr.(*typed.Select)
-			caseType := e.Type
-			for _, cs := range e.Cases {
-				eqs = append(eqs,
-					equation{
-						left:  e.Condition.GetType(),
-						right: cs.Pattern.GetType(),
-						expr:  expr,
-					}, equation{
-						left:  caseType,
-						right: cs.Expression.GetType(),
-						expr:  expr,
-					})
-			}
-
-			for _, cs := range e.Cases {
-				eqs = equatizePattern(eqs, cs.Pattern)
-				eqs = equatizeExpression(eqs, cs.Expression)
-			}
-			break
-		}
-	case *typed.Tuple:
-		{
-			e := expr.(*typed.Tuple)
-			eqs = append(eqs, equation{
-				left: e.Type,
-				right: &typed.TTuple{
-					Location: e.Location,
-					Items: common.Map(
-						func(e typed.Expression) typed.Type { return e.GetType() },
-						e.Items),
-				},
-				expr: expr,
-			})
-			for _, item := range e.Items {
-				eqs = equatizeExpression(eqs, item)
-			}
-			break
-		}
-	case *typed.UpdateLocal:
-		{
-			e := expr.(*typed.UpdateLocal)
-			fieldTypes := map[ast.Identifier]typed.Type{}
-			for _, f := range e.Fields {
-				fieldTypes[f.Name] = f.Type
-			}
-
-			eqs = append(eqs, equation{
-				left: e.Type,
-				right: &typed.TRecord{
-					Location: e.Location,
-					Fields:   fieldTypes,
-				},
-				expr: expr,
-			})
-
-			for _, f := range e.Fields {
-				eqs = equatizeExpression(eqs, f.Value)
-			}
-			break
-		}
-	case *typed.UpdateGlobal:
-		{
-			e := expr.(*typed.UpdateGlobal)
-			fieldTypes := map[ast.Identifier]typed.Type{}
-			for _, f := range e.Fields {
-				fieldTypes[f.Name] = f.Type
-			}
-
-			eqs = append(eqs, equation{
-				left: e.Type,
-				right: &typed.TRecord{
-					Location: e.Location,
-					Fields:   fieldTypes,
-				},
-				expr: expr,
-			})
-
-			for _, f := range e.Fields {
-				eqs = equatizeExpression(eqs, f.Value)
-			}
-			eqs = equatizeDefinition(eqs, e.Definition)
-			break
-		}
-	case *typed.Lambda:
-		{
-			e := expr.(*typed.Lambda)
-			eqs = append(eqs, equation{
-				left: e.Type,
-				right: &typed.TFunc{
-					Location: e.Location,
-					Params:   common.Map(func(p typed.Pattern) typed.Type { return p.GetType() }, e.Params),
-					Return:   e.Body.GetType(),
-				},
-				expr: expr,
-			})
-			for _, p := range e.Params {
-				eqs = equatizePattern(eqs, p)
-			}
-			eqs = equatizeExpression(eqs, e.Body)
-			break
-		}
-	case *typed.Constructor:
-		{
-			e := expr.(*typed.Constructor)
-			eqs = append(eqs, equation{
-				left: e.Type,
-				right: &typed.TExternal{
-					Location: e.Location,
-					Name:     e.DataName,
-				},
-				expr: e,
-			})
-			for _, a := range e.Args {
-				eqs = equatizeExpression(eqs, a)
-			}
-		}
-	case *typed.NativeCall:
-		{
-			e := expr.(*typed.NativeCall)
-			for _, a := range e.Args {
-				eqs = equatizeExpression(eqs, a)
-			}
-		}
-	case *typed.Local:
-		{
-
-		}
-	case *typed.Global:
-		{
-			e := expr.(*typed.Global)
-			eqs = append(eqs, equation{
-				left:  e.Type,
-				right: e.Definition.Type,
-				expr:  e,
-			})
-			eqs = equatizeDefinition(eqs, e.Definition)
-		}
-	default:
-		panic(common.SystemError{Message: "invalid case"})
-	}
-	return eqs
-}
-
 func annotateDefinition(
-	symtab symMap,
+	symbols symbolsMap,
+	typeParams typeParamsMap,
 	modules map[string]normalized.Module,
 	typedModules map[string]*typed.Module,
 	def normalized.Definition,
-) *typed.Definition {
+	stack []*typed.Definition,
+) (*typed.Definition, symbolsMap, typeParamsMap) {
 	o := &typed.Definition{
 		Id: def.Id,
 	}
 
-	typeParams := typeParamsMap{}
-	o.Pattern = annotatePattern(symtab, typeParams, modules, typedModules, def.Pattern)
-	if rec, ok := annotatedDefinitions[def.Id]; ok {
-		return rec
+	localSymbols := symbolsMap{}
+	localTypeParams := typeParamsMap{}
+
+	o.Pattern = annotatePattern(localSymbols, localTypeParams, modules, typedModules, def.Pattern, true, stack)
+
+	mergedSymbols := symbolsMap{}
+	maps.Copy(mergedSymbols, symbols)
+	maps.Copy(mergedSymbols, localSymbols)
+
+	mergedTypeParams := typeParamsMap{}
+	maps.Copy(mergedTypeParams, typeParams)
+	maps.Copy(mergedTypeParams, localTypeParams)
+
+	if def.Type != nil {
+		o.DefinedType = annotateType(mergedTypeParams, def.Type, def.Location, true)
 	}
 
-	annotatedDefinitions[def.Id] = o
+	for _, std := range stack {
+		if std.Id == def.Id {
+			return std, mergedSymbols, mergedTypeParams
+		}
+	}
 
-	o.Type = annotateType(typeParams, def.Type, def.Pattern.(normalized.PNamed).Location, true)
-	o.Expression = annotateExpression(symtab, typeParams, modules, typedModules, def.Expression)
-
-	typeMap[o] = o.Type
-	return o
+	stack = append(stack, o)
+	o.Expression = annotateExpression(mergedSymbols, mergedTypeParams, modules, typedModules, def.Expression, stack)
+	stack = stack[:len(stack)-1]
+	return o, mergedSymbols, mergedTypeParams
 }
 
-func annotatePattern(symtab symMap,
+func annotatePattern(symbols symbolsMap,
 	typeParams typeParamsMap,
 	modules map[string]normalized.Module,
 	typedModules map[string]*typed.Module,
 	pattern normalized.Pattern,
+	typeMapSource bool,
+	stack []*typed.Definition,
 ) typed.Pattern {
+	if pattern == nil {
+		return nil
+	}
 	annotate := func(p normalized.Pattern) typed.Pattern {
-		return annotatePattern(symtab, typeParams, modules, typedModules, p)
+		return annotatePattern(symbols, typeParams, modules, typedModules, p, typeMapSource, stack)
 	}
 	var p typed.Pattern
 	switch pattern.(type) {
@@ -640,11 +193,11 @@ func annotatePattern(symtab symMap,
 			e := pattern.(normalized.PAlias)
 			p = &typed.PAlias{
 				Location: e.Location,
-				Type:     annotateType(typeParams, e.Type, e.Location, true),
+				Type:     annotateType(typeParams, e.Type, e.Location, typeMapSource),
 				Alias:    e.Alias,
 				Nested:   annotate(e.Nested),
 			}
-			symtab[e.Alias] = p.GetType()
+			symbols[e.Alias] = p.GetType()
 			break
 		}
 	case normalized.PAny:
@@ -652,7 +205,7 @@ func annotatePattern(symtab symMap,
 			e := pattern.(normalized.PAny)
 			p = &typed.PAny{
 				Location: e.Location,
-				Type:     annotateType(typeParams, e.Type, e.Location, true),
+				Type:     annotateType(typeParams, e.Type, e.Location, typeMapSource),
 			}
 			break
 		}
@@ -661,7 +214,7 @@ func annotatePattern(symtab symMap,
 			e := pattern.(normalized.PCons)
 			p = &typed.PCons{
 				Location: e.Location,
-				Type:     annotateType(typeParams, e.Type, e.Location, true),
+				Type:     annotateType(typeParams, e.Type, e.Location, typeMapSource),
 				Head:     annotate(e.Head),
 				Tail:     annotate(e.Tail),
 			}
@@ -672,7 +225,7 @@ func annotatePattern(symtab symMap,
 			e := pattern.(normalized.PConst)
 			p = &typed.PConst{
 				Location: e.Location,
-				Type:     annotateType(typeParams, e.Type, e.Location, true),
+				Type:     annotateType(typeParams, e.Type, e.Location, typeMapSource),
 				Value:    e.Value,
 			}
 			break
@@ -681,15 +234,11 @@ func annotatePattern(symtab symMap,
 		{
 			e := pattern.(normalized.PDataValue)
 
-			t, def := getAnnotatedGlobal(e.ModulePath, e.DefinitionName, modules, typedModules)
-
-			if fn, ok := t.(*typed.TFunc); ok {
-				t = fn.Return
-			}
+			def := getAnnotatedGlobal(e.ModulePath, e.DefinitionName, modules, typedModules, stack)
 
 			p = &typed.PDataValue{
 				Location:       e.Location,
-				Type:           t,
+				Type:           annotateType(typeParams, nil, e.Location, typeMapSource),
 				ModulePath:     e.ModulePath,
 				DefinitionName: e.DefinitionName,
 				Args:           common.Map(annotate, e.Values),
@@ -702,7 +251,7 @@ func annotatePattern(symtab symMap,
 			e := pattern.(normalized.PList)
 			p = &typed.PList{
 				Location: e.Location,
-				Type:     annotateType(typeParams, e.Type, e.Location, true),
+				Type:     annotateType(typeParams, e.Type, e.Location, typeMapSource),
 				Items:    common.Map(annotate, e.Items),
 			}
 			break
@@ -712,10 +261,10 @@ func annotatePattern(symtab symMap,
 			e := pattern.(normalized.PNamed)
 			p = &typed.PNamed{
 				Location: e.Location,
-				Type:     annotateType(typeParams, e.Type, e.Location, true),
+				Type:     annotateType(typeParams, e.Type, e.Location, typeMapSource),
 				Name:     e.Name,
 			}
-			symtab[e.Name] = p.GetType()
+			symbols[e.Name] = p.GetType()
 			break
 		}
 	case normalized.PRecord:
@@ -723,12 +272,12 @@ func annotatePattern(symtab symMap,
 			e := pattern.(normalized.PRecord)
 			p = &typed.PRecord{
 				Location: e.Location,
-				Type:     annotateType(typeParams, e.Type, e.Location, true),
+				Type:     annotateType(typeParams, e.Type, e.Location, typeMapSource),
 				Fields: common.Map(func(f normalized.PRecordField) typed.PRecordField {
 					return typed.PRecordField{
 						Location: f.Location,
 						Name:     f.Name,
-						Type:     annotateType(typeParams, nil, e.Location, true),
+						Type:     annotateType(typeParams, nil, e.Location, typeMapSource),
 					}
 				}, e.Fields),
 			}
@@ -739,7 +288,7 @@ func annotatePattern(symtab symMap,
 			e := pattern.(normalized.PTuple)
 			p = &typed.PTuple{
 				Location: e.Location,
-				Type:     annotateType(typeParams, e.Type, e.Location, true),
+				Type:     annotateType(typeParams, e.Type, e.Location, typeMapSource),
 				Items:    common.Map(annotate, e.Items),
 			}
 			break
@@ -748,23 +297,27 @@ func annotatePattern(symtab symMap,
 		panic(common.SystemError{Message: "invalid case"})
 	}
 
-	typeMap[p] = p.GetType()
+	annotations = append(annotations, struct {
+		fmt.Stringer
+		typed.Type
+	}{p, p.GetType()})
 	return p
 }
 
 func annotateExpression(
-	symtab symMap,
+	symbols symbolsMap,
 	typeParams typeParamsMap,
 	modules map[string]normalized.Module,
 	typedModules map[string]*typed.Module,
 	expr normalized.Expression,
+	stack []*typed.Definition,
 ) typed.Expression {
 	if expr == nil {
 		return nil
 	}
 
 	annotate := func(e normalized.Expression) typed.Expression {
-		return annotateExpression(symtab, typeParams, modules, typedModules, e)
+		return annotateExpression(symbols, typeParams, modules, typedModules, e, stack)
 	}
 	var o typed.Expression
 	switch expr.(type) {
@@ -815,11 +368,39 @@ func annotateExpression(
 	case normalized.Let:
 		{
 			e := expr.(normalized.Let)
+
+			def, localSymbols, localTypeParams := annotateDefinition(symbols, typeParams, modules, typedModules, e.Definition, stack)
+
 			o = &typed.Let{
 				Location:   e.Location,
-				Type:       annotateType(typeParams, nil, e.Location, false),
-				Definition: annotateDefinition(symtab, modules, typedModules, e.Definition),
-				Body:       annotate(e.Body),
+				Type:       annotateType(localTypeParams, nil, e.Location, true),
+				Definition: def,
+				Body:       annotateExpression(localSymbols, localTypeParams, modules, typedModules, e.Body, stack),
+			}
+			break
+		}
+	case normalized.Lambda:
+		{
+			//TODO: use annotateDefinition()
+			e := expr.(normalized.Lambda)
+			localSymbols := symbolsMap{}
+			localTypeParams := typeParamsMap{}
+			params := common.Map(func(p normalized.Pattern) typed.Pattern {
+				return annotatePattern(localSymbols, localTypeParams, modules, typedModules, p, true, stack)
+			}, e.Params)
+			mergedSymbols := symbolsMap{}
+			maps.Copy(mergedSymbols, symbols)
+			maps.Copy(mergedSymbols, localSymbols)
+
+			mergedTypeParams := typeParamsMap{}
+			maps.Copy(mergedTypeParams, typeParams)
+			maps.Copy(mergedTypeParams, localTypeParams)
+
+			o = &typed.Lambda{
+				Location: e.Location,
+				Type:     annotateType(mergedTypeParams, nil, e.Location, false),
+				Params:   params,
+				Body:     annotateExpression(mergedSymbols, mergedTypeParams, modules, typedModules, e.Body, stack),
 			}
 			break
 		}
@@ -861,7 +442,7 @@ func annotateExpression(
 					return typed.SelectCase{
 						Location:   c.Location,
 						Type:       annotateType(typeParams, nil, c.Location, false),
-						Pattern:    annotatePattern(symtab, typeParams, modules, typedModules, c.Pattern),
+						Pattern:    annotatePattern(symbols, typeParams, modules, typedModules, c.Pattern, false, stack),
 						Expression: annotate(c.Expression),
 					}
 				}, e.Cases),
@@ -881,7 +462,7 @@ func annotateExpression(
 	case normalized.UpdateLocal:
 		{
 			e := expr.(normalized.UpdateLocal)
-			if t, ok := symtab[e.RecordName]; ok {
+			if t, ok := symbols[e.RecordName]; ok {
 				o = &typed.UpdateLocal{
 					Location:   e.Location,
 					Type:       t,
@@ -898,7 +479,7 @@ func annotateExpression(
 			} else {
 				panic(common.Error{
 					Location: e.Location,
-					Message:  "local variable not found",
+					Message:  fmt.Sprintf("local variable `%s` not found", e.RecordName),
 				})
 			}
 			break
@@ -907,11 +488,11 @@ func annotateExpression(
 		{
 			e := expr.(normalized.UpdateGlobal)
 
-			t, def := getAnnotatedGlobal(e.ModulePath, e.DefinitionName, modules, typedModules)
+			def := getAnnotatedGlobal(e.ModulePath, e.DefinitionName, modules, typedModules, stack)
 
 			o = &typed.UpdateGlobal{
 				Location:       e.Location,
-				Type:           t,
+				Type:           def.GetType(),
 				ModulePath:     e.ModulePath,
 				DefinitionName: e.DefinitionName,
 				Definition:     def,
@@ -923,30 +504,6 @@ func annotateExpression(
 						Value:    annotate(f.Value),
 					}
 				}, e.Fields),
-			}
-			break
-		}
-	case normalized.Lambda:
-		{
-			e := expr.(normalized.Lambda)
-			localSymtab := symMap{}
-			localTypeParams := typeParamsMap{}
-			params := common.Map(func(p normalized.Pattern) typed.Pattern {
-				return annotatePattern(localSymtab, localTypeParams, modules, typedModules, p)
-			}, e.Params)
-			mergedSymtab := symMap{}
-			maps.Copy(mergedSymtab, symtab)
-			maps.Copy(mergedSymtab, localSymtab)
-
-			mergedTypeParams := typeParamsMap{}
-			maps.Copy(mergedTypeParams, typeParams)
-			maps.Copy(mergedTypeParams, localTypeParams)
-
-			o = &typed.Lambda{
-				Location: e.Location,
-				Type:     annotateType(mergedTypeParams, nil, e.Location, true),
-				Params:   params,
-				Body:     annotateExpression(mergedSymtab, mergedTypeParams, modules, typedModules, e.Body),
 			}
 			break
 		}
@@ -973,43 +530,43 @@ func annotateExpression(
 			}
 			break
 		}
-	case normalized.Local:
+	case normalized.Var:
 		{
-			e := expr.(normalized.Local)
-			if t, ok := symtab[e.Name]; ok {
+			e := expr.(normalized.Var)
+
+			if localType, ok := symbols[ast.Identifier(e.Name)]; ok {
 				o = &typed.Local{
 					Location: e.Location,
-					Type:     t,
-					Name:     e.Name,
+					Type:     localType,
+					Name:     ast.Identifier(e.Name),
+				}
+			} else if e.DefinitionName != "" {
+				def := getAnnotatedGlobal(e.ModulePath, e.DefinitionName, modules, typedModules, stack)
+
+				o = &typed.Global{
+					Location:       e.Location,
+					Type:           def.GetType(),
+					ModulePath:     e.ModulePath,
+					DefinitionName: e.DefinitionName,
+					Definition:     def,
 				}
 			} else {
 				panic(common.Error{
 					Location: e.Location,
-					Message:  "local variable not found",
+					Message:  fmt.Sprintf("unknown identifier `%s`", e.Name),
 				})
 			}
-			break
-		}
-	case normalized.Global:
-		{
-			e := expr.(normalized.Global)
 
-			t, def := getAnnotatedGlobal(e.ModulePath, e.DefinitionName, modules, typedModules)
-
-			o = &typed.Global{
-				Location:       e.Location,
-				Type:           t,
-				ModulePath:     e.ModulePath,
-				DefinitionName: e.DefinitionName,
-				Definition:     def,
-			}
 			break
 		}
 	default:
 		panic(common.SystemError{Message: "invalid case"})
 	}
 
-	typeMap[o] = o.GetType()
+	annotations = append(annotations, struct {
+		fmt.Stringer
+		typed.Type
+	}{o, o.GetType()})
 	return o
 }
 
@@ -1018,8 +575,8 @@ func getAnnotatedGlobal(
 	definitionName ast.Identifier,
 	modules map[string]normalized.Module,
 	typedModules map[string]*typed.Module,
-) (typed.Type, *typed.Definition) {
-	var t typed.Type
+	stack []*typed.Definition,
+) *typed.Definition {
 	typedModule, ok := typedModules[modulePath]
 	if !ok {
 		typedModule = &typed.Module{
@@ -1031,17 +588,19 @@ func getAnnotatedGlobal(
 
 	def, ok := typedModule.Definitions[definitionName]
 	if !ok {
-		defSymtab := symMap{}
+		defSymbols := symbolsMap{}
 
-		def = annotateDefinition(defSymtab, modules, typedModules, modules[modulePath].Definitions[definitionName])
-		typedModule.Definitions[definitionName] = def
+		def, _, _ = annotateDefinition(
+			defSymbols, typeParamsMap{}, modules, typedModules, modules[modulePath].Definitions[definitionName], stack,
+		)
 	}
 
-	t = def.Type
-	return t, def
+	return def
 }
 
-func annotateType(typeParams typeParamsMap, t normalized.Type, location ast.Location, typeMapSource bool) typed.Type {
+func annotateType(
+	typeParams typeParamsMap, t normalized.Type, location ast.Location, typeMapSource bool,
+) typed.Type {
 	annotate := func(l ast.Location) func(x normalized.Type) typed.Type {
 		return func(x normalized.Type) typed.Type {
 			return annotateType(typeParams, x, location, typeMapSource)
@@ -1121,15 +680,20 @@ func annotateType(typeParams typeParamsMap, t normalized.Type, location ast.Loca
 			{
 				e := t.(normalized.TTypeParameter)
 				//TODO: constraints
-				if typeMapSource {
-					r = annotateType(typeParams, nil, e.Location, true)
-					typeParams[e.Name] = r.(*typed.TUnbound).Index
+
+				if id, ok := typeParams[e.Name]; ok {
+					r = &typed.TUnbound{
+						Location: e.Location,
+						Index:    id,
+					}
 				} else {
-					if id, ok := typeParams[e.Name]; ok {
-						r = &typed.TUnbound{
-							Location: e.Location,
-							Index:    id,
-						}
+					if typeMapSource {
+						r = annotateType(typeParams, nil, e.Location, true)
+						annotations = append(annotations, struct {
+							fmt.Stringer
+							typed.Type
+						}{e, r})
+						typeParams[e.Name] = r.(*typed.TUnbound).Index
 					} else {
 						panic(common.Error{Location: e.Location, Message: "unknown type parameter"})
 					}
@@ -1142,6 +706,470 @@ func annotateType(typeParams typeParamsMap, t normalized.Type, location ast.Loca
 		}
 	}
 	return r
+}
+
+func equatizeDefinition(eqs []equation, td *typed.Definition, stack []*typed.Definition) []equation {
+	for _, std := range stack {
+		if std.Id == td.Id {
+			return eqs
+		}
+	}
+	stack = append(stack, td)
+	eqs = equatizePattern(eqs, td.Pattern)
+	if td.Expression != nil && td.DefinedType != nil {
+		eqs = append(eqs, equation{
+			right: td.Expression.GetType(),
+			left:  td.DefinedType,
+			def:   td,
+		})
+	}
+
+	if td.Expression != nil {
+		eqs = equatizeExpression(eqs, td.Expression, stack)
+	}
+	stack = stack[:len(stack)-1]
+	return eqs
+}
+
+func equatizePattern(eqs []equation, pattern typed.Pattern) []equation {
+	switch pattern.(type) {
+	case *typed.PAlias:
+		{
+			e := pattern.(*typed.PAlias)
+			eqs = append(eqs,
+				equation{
+					left:    e.Type,
+					right:   e.Nested.GetType(),
+					pattern: pattern,
+				})
+			eqs = equatizePattern(eqs, e.Nested)
+			break
+		}
+	case *typed.PAny:
+		{
+			break
+		}
+	case *typed.PCons:
+		{
+			e := pattern.(*typed.PCons)
+			eqs = append(eqs,
+				equation{
+					left:    e.Type,
+					right:   e.Tail.GetType(),
+					pattern: pattern,
+				},
+				equation{
+					left: e.Tail.GetType(),
+					right: &typed.TExternal{
+						Location: e.Location,
+						Name:     common.OakCoreListList,
+						Args:     []typed.Type{e.Head.GetType()},
+					},
+					pattern: pattern,
+				})
+			eqs = equatizePattern(eqs, e.Head)
+			eqs = equatizePattern(eqs, e.Tail)
+			break
+		}
+	case *typed.PConst:
+		{
+			e := pattern.(*typed.PConst)
+			eqs = append(eqs, equation{
+				left:    e.Type,
+				right:   getConstType(e.Value, e.Location),
+				pattern: pattern,
+			})
+			break
+		}
+	case *typed.PDataValue:
+		{
+			e := pattern.(*typed.PDataValue)
+			if len(e.Args) == 0 {
+				eqs = append(eqs, equation{
+					left:    e.Type,
+					right:   e.Definition.GetType(),
+					pattern: pattern,
+				})
+			} else {
+				eqs = append(eqs, equation{
+					left: &typed.TFunc{
+						Location: e.Location,
+						Params:   common.Map(func(x typed.Pattern) typed.Type { return x.GetType() }, e.Args),
+						Return:   e.Type,
+					},
+					right:   e.Definition.GetType(),
+					pattern: e,
+				})
+				for _, arg := range e.Args {
+					eqs = equatizePattern(eqs, arg)
+				}
+			}
+			break
+		}
+	case *typed.PList:
+		{
+			e := pattern.(*typed.PList)
+			var itemType typed.Type
+			for _, item := range e.Items {
+				if itemType == nil {
+					itemType = item.GetType()
+				} else {
+					eqs = append(eqs, equation{
+						left:    itemType,
+						right:   item.GetType(),
+						pattern: pattern,
+					})
+				}
+			}
+			if itemType == nil {
+				itemType = annotateType(nil, nil, e.Location, false)
+			}
+			eqs = append(eqs, equation{
+				left: e.Type,
+				right: &typed.TExternal{
+					Location: e.Location,
+					Name:     common.OakCoreListList,
+					Args:     []typed.Type{itemType},
+				},
+				pattern: pattern,
+			})
+			for _, item := range e.Items {
+				eqs = equatizePattern(eqs, item)
+			}
+			break
+		}
+	case *typed.PNamed:
+		{
+			break
+		}
+	case *typed.PRecord:
+		{
+			e := pattern.(*typed.PRecord)
+			fields := map[ast.Identifier]typed.Type{}
+			for _, f := range e.Fields {
+				fields[f.Name] = f.Type
+			}
+
+			eqs = append(eqs, equation{
+				left: e.Type,
+				right: &typed.TRecord{
+					Location: e.Location,
+					Fields:   fields,
+				},
+				pattern: pattern,
+			})
+
+			break
+		}
+	case *typed.PTuple:
+		{
+			e := pattern.(*typed.PTuple)
+			eqs = append(eqs, equation{
+				left: e.Type,
+				right: &typed.TTuple{
+					Location: e.Location,
+					Items:    common.Map(func(p typed.Pattern) typed.Type { return p.GetType() }, e.Items),
+				},
+				pattern: pattern,
+			})
+
+			for _, item := range e.Items {
+				eqs = equatizePattern(eqs, item)
+			}
+			break
+		}
+	default:
+		panic(common.SystemError{Message: "invalid case"})
+	}
+	return eqs
+}
+
+func equatizeExpression(eqs []equation, expr typed.Expression, stack []*typed.Definition) []equation {
+	if expr == nil {
+		return eqs
+	}
+	switch expr.(type) {
+	case *typed.Access:
+		{
+			e := expr.(*typed.Access)
+
+			fields := map[ast.Identifier]typed.Type{}
+			fields[e.FieldName] = e.Type
+			eqs = append(eqs, equation{
+				left:  e.Record.GetType(),
+				right: &typed.TRecord{Location: e.Location, Fields: fields},
+				expr:  expr,
+			})
+			eqs = equatizeExpression(eqs, e.Record, stack)
+			break
+		}
+	case *typed.Call:
+		{
+			e := expr.(*typed.Call)
+			eqs = append(eqs, equation{
+				left: e.Func.GetType(),
+				right: &typed.TFunc{
+					Location: e.Location,
+					Params:   common.Map(func(p typed.Expression) typed.Type { return p.GetType() }, e.Args),
+					Return:   e.Type,
+				},
+				expr: expr,
+			})
+			eqs = equatizeExpression(eqs, e.Func, stack)
+			for _, a := range e.Args {
+				eqs = equatizeExpression(eqs, a, stack)
+			}
+			break
+		}
+	case *typed.Const:
+		{
+			e := expr.(*typed.Const)
+			eqs = append(eqs, equation{
+				left:  e.Type,
+				right: getConstType(e.Value, e.Location),
+				expr:  e,
+			})
+			break
+		}
+	case *typed.If:
+		{
+			e := expr.(*typed.If)
+			eqs = append(eqs,
+				equation{
+					left:  e.Condition.GetType(),
+					right: &typed.TExternal{Location: e.Location, Name: common.OakCoreBasicsBool},
+					expr:  expr,
+				},
+				equation{
+					left:  e.Type,
+					right: e.Positive.GetType(),
+					expr:  expr,
+				},
+				equation{
+					left:  e.Type,
+					right: e.Negative.GetType(),
+					expr:  expr,
+				})
+			eqs = equatizeExpression(eqs, e.Condition, stack)
+			eqs = equatizeExpression(eqs, e.Positive, stack)
+			eqs = equatizeExpression(eqs, e.Negative, stack)
+			break
+		}
+	case *typed.Let:
+		{
+			e := expr.(*typed.Let)
+			eqs = append(eqs,
+				equation{
+					left:  e.Type,
+					right: e.Body.GetType(),
+					expr:  expr,
+				})
+			eqs = equatizeDefinition(eqs, e.Definition, stack)
+			eqs = equatizeExpression(eqs, e.Body, stack)
+			break
+		}
+	case *typed.Lambda:
+		{
+			e := expr.(*typed.Lambda)
+			eqs = append(eqs, equation{
+				left: e.Type,
+				right: &typed.TFunc{
+					Location: e.Location,
+					Params:   common.Map(func(p typed.Pattern) typed.Type { return p.GetType() }, e.Params),
+					Return:   e.Body.GetType(),
+				},
+				expr: expr,
+			})
+			for _, p := range e.Params {
+				eqs = equatizePattern(eqs, p)
+			}
+			eqs = equatizeExpression(eqs, e.Body, stack)
+			break
+		}
+	case *typed.List:
+		{
+			e := expr.(*typed.List)
+			var listItemType typed.Type
+
+			for _, item := range e.Items {
+				if listItemType == nil {
+					listItemType = item.GetType()
+				} else {
+					eqs = append(eqs, equation{
+						left:  listItemType,
+						right: item.GetType(),
+						expr:  expr,
+					})
+				}
+			}
+
+			if listItemType == nil {
+				listItemType = annotateType(nil, nil, e.Location, false)
+			}
+			eqs = append(eqs, equation{
+				left: e.Type,
+				right: &typed.TExternal{
+					Location: e.Location,
+					Name:     common.OakCoreListList,
+					Args:     []typed.Type{listItemType},
+				},
+				expr: expr,
+			})
+
+			for _, item := range e.Items {
+				eqs = equatizeExpression(eqs, item, stack)
+			}
+			break
+		}
+	case *typed.Record:
+		{
+			e := expr.(*typed.Record)
+			fieldTypes := map[ast.Identifier]typed.Type{}
+			for _, f := range e.Fields {
+				fieldTypes[f.Name] = f.Type
+			}
+
+			eqs = append(eqs, equation{
+				left: e.Type,
+				right: &typed.TRecord{
+					Location: e.Location,
+					Fields:   fieldTypes,
+				},
+				expr: expr,
+			})
+
+			for _, f := range e.Fields {
+				eqs = equatizeExpression(eqs, f.Value, stack)
+			}
+			break
+		}
+	case *typed.Select:
+		{
+			e := expr.(*typed.Select)
+			caseType := e.Type
+			for _, cs := range e.Cases {
+				eqs = append(eqs,
+					equation{
+						left:  e.Condition.GetType(),
+						right: cs.Pattern.GetType(),
+						expr:  expr,
+					}, equation{
+						left:  caseType,
+						right: cs.Expression.GetType(),
+						expr:  expr,
+					})
+			}
+
+			for _, cs := range e.Cases {
+				eqs = equatizePattern(eqs, cs.Pattern)
+				eqs = equatizeExpression(eqs, cs.Expression, stack)
+			}
+			break
+		}
+	case *typed.Tuple:
+		{
+			e := expr.(*typed.Tuple)
+			eqs = append(eqs, equation{
+				left: e.Type,
+				right: &typed.TTuple{
+					Location: e.Location,
+					Items:    common.Map(func(e typed.Expression) typed.Type { return e.GetType() }, e.Items),
+				},
+				expr: expr,
+			})
+			for _, item := range e.Items {
+				eqs = equatizeExpression(eqs, item, stack)
+			}
+			break
+		}
+	case *typed.UpdateLocal:
+		{
+			e := expr.(*typed.UpdateLocal)
+			fieldTypes := map[ast.Identifier]typed.Type{}
+			for _, f := range e.Fields {
+				fieldTypes[f.Name] = f.Type
+			}
+
+			eqs = append(eqs, equation{
+				left: e.Type,
+				right: &typed.TRecord{
+					Location: e.Location,
+					Fields:   fieldTypes,
+				},
+				expr: expr,
+			})
+
+			for _, f := range e.Fields {
+				eqs = equatizeExpression(eqs, f.Value, stack)
+			}
+			break
+		}
+	case *typed.UpdateGlobal:
+		{
+			e := expr.(*typed.UpdateGlobal)
+			fieldTypes := map[ast.Identifier]typed.Type{}
+			for _, f := range e.Fields {
+				fieldTypes[f.Name] = f.Type
+			}
+
+			eqs = append(eqs, equation{
+				left: e.Type,
+				right: &typed.TRecord{
+					Location: e.Location,
+					Fields:   fieldTypes,
+				},
+				expr: expr,
+			})
+
+			for _, f := range e.Fields {
+				eqs = equatizeExpression(eqs, f.Value, stack)
+			}
+			eqs = equatizeDefinition(eqs, e.Definition, stack)
+			break
+		}
+	case *typed.Constructor:
+		{
+			e := expr.(*typed.Constructor)
+			eqs = append(eqs, equation{
+				left: e.Type,
+				right: &typed.TExternal{
+					Location: e.Location,
+					Name:     e.DataName,
+				},
+				expr: e,
+			})
+			for _, a := range e.Args {
+				eqs = equatizeExpression(eqs, a, stack)
+			}
+			break
+		}
+	case *typed.NativeCall:
+		{
+			e := expr.(*typed.NativeCall)
+			for _, a := range e.Args {
+				eqs = equatizeExpression(eqs, a, stack)
+			}
+			break
+		}
+	case *typed.Local:
+		{
+
+		}
+	case *typed.Global:
+		{
+			e := expr.(*typed.Global)
+			eqs = append(eqs, equation{
+				left:  e.Type,
+				right: e.Definition.GetType(),
+				expr:  e,
+			})
+			eqs = equatizeDefinition(eqs, e.Definition, stack)
+			break
+		}
+	default:
+		panic(common.SystemError{Message: "invalid case"})
+	}
+	return eqs
 }
 
 func getConstType(cv ast.ConstValue, location ast.Location) typed.Type {
@@ -1161,6 +1189,14 @@ func getConstType(cv ast.ConstValue, location ast.Location) typed.Type {
 }
 
 func unifyAll(eqs []equation) map[uint64]typed.Type {
+	var i int
+	defer func() {
+		err := recover()
+		if err != nil {
+			println(fmt.Sprintf("equation #%d", i))
+			panic(err)
+		}
+	}()
 	subst := map[uint64]typed.Type{}
 	for _, eq := range eqs {
 		loc := eq.left.GetLocation()
@@ -1174,6 +1210,7 @@ func unifyAll(eqs []equation) map[uint64]typed.Type {
 			loc = eq.def.Expression.GetLocation()
 		}
 		unify(eq.left, eq.right, loc, subst)
+		i++
 	}
 	return subst
 }
@@ -1199,11 +1236,8 @@ func unify(x typed.Type, y typed.Type, loc ast.Location, subst map[uint64]typed.
 		return
 	}
 
-	ux, ubx := x.(*typed.TUnbound)
-	uy, uby := y.(*typed.TUnbound)
-	if ubx && uby && uy.Index < ux.Index {
-		ubx = false
-	}
+	_, ubx := x.(*typed.TUnbound)
+	_, uby := y.(*typed.TUnbound)
 
 	if ubx {
 		unifyUnbound(x.(*typed.TUnbound), y, loc, subst)
@@ -1219,7 +1253,7 @@ func unify(x typed.Type, y typed.Type, loc ast.Location, subst map[uint64]typed.
 			if ey, ok := y.(*typed.TFunc); ok {
 				ex := x.(*typed.TFunc)
 				if len(ex.Params) < len(ey.Params) {
-					panic(common.Error{Location: ex.Location, Message: "func parameters mismatch"})
+					ex, ey = ey, ex
 				}
 				ex = balanceFn(ex, len(ey.Params))
 				for i, p := range ex.Params {
@@ -1277,27 +1311,92 @@ func unify(x typed.Type, y typed.Type, loc ast.Location, subst map[uint64]typed.
 	default:
 		panic(common.SystemError{Message: "invalid case"})
 	}
-	panic(common.Error{Location: loc, Message: fmt.Sprintf("type %v and %v do not match", x, y)})
+	panic(common.Error{Location: loc, Message: fmt.Sprintf("%v cannot be matched with %v", x, y)})
 }
 
 func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc ast.Location, subst map[uint64]typed.Type) {
 	if x, ok := subst[v.Index]; ok {
 		unify(x, typ, loc, subst)
+		return
 	} else {
 		if y, ok := typ.(*typed.TUnbound); ok {
-			if _, c := subst[y.Index]; c {
-				unify(v, subst[y.Index], loc, subst)
+			if uy, c := subst[y.Index]; c {
+				unify(v, uy, loc, subst)
+				return
 			}
 		}
-		if v.OccursCheck(typ, subst) {
-			panic(common.Error{Location: v.GetLocation(), Message: fmt.Sprintf("ambigous type: %v vs %v", v, typ)})
+		if OccursCheck(v, typ, subst) {
+			panic(common.Error{
+				Location: v.GetLocation(),
+				Message:  fmt.Sprintf("ambigous type: %v vs %v", applyType(v, subst), applyType(typ, subst)),
+			})
 		}
 	}
 	subst[v.Index] = typ
 }
 
+func OccursCheck(v *typed.TUnbound, typ typed.Type, subst map[uint64]typed.Type) bool {
+	if v.EqualsTo(typ) {
+		return true
+	}
+	switch typ.(type) {
+	case *typed.TFunc:
+		{
+			e := typ.(*typed.TFunc)
+			if OccursCheck(v, e.Return, subst) {
+				return true
+			}
+			for _, p := range e.Params {
+				if OccursCheck(v, p, subst) {
+					return true
+				}
+			}
+			break
+		}
+	case *typed.TRecord:
+		{
+			e := typ.(*typed.TRecord)
+			for _, f := range e.Fields {
+				if OccursCheck(v, f, subst) {
+					return true
+				}
+			}
+			break
+		}
+	case *typed.TTuple:
+		{
+			e := typ.(*typed.TTuple)
+			for _, i := range e.Items {
+				if OccursCheck(v, i, subst) {
+					return true
+				}
+			}
+			break
+		}
+	case *typed.TExternal:
+		{
+			e := typ.(*typed.TExternal)
+			for _, a := range e.Args {
+				if OccursCheck(v, a, subst) {
+					return true
+				}
+			}
+			break
+		}
+	case *typed.TUnbound:
+		{
+			if c, ok := subst[typ.(*typed.TUnbound).Index]; ok {
+				return OccursCheck(v, c, subst)
+			}
+			break
+		}
+	default:
+		panic("invalid case")
+	}
+	return false
+}
+
 func applyDefinition(td *typed.Definition, subst map[uint64]typed.Type) *typed.Definition {
-	td.Type = applyType(td.Type, subst)
 	td.Pattern = applyPattern(td.Pattern, subst)
 	td.Expression = applyExpression(td.Expression, subst)
 	return td

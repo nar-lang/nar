@@ -6,10 +6,17 @@ import (
 )
 
 type Definition struct {
-	Id         uint64
-	Type       Type
-	Pattern    Pattern
-	Expression Expression
+	Id          uint64
+	Pattern     Pattern
+	Expression  Expression
+	DefinedType Type
+}
+
+func (d *Definition) GetType() Type {
+	if d.Expression == nil {
+		return d.DefinedType
+	}
+	return d.Expression.GetType()
 }
 
 func (d *Definition) String() string {

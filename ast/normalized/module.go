@@ -9,6 +9,7 @@ type Definition struct {
 	Pattern    Pattern
 	Expression Expression
 	Type       Type
+	Location   ast.Location
 }
 
 type Module struct {
