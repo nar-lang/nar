@@ -3,7 +3,7 @@
 ## v0.1
 * [x] Parser
 * [x] Normalizer
-* [ ] Type checker
+* [x] Type checker
 * [ ] Bytecode compiler
 * [ ] Runtime (JavaScript)
 * [ ] Runtime (C99)
