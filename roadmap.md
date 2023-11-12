@@ -4,7 +4,7 @@
 * [x] Parser
 * [x] Normalizer
 * [x] Type checker
-* [ ] Bytecode compiler
+* [x] Bytecode compiler
 * [ ] Runtime (JavaScript)
 * [ ] Runtime (C99)
 * [ ] Language server

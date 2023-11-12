@@ -93,25 +93,25 @@ func (p PConst) GetType() Type {
 	return p.Type
 }
 
-type PDataValue struct {
+type PDataOption struct {
 	ast.Location
 	Type
 	Name   ast.QualifiedIdentifier
 	Values []Pattern
 }
 
-func (PDataValue) _pattern() {}
+func (PDataOption) _pattern() {}
 
-func (p PDataValue) WithType(decl Type) Pattern {
+func (p PDataOption) WithType(decl Type) Pattern {
 	p.Type = decl
 	return p
 }
 
-func (p PDataValue) GetLocation() ast.Location {
+func (p PDataOption) GetLocation() ast.Location {
 	return p.Location
 }
 
-func (p PDataValue) GetType() Type {
+func (p PDataOption) GetType() Type {
 	return p.Type
 }
 

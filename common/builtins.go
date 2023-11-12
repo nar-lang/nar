@@ -17,5 +17,13 @@ var (
 )
 
 func MakeExternalIdentifier(moduleName ast.QualifiedIdentifier, name ast.Identifier) ast.ExternalIdentifier {
-	return ast.ExternalIdentifier(fmt.Sprintf("%s/%s", moduleName, name))
+	return ast.ExternalIdentifier(fmt.Sprintf("%s:%s", moduleName, name))
+}
+
+func MakePathIdentifier(modulePath string, name ast.Identifier) ast.PathIdentifier {
+	return ast.PathIdentifier(fmt.Sprintf("%s:%s", modulePath, name))
+}
+
+func MakeDataOptionIdentifier(dataName ast.ExternalIdentifier, optionName ast.Identifier) ast.DataOptionIdentifier {
+	return ast.DataOptionIdentifier(fmt.Sprintf("%s#%s", dataName, optionName))
 }

@@ -46,7 +46,7 @@ type Definition struct {
 	Type       Type
 }
 
-type DataTypeValue struct {
+type DataTypeOption struct {
 	Location ast.Location
 	Hidden   bool
 	Name     ast.Identifier
@@ -58,7 +58,7 @@ type DataType struct {
 	Hidden   bool
 	Name     ast.Identifier
 	Params   []ast.Identifier
-	Values   []DataTypeValue
+	Options  []DataTypeOption
 }
 
 type Module struct {

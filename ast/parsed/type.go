@@ -44,9 +44,9 @@ func (TNamed) _type() {}
 
 type TData struct {
 	ast.Location
-	Name   ast.ExternalIdentifier
-	Args   []Type
-	Values []ast.Identifier
+	Name    ast.ExternalIdentifier
+	Args    []Type
+	Options []ast.Identifier
 }
 
 func (TData) _type() {}

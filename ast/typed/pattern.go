@@ -92,26 +92,25 @@ func (p *PConst) GetType() Type {
 	return p.Type
 }
 
-type PDataValue struct {
+type PDataOption struct {
 	ast.Location
 	Type
-	ModulePath     string
-	DefinitionName ast.Identifier
-	Definition     *Definition
-	Args           []Pattern
+	Name       ast.DataOptionIdentifier
+	Definition *Definition
+	Args       []Pattern
 }
 
-func (*PDataValue) _pattern() {}
+func (*PDataOption) _pattern() {}
 
-func (p *PDataValue) String() string {
-	return fmt.Sprintf("PDataValue(%s:%s,%v)", p.ModulePath, p.DefinitionName, p.Args)
+func (p *PDataOption) String() string {
+	return fmt.Sprintf("PDataOption(%s,%v)", p.Name, p.Args)
 }
 
-func (p *PDataValue) GetLocation() ast.Location {
+func (p *PDataOption) GetLocation() ast.Location {
 	return p.Location
 }
 
-func (p *PDataValue) GetType() Type {
+func (p *PDataOption) GetType() Type {
 	return p.Type
 }
 

@@ -16,13 +16,13 @@ type Access struct {
 
 func (Access) _expression() {}
 
-type Call struct {
+type Apply struct {
 	ast.Location
 	Func Expression
 	Args []Expression
 }
 
-func (Call) _expression() {}
+func (Apply) _expression() {}
 
 type Const struct {
 	ast.Location
@@ -141,9 +141,9 @@ func (Var) _expression() {}
 
 type Constructor struct {
 	ast.Location
-	DataName  ast.ExternalIdentifier
-	ValueName ast.Identifier
-	Args      []Expression
+	DataName   ast.ExternalIdentifier
+	OptionName ast.Identifier
+	Args       []Expression
 }
 
 func (Constructor) _expression() {}

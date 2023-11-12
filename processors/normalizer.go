@@ -27,6 +27,7 @@ func Normalize(path string, modules map[string]parsed.Module, normalizedModules 
 
 	o := normalized.Module{
 		Path:        m.Path,
+		Name:        m.Name,
 		Definitions: map[ast.Identifier]normalized.Definition{},
 	}
 
@@ -65,47 +66,47 @@ func flattenDataTypes(m *parsed.Module) {
 				Location: it.Location,
 				Name:     common.MakeExternalIdentifier(m.Name, it.Name),
 				Args:     typeArgs,
-				Values:   common.Map(func(x parsed.DataTypeValue) ast.Identifier { return x.Name }, it.Values),
+				Options:  common.Map(func(x parsed.DataTypeOption) ast.Identifier { return x.Name }, it.Options),
 			},
 		})
-		for _, value := range it.Values {
+		for _, option := range it.Options {
 			var type_ parsed.Type = parsed.TExternal{
 				Name: common.MakeExternalIdentifier(m.Name, it.Name),
 				Args: typeArgs,
 			}
 			var body parsed.Expression = parsed.Constructor{
-				Location:  value.Location,
-				DataName:  common.MakeExternalIdentifier(m.Name, it.Name),
-				ValueName: value.Name,
+				Location:   option.Location,
+				DataName:   common.MakeExternalIdentifier(m.Name, it.Name),
+				OptionName: option.Name,
 				Args: common.Map(
 					func(i int) parsed.Expression {
 						return parsed.Var{
-							Location: value.Location,
+							Location: option.Location,
 							Name:     ast.QualifiedIdentifier(fmt.Sprintf("p%d", i)),
 						}
 					},
-					common.Range(0, len(value.Params)),
+					common.Range(0, len(option.Params)),
 				),
 			}
 
-			if len(value.Params) > 0 {
+			if len(option.Params) > 0 {
 				body = parsed.Lambda{
 					Params: common.Map(
 						func(i int) parsed.Pattern {
-							return parsed.PNamed{Location: value.Location, Name: ast.Identifier(fmt.Sprintf("p%d", i))}
+							return parsed.PNamed{Location: option.Location, Name: ast.Identifier(fmt.Sprintf("p%d", i))}
 						},
-						common.Range(0, len(value.Params)),
+						common.Range(0, len(option.Params)),
 					),
 					Body: body,
 				}
 				type_ = parsed.TFunc{
-					Params: value.Params,
+					Params: option.Params,
 					Return: type_,
 				}
 			}
 
 			m.Definitions = append(m.Definitions, parsed.Definition{
-				Pattern:    parsed.PNamed{Location: value.Location, Name: value.Name},
+				Pattern:    parsed.PNamed{Location: option.Location, Name: option.Name},
 				Expression: body,
 				Type:       type_,
 			})
@@ -144,14 +145,14 @@ func unwrapImports(module *parsed.Module, modules map[string]parsed.Module) {
 			if imp.ExposingAll || slices.Contains(imp.Exposing, n) {
 				exp = append(exp, n)
 				if dt, ok := a.Type.(parsed.TData); ok {
-					for _, v := range dt.Values {
+					for _, v := range dt.Options {
 						exp = append(exp, string(v))
 					}
 				}
 			}
 			exp = append(exp, fmt.Sprintf("%s.%s", modName, n))
 			if dt, ok := a.Type.(parsed.TData); ok {
-				for _, v := range dt.Values {
+				for _, v := range dt.Options {
 					exp = append(exp, fmt.Sprintf("%s.%s", modName, v))
 					if shortModName != "" {
 						exp = append(exp, fmt.Sprintf("%s.%s", shortModName, v))
@@ -182,6 +183,7 @@ func normalizeDefinition(modules map[string]parsed.Module, module parsed.Module,
 	o := normalized.Definition{
 		Id:       nextDefinitionId,
 		Location: def.Location,
+		Hidden:   def.Hidden,
 	}
 	o.Pattern = normalizePattern(modules, module, def.Pattern)
 	o.Expression = normalizeExpression(modules, module, def.Expression)
@@ -230,15 +232,14 @@ func normalizePattern(modules map[string]parsed.Module, module parsed.Module, pa
 				Value:    e.Value,
 			}
 		}
-	case parsed.PDataValue:
+	case parsed.PDataOption:
 		{
-			e := pattern.(parsed.PDataValue)
+			e := pattern.(parsed.PDataOption)
 			mod, def, ok := findParsedDefinition(modules, module, e.Name)
 			if !ok {
-				findParsedDefinition(modules, module, e.Name)
 				panic(common.Error{Location: e.Location, Message: "data constructor not found"})
 			}
-			return normalized.PDataValue{
+			return normalized.PDataOption{
 				Location:       e.Location,
 				Type:           normalizeType(modules, module, e.Type),
 				ModulePath:     mod.Path,
@@ -306,10 +307,10 @@ func normalizeExpression(modules map[string]parsed.Module, module parsed.Module,
 				FieldName: e.FieldName,
 			}
 		}
-	case parsed.Call:
+	case parsed.Apply:
 		{
-			e := expr.(parsed.Call)
-			return normalized.Call{
+			e := expr.(parsed.Apply)
+			return normalized.Apply{
 				Location: e.Location,
 				Func:     normalize(e.Func),
 				Args:     common.Map(normalize, e.Args),
@@ -327,10 +328,10 @@ func normalizeExpression(modules map[string]parsed.Module, module parsed.Module,
 		{
 			e := expr.(parsed.Constructor)
 			return normalized.Constructor{
-				Location:  e.Location,
-				DataName:  e.DataName,
-				ValueName: e.ValueName,
-				Args:      common.Map(normalize, e.Args),
+				Location:   e.Location,
+				DataName:   e.DataName,
+				OptionName: e.OptionName,
+				Args:       common.Map(normalize, e.Args),
 			}
 		}
 	case parsed.If:
@@ -510,7 +511,7 @@ func normalizeExpression(modules map[string]parsed.Module, module parsed.Module,
 						left = buildTree()
 					}
 
-					return normalized.Call{
+					return normalized.Apply{
 						Location: e.Location,
 						Func: normalized.Var{
 							Location:       e.Location,

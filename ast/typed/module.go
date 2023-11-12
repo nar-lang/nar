@@ -10,6 +10,7 @@ type Definition struct {
 	Pattern     Pattern
 	Expression  Expression
 	DefinedType Type
+	Hidden      bool
 }
 
 func (d *Definition) GetType() Type {
@@ -25,5 +26,7 @@ func (d *Definition) String() string {
 
 type Module struct {
 	Path        string
+	Name        ast.QualifiedIdentifier
+	DepPaths    []string
 	Definitions map[ast.Identifier]*Definition
 }

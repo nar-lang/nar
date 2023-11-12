@@ -10,10 +10,12 @@ type Definition struct {
 	Expression Expression
 	Type       Type
 	Location   ast.Location
+	Hidden     bool
 }
 
 type Module struct {
 	Path        string
+	Name        ast.QualifiedIdentifier
 	DepPaths    []string
 	Definitions map[ast.Identifier]Definition
 }

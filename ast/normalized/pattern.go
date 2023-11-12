@@ -38,7 +38,7 @@ type PConst struct {
 
 func (PConst) _pattern() {}
 
-type PDataValue struct {
+type PDataOption struct {
 	ast.Location
 	Type
 	ModulePath     string
@@ -46,7 +46,7 @@ type PDataValue struct {
 	Values         []Pattern
 }
 
-func (PDataValue) _pattern() {}
+func (PDataOption) _pattern() {}
 
 type PList struct {
 	ast.Location

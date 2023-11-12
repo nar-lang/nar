@@ -19,6 +19,8 @@ var annotations []struct {
 	typed.Type
 }
 
+const dumpDebugOutput = false
+
 type symbolsMap map[ast.Identifier]typed.Type
 type typeParamsMap map[ast.Identifier]uint64
 
@@ -65,6 +67,8 @@ func CheckTypes(
 
 	o := typed.Module{
 		Path:        m.Path,
+		Name:        m.Name,
+		DepPaths:    m.DepPaths,
 		Definitions: map[ast.Identifier]*typed.Definition{},
 	}
 
@@ -85,7 +89,7 @@ func CheckTypes(
 			rp, _ := filepath.Rel(cwd, m.Path[:len(m.Path)-4])
 			p := strings.Replace(rp, "../", "", -1)
 			fp := fmt.Sprintf(".oak-bin/%s/%s.md", p, def.Pattern.(normalized.PNamed).Name)
-			_ = os.MkdirAll(filepath.Dir(fp), 0700)
+			sb := strings.Builder{}
 
 			unboundIndex = 0
 			annotations = []struct {
@@ -95,36 +99,45 @@ func CheckTypes(
 			localTyped := map[string]*typed.Module{}
 			var eqs []equation
 
-			sb := strings.Builder{}
 			td, _, _ := annotateDefinition(symbolsMap{}, typeParamsMap{}, modules, localTyped, def, nil)
-			sb.WriteString(fmt.Sprintf("\n\nDefinition\n---\n`%s`", td))
-			sb.WriteString("\n\nAnnotations\n---\n| Node | Type |\n|---|---|")
-			for _, t := range annotations {
-				sb.WriteString(fmt.Sprintf("\n| `%v` | `%v` |", t.Stringer, t.Type))
+
+			if dumpDebugOutput {
+				_ = os.MkdirAll(filepath.Dir(fp), 0700)
+				sb.WriteString(fmt.Sprintf("\n\nDefinition\n---\n`%s`", td))
+				sb.WriteString("\n\nAnnotations\n---\n| Node | Type |\n|---|---|")
+				for _, t := range annotations {
+					sb.WriteString(fmt.Sprintf("\n| `%v` | `%v` |", t.Stringer, t.Type))
+				}
+				_ = os.WriteFile(fp, []byte(sb.String()), 0666)
 			}
-			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
 
 			eqs = equatizeDefinition(eqs, td, nil)
 
-			sb.WriteString("\n\nEquations\n---\n| No | Left | Right | Node |\n|---|---|---|---|")
-			for i, eq := range eqs {
-				sb.WriteString(eq.String(i))
+			if dumpDebugOutput {
+				sb.WriteString("\n\nEquations\n---\n| No | Left | Right | Node |\n|---|---|---|---|")
+				for i, eq := range eqs {
+					sb.WriteString(eq.String(i))
+				}
+				_ = os.WriteFile(fp, []byte(sb.String()), 0666)
 			}
-			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
 
 			subst := unifyAll(eqs)
 
-			sb.WriteString("\n\nUnified\n---\n| Left | Right |\n|---|---|")
-			for k, v := range subst {
-				sb.WriteString(fmt.Sprintf("\n | `%v` | `%v` |", &typed.TUnbound{Index: k}, v))
+			if dumpDebugOutput {
+				sb.WriteString("\n\nUnified\n---\n| Left | Right |\n|---|---|")
+				for k, v := range subst {
+					sb.WriteString(fmt.Sprintf("\n | `%v` | `%v` |", &typed.TUnbound{Index: k}, v))
+				}
+				_ = os.WriteFile(fp, []byte(sb.String()), 0666)
 			}
-			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
 
 			td = applyDefinition(td, subst)
 
-			sb.WriteString("\n\nSolved\n---\n")
-			sb.WriteString(fmt.Sprintf("\n `%v`", td.GetType()))
-			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
+			if dumpDebugOutput {
+				sb.WriteString("\n\nSolved\n---\n")
+				sb.WriteString(fmt.Sprintf("\n `%v`", td.GetType()))
+				_ = os.WriteFile(fp, []byte(sb.String()), 0666)
+			}
 
 			o.Definitions[def.Pattern.(normalized.PNamed).Name] = td
 		}
@@ -140,7 +153,8 @@ func annotateDefinition(
 	stack []*typed.Definition,
 ) (*typed.Definition, symbolsMap, typeParamsMap) {
 	o := &typed.Definition{
-		Id: def.Id,
+		Id:     def.Id,
+		Hidden: def.Hidden,
 	}
 
 	localSymbols := symbolsMap{}
@@ -230,19 +244,24 @@ func annotatePattern(symbols symbolsMap,
 			}
 			break
 		}
-	case normalized.PDataValue:
+	case normalized.PDataOption:
 		{
-			e := pattern.(normalized.PDataValue)
+			e := pattern.(normalized.PDataOption)
 
 			def := getAnnotatedGlobal(e.ModulePath, e.DefinitionName, modules, typedModules, stack)
+			var ctor *typed.Constructor
+			if fn, ok := def.Expression.(*typed.Lambda); ok {
+				ctor = fn.Body.(*typed.Constructor)
+			} else {
+				ctor = def.Expression.(*typed.Constructor)
+			}
 
-			p = &typed.PDataValue{
-				Location:       e.Location,
-				Type:           annotateType(typeParams, nil, e.Location, typeMapSource),
-				ModulePath:     e.ModulePath,
-				DefinitionName: e.DefinitionName,
-				Args:           common.Map(annotate, e.Values),
-				Definition:     def,
+			p = &typed.PDataOption{
+				Location:   e.Location,
+				Type:       annotateType(typeParams, nil, e.Location, typeMapSource),
+				Name:       ctor.OptionName,
+				Args:       common.Map(annotate, e.Values),
+				Definition: def,
 			}
 			break
 		}
@@ -332,10 +351,10 @@ func annotateExpression(
 			}
 			break
 		}
-	case normalized.Call:
+	case normalized.Apply:
 		{
-			e := expr.(normalized.Call)
-			o = &typed.Call{
+			e := expr.(normalized.Apply)
+			o = &typed.Apply{
 				Location: e.Location,
 				Type:     annotateType(typeParams, nil, e.Location, false),
 				Func:     annotate(e.Func),
@@ -511,11 +530,11 @@ func annotateExpression(
 		{
 			e := expr.(normalized.Constructor)
 			o = &typed.Constructor{
-				Location:  e.Location,
-				Type:      annotateType(typeParams, nil, e.Location, false),
-				DataName:  e.DataName,
-				ValueName: e.ValueName,
-				Args:      common.Map(annotate, e.Args),
+				Location:   e.Location,
+				Type:       annotateType(typeParams, nil, e.Location, false),
+				DataName:   e.DataName,
+				OptionName: common.MakeDataOptionIdentifier(e.DataName, e.OptionName),
+				Args:       common.Map(annotate, e.Args),
 			}
 			break
 		}
@@ -581,6 +600,8 @@ func getAnnotatedGlobal(
 	if !ok {
 		typedModule = &typed.Module{
 			Path:        modulePath,
+			Name:        modules[modulePath].Name,
+			DepPaths:    modules[modulePath].DepPaths,
 			Definitions: map[ast.Identifier]*typed.Definition{},
 		}
 		typedModules[modulePath] = typedModule
@@ -781,9 +802,9 @@ func equatizePattern(eqs []equation, pattern typed.Pattern) []equation {
 			})
 			break
 		}
-	case *typed.PDataValue:
+	case *typed.PDataOption:
 		{
-			e := pattern.(*typed.PDataValue)
+			e := pattern.(*typed.PDataOption)
 			if len(e.Args) == 0 {
 				eqs = append(eqs, equation{
 					left:    e.Type,
@@ -903,9 +924,9 @@ func equatizeExpression(eqs []equation, expr typed.Expression, stack []*typed.De
 			eqs = equatizeExpression(eqs, e.Record, stack)
 			break
 		}
-	case *typed.Call:
+	case *typed.Apply:
 		{
-			e := expr.(*typed.Call)
+			e := expr.(*typed.Apply)
 			eqs = append(eqs, equation{
 				left: e.Func.GetType(),
 				right: &typed.TFunc{
@@ -1510,16 +1531,15 @@ func applyPattern(pattern typed.Pattern, subst map[uint64]typed.Type) typed.Patt
 			}
 			break
 		}
-	case *typed.PDataValue:
+	case *typed.PDataOption:
 		{
-			e := pattern.(*typed.PDataValue)
-			pattern = &typed.PDataValue{
-				Location:       e.Location,
-				Type:           applyType(e.Type, subst),
-				ModulePath:     e.ModulePath,
-				DefinitionName: e.DefinitionName,
-				Definition:     e.Definition,
-				Args:           common.Map(apply, e.Args),
+			e := pattern.(*typed.PDataOption)
+			pattern = &typed.PDataOption{
+				Location:   e.Location,
+				Type:       applyType(e.Type, subst),
+				Name:       e.Name,
+				Definition: e.Definition,
+				Args:       common.Map(apply, e.Args),
 			}
 			break
 		}
@@ -1595,10 +1615,10 @@ func applyExpression(expr typed.Expression, subst map[uint64]typed.Type) typed.E
 			}
 			break
 		}
-	case *typed.Call:
+	case *typed.Apply:
 		{
-			e := expr.(*typed.Call)
-			expr = &typed.Call{
+			e := expr.(*typed.Apply)
+			expr = &typed.Apply{
 				Location: e.Location,
 				Type:     applyType(e.Type, subst),
 				Func:     apply(e.Func),
@@ -1752,11 +1772,11 @@ func applyExpression(expr typed.Expression, subst map[uint64]typed.Type) typed.E
 		{
 			e := expr.(*typed.Constructor)
 			expr = &typed.Constructor{
-				Location:  e.Location,
-				Type:      applyType(e.Type, subst),
-				DataName:  e.DataName,
-				ValueName: e.ValueName,
-				Args:      common.Map(apply, e.Args),
+				Location:   e.Location,
+				Type:       applyType(e.Type, subst),
+				DataName:   e.DataName,
+				OptionName: e.OptionName,
+				Args:       common.Map(apply, e.Args),
 			}
 
 			break

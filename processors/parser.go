@@ -69,26 +69,27 @@ const (
 
 type Source struct {
 	filePath string
-	cursor   uint64
+	cursor   uint32
 	text     []rune
 }
 
-func loc(src *Source, cursor uint64) ast.Location {
-	return ast.Location{FilePath: src.filePath, Position: cursor}
+func loc(src *Source, cursor uint32) ast.Location {
+	return ast.Location{FilePath: src.filePath, FileContent: src.text, Position: cursor}
 }
 
 func setErrorSource(src Source, msg string) {
 	panic(common.Error{
 		Location: ast.Location{
-			FilePath: src.filePath,
-			Position: src.cursor,
+			FilePath:    src.filePath,
+			FileContent: src.text,
+			Position:    src.cursor,
 		},
 		Message: msg,
 	})
 }
 
 func isOk(src *Source) bool {
-	return src.cursor < uint64(len(src.text))
+	return src.cursor < uint32(len(src.text))
 }
 
 func isIdentChar(c rune, first *bool, qualified bool) bool {
@@ -719,7 +720,7 @@ func parsePattern(src *Source) parsed.Pattern {
 				setErrorSource(*src, "expected `,` or `)` here")
 			}
 		}
-		return finishParsePattern(src, parsed.PDataValue{Location: loc(src, cursor), Name: *name, Values: items})
+		return finishParsePattern(src, parsed.PDataOption{Location: loc(src, cursor), Name: *name, Values: items})
 	} else {
 		src.cursor = cursor
 	}
@@ -1141,7 +1142,7 @@ func finishParseExpression(src *Source, expr parsed.Expression) parsed.Expressio
 			}
 			setErrorSource(*src, "expected `,` or `)` here")
 		}
-		return finishParseExpression(src, parsed.Call{Location: loc(src, cursor), Func: expr, Args: items})
+		return finishParseExpression(src, parsed.Apply{Location: loc(src, cursor), Func: expr, Args: items})
 	}
 
 	if readExact(src, SeqDot) {
@@ -1157,7 +1158,7 @@ func finishParseExpression(src *Source, expr parsed.Expression) parsed.Expressio
 	return expr
 }
 
-func parseDataValue(src *Source) parsed.DataTypeValue {
+func parseDataOption(src *Source) parsed.DataTypeOption {
 	cursor := src.cursor
 	hidden := readExact(src, KwHidden)
 	var types []parsed.Type
@@ -1189,7 +1190,7 @@ func parseDataValue(src *Source) parsed.DataTypeValue {
 		}
 	}
 
-	return parsed.DataTypeValue{
+	return parsed.DataTypeOption{
 		Location: loc(src, cursor),
 		Name:     ast.Identifier(*name),
 		Params:   types,
@@ -1367,10 +1368,10 @@ func parseDataType(src *Source) *parsed.DataType {
 		setErrorSource(*src, "expected `=` here")
 	}
 
-	var values []parsed.DataTypeValue
+	var options []parsed.DataTypeOption
 	for {
-		value := parseDataValue(src)
-		values = append(values, value)
+		option := parseDataOption(src)
+		options = append(options, option)
 		if !readExact(src, SeqBar) {
 			break
 		}
@@ -1380,7 +1381,7 @@ func parseDataType(src *Source) *parsed.DataType {
 		Hidden:   hidden,
 		Name:     ast.Identifier(*name),
 		Params:   typeParams,
-		Values:   values,
+		Options:  options,
 	}
 }
 

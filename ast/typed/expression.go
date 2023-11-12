@@ -35,24 +35,24 @@ func (e *Access) GetType() Type {
 	return e.Type
 }
 
-type Call struct {
+type Apply struct {
 	ast.Location
 	Type
 	Func Expression
 	Args []Expression
 }
 
-func (e *Call) _expression() {}
+func (e *Apply) _expression() {}
 
-func (e *Call) String() string {
-	return fmt.Sprintf("Call(%v,%v)", e.Func, e.Args)
+func (e *Apply) String() string {
+	return fmt.Sprintf("Apply(%v,%v)", e.Func, e.Args)
 }
 
-func (e *Call) GetLocation() ast.Location {
+func (e *Apply) GetLocation() ast.Location {
 	return e.Location
 }
 
-func (e *Call) GetType() Type {
+func (e *Apply) GetType() Type {
 	return e.Type
 }
 
@@ -288,15 +288,15 @@ func (e *Lambda) GetType() Type {
 type Constructor struct {
 	ast.Location
 	Type
-	DataName  ast.ExternalIdentifier
-	ValueName ast.Identifier
-	Args      []Expression
+	DataName   ast.ExternalIdentifier
+	OptionName ast.DataOptionIdentifier
+	Args       []Expression
 }
 
 func (e *Constructor) _expression() {}
 
 func (e *Constructor) String() string {
-	return fmt.Sprintf("Constructor(%s/%s,%v)", e.DataName, e.ValueName, e.Args)
+	return fmt.Sprintf("Constructor(%s/%s,%v)", e.DataName, e.OptionName, e.Args)
 }
 
 func (e *Constructor) GetLocation() ast.Location {
