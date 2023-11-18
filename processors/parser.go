@@ -1385,7 +1385,7 @@ func parseDataType(src *Source) *parsed.DataType {
 	}
 }
 
-func parseDefinition(src *Source) *parsed.Definition {
+func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Definition {
 	cursor := src.cursor
 
 	if !readExact(src, KwDef) {
@@ -1421,22 +1421,37 @@ func parseDefinition(src *Source) *parsed.Definition {
 			}
 		}
 	} else {
-		if !extern {
+		exprCursor := typeCursor
+		if extern {
+			expr = parsed.NativeCall{
+				Location: loc(src, typeCursor),
+				Name:     common.MakeExternalIdentifier(modName, ast.Identifier(*name)),
+				Args: common.Map(func(x parsed.Pattern) parsed.Expression {
+					return parsed.Var{
+						Location: x.GetLocation(),
+						Name:     ast.QualifiedIdentifier(x.(parsed.PNamed).Name),
+					}
+				}, params),
+			}
+		} else {
 			if !readExact(src, SeqEqual) {
 				setErrorSource(*src, "expected `=` here")
 			}
-			exprCursor := src.cursor
+			exprCursor = src.cursor
 			expr = parseExpression(src)
 			if nil == expr {
 				setErrorSource(*src, "expected expression here")
 			}
-			expr = parsed.Lambda{
-				Location: loc(src, exprCursor),
-				Params:   params,
-				Return:   ret,
-				Body:     expr,
-			}
+
 		}
+
+		expr = parsed.Lambda{
+			Location: loc(src, exprCursor),
+			Params:   params,
+			Return:   ret,
+			Body:     expr,
+		}
+
 		type_ = parsed.TFunc{
 			Location: loc(src, typeCursor),
 			Params:   common.Map(func(x parsed.Pattern) parsed.Type { return x.GetType() }, params),
@@ -1490,7 +1505,7 @@ func parseModule(src *Source) *parsed.Module {
 			continue
 		}
 
-		if definition := parseDefinition(src); definition != nil {
+		if definition := parseDefinition(src, *name); definition != nil {
 			m.Definitions = append(m.Definitions, *definition)
 			continue
 		}

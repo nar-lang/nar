@@ -154,3 +154,11 @@ type InfixVar struct {
 }
 
 func (InfixVar) _expression() {}
+
+type NativeCall struct {
+	Location ast.Location
+	Name     ast.ExternalIdentifier
+	Args     []Expression
+}
+
+func (NativeCall) _expression() {}

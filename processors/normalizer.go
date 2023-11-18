@@ -290,10 +290,6 @@ func normalizePattern(modules map[string]parsed.Module, module parsed.Module, pa
 }
 
 func normalizeExpression(modules map[string]parsed.Module, module parsed.Module, expr parsed.Expression) normalized.Expression {
-	if expr == nil {
-		return nil
-	}
-
 	normalize := func(e parsed.Expression) normalized.Expression {
 		return normalizeExpression(modules, module, e)
 	}
@@ -359,6 +355,15 @@ func normalizeExpression(modules map[string]parsed.Module, module parsed.Module,
 			return normalized.List{
 				Location: e.Location,
 				Items:    common.Map(normalize, e.Items),
+			}
+		}
+	case parsed.NativeCall:
+		{
+			e := expr.(parsed.NativeCall)
+			return normalized.NativeCall{
+				Location: e.Location,
+				Name:     e.Name,
+				Args:     common.Map(normalize, e.Args),
 			}
 		}
 	case parsed.Record:
@@ -574,7 +579,7 @@ func normalizeExpression(modules map[string]parsed.Module, module parsed.Module,
 
 func normalizeType(modules map[string]parsed.Module, module parsed.Module, t parsed.Type) normalized.Type {
 	if t == nil {
-		return nil
+		return nil //TODO: find places where it can happen and check there
 	}
 	normalize := func(x parsed.Type) normalized.Type {
 		return normalizeType(modules, module, x)

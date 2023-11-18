@@ -31,9 +31,6 @@ func Compile(path string, modules map[string]*typed.Module, binary *bytecode.Bin
 	}
 	slices.Sort(names)
 	for _, name := range names {
-		if m.Definitions[name].Expression == nil {
-			continue
-		}
 		pathId := common.MakePathIdentifier(m.Path, name)
 		binary.FuncsMap[pathId] = bytecode.Pointer(len(binary.Funcs))
 		binary.Funcs = append(binary.Funcs, bytecode.Func{})
@@ -41,9 +38,6 @@ func Compile(path string, modules map[string]*typed.Module, binary *bytecode.Bin
 
 	for _, name := range names {
 		def := m.Definitions[name]
-		if def.Expression == nil {
-			continue
-		}
 		pathId := common.MakePathIdentifier(m.Path, name)
 		ptr := binary.FuncsMap[pathId]
 		if binary.Funcs[ptr].Ops == nil {
@@ -121,7 +115,11 @@ func compileExpression(
 		{
 			e := expr.(*typed.Global)
 			id := common.MakePathIdentifier(e.ModulePath, e.DefinitionName)
-			ops, locations = loadGlobal(binary.FuncsMap[id], e.Location, ops, locations)
+			funcIndex, ok := binary.FuncsMap[id]
+			if !ok {
+				panic(common.SystemError{Message: fmt.Sprintf("global definition `%v` not found", id)})
+			}
+			ops, locations = loadGlobal(funcIndex, e.Location, ops, locations)
 			break
 		}
 	case *typed.Access:
@@ -212,6 +210,7 @@ func compileExpression(
 			ops, locations = compileExpression(e.Definition.Expression, ops, locations, binary)
 			ops, locations = compilePattern(e.Definition.Pattern, ops, locations, binary)
 			ops, locations = match(0, e.Location, ops, locations)
+			ops, locations = compileExpression(e.Body, ops, locations, binary)
 			break
 		}
 	case *typed.If:
