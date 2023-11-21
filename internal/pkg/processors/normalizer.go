@@ -416,7 +416,7 @@ func normalizeExpression(
 	case parsed.Update:
 		{
 			e := expr.(parsed.Update)
-			if m, d, ok := findParsedDefinition(modules, module, e.RecordName); !ok {
+			if m, d, ok := findParsedDefinition(modules, module, e.RecordName); ok {
 				return normalized.UpdateGlobal{
 					Location:       e.Location,
 					ModuleName:     m.Name,
