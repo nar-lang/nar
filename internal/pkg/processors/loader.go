@@ -40,20 +40,19 @@ func loadPackage(
 	absPath := filepath.Clean(filepath.Join(baseDir, url))
 	loadedPackages, loaded := loadPackageWithPath(url, absPath, cacheDir, log, loadedPackages)
 
+	absPath = filepath.Clean(filepath.Join(cacheDir, url))
 	if !loaded {
-		absPath = filepath.Clean(filepath.Join(cacheDir, url))
 		loadedPackages, loaded = loadPackageWithPath(url, absPath, cacheDir, log, loadedPackages)
 	}
 	if !loaded {
 		_, _ = fmt.Fprintf(log, "cloning package `%s`", url)
-		_, err := git.PlainClone(cacheDir, false, &git.CloneOptions{
+		_, err := git.PlainClone(absPath, false, &git.CloneOptions{
 			URL:      fmt.Sprintf("https://%s", url),
 			Progress: log,
 		})
 		if err != nil {
 			panic(common.SystemError{Message: err.Error()})
 		}
-		absPath = filepath.Clean(filepath.Join(cacheDir, url))
 		loadedPackages, loaded = loadPackageWithPath(url, absPath, cacheDir, log, loadedPackages)
 	}
 	if !loaded {
