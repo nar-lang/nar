@@ -1,17 +1,29 @@
 # Roadmap
 
-## v0.1
+## Compiler
 * [x] Parser
 * [x] Normalizer
-* [x] Type checker
+* [x] Type solver
 * [x] Bytecode compiler
-* [x] Runtime (JavaScript)
 * [x] Packages system
+
+## Libraries
+* [ ] Oak.Tests library
 * [ ] Oak.Core library + tests
 * [ ] Oak.Program library + tests
-* [ ] Runtime (C99)
 * [ ] Tests for compiler
+* [ ] Oak.Leaf library (game engine)
+* [ ] ...
+
+## Quality Of Life
 * [ ] Language server
 * [ ] Debugger
-* [ ] Oak.Leaf library (game engine)
+* [ ] Formatter
+* [ ] IDE support
+  * [ ] Visual Studio Code
+  * [ ] Jetbrains Family
+
+## Platforms
+* [x] Runtime (JavaScript)
+* [ ] Runtime (C99 static library)
 * [ ] LLVM compiler
