@@ -97,14 +97,15 @@ func (e *If) GetType() Type {
 type Let struct {
 	ast.Location
 	Type
-	Definition *Definition
-	Body       Expression
+	Pattern Pattern
+	Value   Expression
+	Body    Expression
 }
 
 func (e *Let) _expression() {}
 
 func (e *Let) String() string {
-	return fmt.Sprintf("Let(%v,%v)", e.Definition, e.Body)
+	return fmt.Sprintf("Let(%v,%v,%v)", e.Pattern, e.Value, e.Body)
 }
 
 func (e *Let) GetLocation() ast.Location {
@@ -259,27 +260,6 @@ func (e *UpdateGlobal) GetLocation() ast.Location {
 }
 
 func (e *UpdateGlobal) GetType() Type {
-	return e.Type
-}
-
-type Lambda struct {
-	ast.Location
-	Type
-	Params []Pattern
-	Body   Expression
-}
-
-func (e *Lambda) _expression() {}
-
-func (e *Lambda) String() string {
-	return fmt.Sprintf("Lambda(%v,%v)", e.Params, e.Body)
-}
-
-func (e *Lambda) GetLocation() ast.Location {
-	return e.Location
-}
-
-func (e *Lambda) GetType() Type {
 	return e.Type
 }
 

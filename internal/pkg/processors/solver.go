@@ -13,15 +13,17 @@ import (
 	"strings"
 )
 
+var lastLambdaId = uint64(0)
 var unboundIndex = uint64(0)
 var annotations []struct {
 	fmt.Stringer
 	typed.Type
 }
 
-const dumpDebugOutput = false
+const dumpDebugOutput = true
 
 type symbolsMap map[ast.Identifier]typed.Type
+type localDefsMap map[ast.Identifier]*typed.Definition
 type typeParamsMap map[ast.Identifier]uint64
 
 type equation struct {
@@ -45,7 +47,7 @@ func (e equation) String(index int) string {
 
 func Solve(
 	moduleName ast.QualifiedIdentifier,
-	modules map[ast.QualifiedIdentifier]normalized.Module,
+	modules map[ast.QualifiedIdentifier]*normalized.Module,
 	typedModules map[ast.QualifiedIdentifier]*typed.Module,
 ) {
 	if _, ok := typedModules[moduleName]; ok {
@@ -60,93 +62,93 @@ func Solve(
 	o := typed.Module{
 		Name:         m.Name,
 		Dependencies: m.Dependencies,
-		Definitions:  map[ast.Identifier]*typed.Definition{},
 	}
 
 	typedModules[o.Name] = &o
 
-	var names []ast.Identifier
-	for name := range m.Definitions {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-
-	for _, name := range names {
-		def := m.Definitions[name]
-		if _, ok := o.Definitions[name]; !ok {
-			fp := fmt.Sprintf(".oak-bin/%s/%s.md", m.Name, def.Pattern.(normalized.PNamed).Name)
-			sb := strings.Builder{}
-
-			unboundIndex = 0
-			annotations = []struct {
-				fmt.Stringer
-				typed.Type
-			}{}
-			localTyped := map[ast.QualifiedIdentifier]*typed.Module{}
-			var eqs []equation
-
-			td, _, _ := annotateDefinition(symbolsMap{}, typeParamsMap{}, modules, localTyped, def, nil)
-
-			if dumpDebugOutput {
-				_ = os.MkdirAll(filepath.Dir(fp), 0700)
-				sb.WriteString(fmt.Sprintf("\n\nDefinition\n---\n`%s`", td))
-				sb.WriteString("\n\nAnnotations\n---\n| Node | Type |\n|---|---|")
-				for _, t := range annotations {
-					sb.WriteString(fmt.Sprintf("\n| `%v` | `%v` |", t.Stringer, t.Type))
-				}
-				_ = os.WriteFile(fp, []byte(sb.String()), 0666)
-			}
-
-			eqs = equatizeDefinition(eqs, td, nil, nil)
-
-			if dumpDebugOutput {
-				sb.WriteString("\n\nEquations\n---\n| No | Left | Right | Node |\n|---|---|---|---|")
-				for i, eq := range eqs {
-					sb.WriteString(eq.String(i))
-				}
-				_ = os.WriteFile(fp, []byte(sb.String()), 0666)
-			}
-
-			subst := unifyAll(eqs)
-
-			if dumpDebugOutput {
-				sb.WriteString("\n\nUnified\n---\n| Left | Right |\n|---|---|")
-				for k, v := range subst {
-					sb.WriteString(fmt.Sprintf("\n | `%v` | `%v` |", &typed.TUnbound{Index: k}, v))
-				}
-				_ = os.WriteFile(fp, []byte(sb.String()), 0666)
-			}
-
-			td = applyDefinition(td, subst)
-
-			if dumpDebugOutput {
-				sb.WriteString("\n\nSolved\n---\n")
-				sb.WriteString(fmt.Sprintf("\n `%v`", td.GetType()))
-				_ = os.WriteFile(fp, []byte(sb.String()), 0666)
-			}
-
-			o.Definitions[def.Pattern.(normalized.PNamed).Name] = td
+	for i := 0; i < len(m.Definitions); i++ {
+		def := m.Definitions[i]
+		if slices.ContainsFunc(o.Definitions, func(d *typed.Definition) bool { return d.Id == def.Id }) {
+			continue
 		}
+
+		fp := fmt.Sprintf(".oak-bin/%s/%s.md", m.Name, def.Name)
+		sb := strings.Builder{}
+
+		unboundIndex = 0
+		annotations = []struct {
+			fmt.Stringer
+			typed.Type
+		}{}
+		localTyped := map[ast.QualifiedIdentifier]*typed.Module{}
+		var eqs []equation
+
+		td, _, _ := annotateDefinition(symbolsMap{}, typeParamsMap{}, modules, localTyped, m.Name, def, nil)
+
+		if dumpDebugOutput {
+			_ = os.MkdirAll(filepath.Dir(fp), 0700)
+			sb.WriteString(fmt.Sprintf("\n\nDefinition\n---\n`%s`", td))
+			sb.WriteString("\n\nAnnotations\n---\n| Node | Type |\n|---|---|")
+			for _, t := range annotations {
+				sb.WriteString(fmt.Sprintf("\n| `%v` | `%v` |", t.Stringer, t.Type))
+			}
+			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
+		}
+
+		eqs = equatizeDefinition(eqs, td, localDefsMap{}, nil, nil)
+
+		if dumpDebugOutput {
+			sb.WriteString("\n\nEquations\n---\n| No | Left | Right | Node |\n|---|---|---|---|")
+			for i, eq := range eqs {
+				sb.WriteString(eq.String(i))
+			}
+			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
+		}
+
+		subst := unifyAll(eqs)
+
+		if dumpDebugOutput {
+			sb.WriteString("\n\nUnified\n---\n| Left | Right |\n|---|---|")
+			for k, v := range subst {
+				sb.WriteString(fmt.Sprintf("\n | `%v` | `%v` |", &typed.TUnbound{Index: k}, v))
+			}
+			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
+		}
+
+		td = applyDefinition(td, subst)
+
+		if dumpDebugOutput {
+			sb.WriteString("\n\nSolved\n---\n")
+			sb.WriteString(fmt.Sprintf("\n `%v`", td.GetType()))
+			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
+		}
+
+		o.Definitions = append(o.Definitions, td)
 	}
 }
 
 func annotateDefinition(
 	symbols symbolsMap,
 	typeParams typeParamsMap,
-	modules map[ast.QualifiedIdentifier]normalized.Module,
+	modules map[ast.QualifiedIdentifier]*normalized.Module,
 	typedModules map[ast.QualifiedIdentifier]*typed.Module,
+	moduleName ast.QualifiedIdentifier,
 	def normalized.Definition,
 	stack []*typed.Definition,
 ) (*typed.Definition, symbolsMap, typeParamsMap) {
 	o := &typed.Definition{
-		Id:     def.Id,
-		Hidden: def.Hidden,
+		Id:       def.Id,
+		Name:     def.Name,
+		Hidden:   def.Hidden,
+		Location: def.Location,
 	}
 
 	localSymbols := symbolsMap{}
 	localTypeParams := typeParamsMap{}
 
-	o.Pattern = annotatePattern(localSymbols, localTypeParams, modules, typedModules, def.Pattern, true, stack)
+	o.Params = common.Map(func(p normalized.Pattern) typed.Pattern {
+		return annotatePattern(localSymbols, localTypeParams, modules, typedModules, moduleName, p, true, stack)
+	}, def.Params)
 
 	mergedSymbols := symbolsMap{}
 	maps.Copy(mergedSymbols, symbols)
@@ -167,15 +169,16 @@ func annotateDefinition(
 	}
 
 	stack = append(stack, o)
-	o.Expression = annotateExpression(mergedSymbols, mergedTypeParams, modules, typedModules, def.Expression, stack)
+	o.Expression = annotateExpression(mergedSymbols, mergedTypeParams, modules, typedModules, moduleName, def.Expression, stack)
 	stack = stack[:len(stack)-1]
 	return o, mergedSymbols, mergedTypeParams
 }
 
 func annotatePattern(symbols symbolsMap,
 	typeParams typeParamsMap,
-	modules map[ast.QualifiedIdentifier]normalized.Module,
+	modules map[ast.QualifiedIdentifier]*normalized.Module,
 	typedModules map[ast.QualifiedIdentifier]*typed.Module,
+	moduleName ast.QualifiedIdentifier,
 	pattern normalized.Pattern,
 	typeMapSource bool,
 	stack []*typed.Definition,
@@ -184,7 +187,7 @@ func annotatePattern(symbols symbolsMap,
 		return nil
 	}
 	annotate := func(p normalized.Pattern) typed.Pattern {
-		return annotatePattern(symbols, typeParams, modules, typedModules, p, typeMapSource, stack)
+		return annotatePattern(symbols, typeParams, modules, typedModules, moduleName, p, typeMapSource, stack)
 	}
 	var p typed.Pattern
 	switch pattern.(type) {
@@ -233,21 +236,17 @@ func annotatePattern(symbols symbolsMap,
 	case normalized.PDataOption:
 		{
 			e := pattern.(normalized.PDataOption)
-
 			def := getAnnotatedGlobal(e.ModuleName, e.DefinitionName, modules, typedModules, stack)
-			var ctor *typed.Constructor
-			if fn, ok := def.Expression.(*typed.Lambda); ok {
-				ctor = fn.Body.(*typed.Constructor)
+			if ctor, ok := def.Expression.(*typed.Constructor); !ok {
+				panic(common.SystemError{Message: "data option definition is not a constructor"})
 			} else {
-				ctor = def.Expression.(*typed.Constructor)
-			}
-
-			p = &typed.PDataOption{
-				Location:   e.Location,
-				Type:       annotateType(typeParams, nil, e.Location, typeMapSource),
-				Name:       ctor.OptionName,
-				Args:       common.Map(annotate, e.Values),
-				Definition: def,
+				p = &typed.PDataOption{
+					Location:   e.Location,
+					Type:       annotateType(typeParams, nil, e.Location, typeMapSource),
+					Name:       ctor.OptionName,
+					Args:       common.Map(annotate, e.Values),
+					Definition: def,
+				}
 			}
 			break
 		}
@@ -266,7 +265,7 @@ func annotatePattern(symbols symbolsMap,
 			e := pattern.(normalized.PNamed)
 			p = &typed.PNamed{
 				Location: e.Location,
-				Type:     annotateType(typeParams, e.Type, e.Location, typeMapSource),
+				Type:     annotateType(typeParams, nil, e.Location, typeMapSource),
 				Name:     e.Name,
 			}
 			symbols[e.Name] = p.GetType()
@@ -312,8 +311,9 @@ func annotatePattern(symbols symbolsMap,
 func annotateExpression(
 	symbols symbolsMap,
 	typeParams typeParamsMap,
-	modules map[ast.QualifiedIdentifier]normalized.Module,
+	modules map[ast.QualifiedIdentifier]*normalized.Module,
 	typedModules map[ast.QualifiedIdentifier]*typed.Module,
+	moduleName ast.QualifiedIdentifier,
 	expr normalized.Expression,
 	stack []*typed.Definition,
 ) typed.Expression {
@@ -322,7 +322,7 @@ func annotateExpression(
 	}
 
 	annotate := func(e normalized.Expression) typed.Expression {
-		return annotateExpression(symbols, typeParams, modules, typedModules, e, stack)
+		return annotateExpression(symbols, typeParams, modules, typedModules, moduleName, e, stack)
 	}
 	var o typed.Expression
 	switch expr.(type) {
@@ -374,39 +374,55 @@ func annotateExpression(
 		{
 			e := expr.(normalized.Let)
 
-			def, localSymbols, localTypeParams := annotateDefinition(symbols, typeParams, modules, typedModules, e.Definition, stack)
+			localSymbols := maps.Clone(symbols)
+			localTypeParams := maps.Clone(typeParams)
 
 			o = &typed.Let{
-				Location:   e.Location,
-				Type:       annotateType(localTypeParams, nil, e.Location, true),
-				Definition: def,
-				Body:       annotateExpression(localSymbols, localTypeParams, modules, typedModules, e.Body, stack),
+				Location: e.Location,
+				Type:     annotateType(localTypeParams, nil, e.Location, true),
+				Pattern:  annotatePattern(localSymbols, localTypeParams, modules, typedModules, moduleName, e.Pattern, true, stack),
+				Value:    annotateExpression(localSymbols, localTypeParams, modules, typedModules, moduleName, e.Value, stack),
+				Body:     annotateExpression(localSymbols, localTypeParams, modules, typedModules, moduleName, e.Body, stack),
 			}
 			break
 		}
 	case normalized.Lambda:
 		{
-			//TODO: use annotateDefinition()
 			e := expr.(normalized.Lambda)
-			localSymbols := symbolsMap{}
-			localTypeParams := typeParamsMap{}
-			params := common.Map(func(p normalized.Pattern) typed.Pattern {
-				return annotatePattern(localSymbols, localTypeParams, modules, typedModules, p, true, stack)
-			}, e.Params)
-			mergedSymbols := symbolsMap{}
-			maps.Copy(mergedSymbols, symbols)
-			maps.Copy(mergedSymbols, localSymbols)
+			lastLambdaId++
+			name := ast.Identifier(fmt.Sprintf("_lambda_%v", lastLambdaId))
+			vars := extractVars(e.Body, symbols, nil)
 
-			mergedTypeParams := typeParamsMap{}
-			maps.Copy(mergedTypeParams, typeParams)
-			maps.Copy(mergedTypeParams, localTypeParams)
+			lastDefinitionId++
+			modules[moduleName].Definitions = append(modules[moduleName].Definitions, normalized.Definition{
+				Id:   lastDefinitionId,
+				Name: name,
+				Params: append(
+					common.Map(func(v ast.Identifier) normalized.Pattern {
+						return normalized.PNamed{Location: e.Location, Name: v}
+					}, vars),
+					e.Params...),
+				Expression: e.Body,
+				Type:       nil, //TODO: allow typed lambdas
+				Location:   e.Location,
+				Hidden:     true,
+			})
 
-			o = &typed.Lambda{
-				Location: e.Location,
-				Type:     annotateType(mergedTypeParams, nil, e.Location, false),
-				Params:   params,
-				Body:     annotateExpression(mergedSymbols, mergedTypeParams, modules, typedModules, e.Body, stack),
-			}
+			o = annotate(normalized.Apply{
+				Location: ast.Location{},
+				Func: normalized.Var{
+					Location:       e.Location,
+					ModuleName:     moduleName,
+					DefinitionName: name,
+				},
+				Args: common.Map(func(v ast.Identifier) normalized.Expression {
+					return normalized.Var{
+						Location: e.Location,
+						Name:     ast.QualifiedIdentifier(v),
+					}
+				}, vars),
+			})
+
 			break
 		}
 	case normalized.List:
@@ -444,11 +460,15 @@ func annotateExpression(
 				Type:      annotateType(typeParams, nil, e.Location, false),
 				Condition: annotate(e.Condition),
 				Cases: common.Map(func(c normalized.SelectCase) typed.SelectCase {
+					localSymbols := maps.Clone(symbols)
+					localTypeParams := maps.Clone(typeParams)
 					return typed.SelectCase{
-						Location:   c.Location,
-						Type:       annotateType(typeParams, nil, c.Location, false),
-						Pattern:    annotatePattern(symbols, typeParams, modules, typedModules, c.Pattern, false, stack),
-						Expression: annotate(c.Expression),
+						Location: c.Location,
+						Pattern: annotatePattern(
+							localSymbols, localTypeParams, modules, typedModules, moduleName, c.Pattern, false, stack),
+						Expression: annotateExpression(
+							localSymbols, localTypeParams, modules, typedModules, moduleName, c.Expression, stack),
+						Type: annotateType(localTypeParams, nil, c.Location, false),
 					}
 				}, e.Cases),
 			}
@@ -578,30 +598,62 @@ func annotateExpression(
 func getAnnotatedGlobal(
 	moduleName ast.QualifiedIdentifier,
 	definitionName ast.Identifier,
-	modules map[ast.QualifiedIdentifier]normalized.Module,
+	modules map[ast.QualifiedIdentifier]*normalized.Module,
 	typedModules map[ast.QualifiedIdentifier]*typed.Module,
 	stack []*typed.Definition,
 ) *typed.Definition {
-	typedModule, ok := typedModules[moduleName]
+	nDef, ok := common.Find(func(definition normalized.Definition) bool {
+		return definition.Name == definitionName
+	}, modules[moduleName].Definitions)
+	if !ok {
+		panic(common.SystemError{
+			Message: fmt.Sprintf("definition `%s` not found", definitionName),
+		})
+	}
+
+	def, ok := common.Find(func(definition *typed.Definition) bool {
+		return definition.Id == nDef.Id
+	}, stack)
+
+	if !ok {
+		def, _, _ = annotateDefinition(symbolsMap{}, typeParamsMap{}, modules, typedModules, moduleName, nDef, stack)
+	}
+
+	return def
+
+	/*typedModule, ok := typedModules[moduleName]
 	if !ok {
 		typedModule = &typed.Module{
 			Name:         moduleName,
 			Dependencies: modules[moduleName].Dependencies,
-			Definitions:  map[ast.Identifier]*typed.Definition{},
 		}
 		typedModules[moduleName] = typedModule
 	}
 
-	def, ok := typedModule.Definitions[definitionName]
-	if !ok {
-		defSymbols := symbolsMap{}
+	def, ok := common.Find(func(definition *typed.Definition) bool {
+		return definition.Name == definitionName
+	}, typedModule.Definitions)
 
-		def, _, _ = annotateDefinition(
-			defSymbols, typeParamsMap{}, modules, typedModules, modules[moduleName].Definitions[definitionName], stack,
-		)
+	if ok {
+		def, ok = common.Find(func(definition *typed.Definition) bool {
+			return definition.Id == def.Id
+		}, stack)
+	}
+	if ok {
+		return def
 	}
 
-	return def
+	nDef, ok := common.Find(func(definition normalized.Definition) bool {
+		return definition.Name == definitionName
+	}, modules[moduleName].Definitions)
+	if !ok {
+		panic(common.SystemError{
+			Message: fmt.Sprintf("definition `%s` not found", definitionName),
+		})
+	}
+	def, _, _ = annotateDefinition(symbolsMap{}, typeParamsMap{}, modules, typedModules, moduleName, nDef, stack)
+
+	return def*/
 }
 
 func annotateType(
@@ -714,26 +766,43 @@ func annotateType(
 	return r
 }
 
-func equatizeDefinition(eqs []equation, td *typed.Definition, stack []*typed.Definition, loc *ast.Location) []equation {
+func equatizeDefinition(
+	eqs []equation, td *typed.Definition, localDefs localDefsMap, stack []*typed.Definition, loc *ast.Location,
+) []equation {
 	for _, std := range stack {
 		if std.Id == td.Id {
 			return eqs
 		}
 	}
 	stack = append(stack, td)
-	eqs = equatizePattern(eqs, td.Pattern, loc)
+
 	if td.Expression != nil && td.DefinedType != nil {
+		defType := td.Expression.GetType()
+
+		if len(td.Params) > 0 {
+			defType = &typed.TFunc{
+				Location: td.Location,
+				Params:   common.Map(func(x typed.Pattern) typed.Type { return x.GetType() }, td.Params),
+				Return:   defType,
+			}
+		}
+
 		eqs = append(eqs, equation{
 			loc:   loc,
-			right: td.Expression.GetType(),
 			left:  td.DefinedType,
+			right: defType,
 			def:   td,
 		})
 	}
 
-	if td.Expression != nil {
-		eqs = equatizeExpression(eqs, td.Expression, stack, loc)
+	for _, p := range td.Params {
+		eqs = equatizePattern(eqs, p, loc)
 	}
+
+	if td.Expression != nil {
+		eqs = equatizeExpression(eqs, td.Expression, localDefs, stack, loc)
+	}
+
 	stack = stack[:len(stack)-1]
 	return eqs
 }
@@ -902,7 +971,7 @@ func equatizePattern(eqs []equation, pattern typed.Pattern, loc *ast.Location) [
 }
 
 func equatizeExpression(
-	eqs []equation, expr typed.Expression, stack []*typed.Definition, loc *ast.Location,
+	eqs []equation, expr typed.Expression, localDefs localDefsMap, stack []*typed.Definition, loc *ast.Location,
 ) []equation {
 	if expr == nil {
 		return eqs
@@ -920,7 +989,7 @@ func equatizeExpression(
 				right: &typed.TRecord{Location: e.Location, Fields: fields},
 				expr:  expr,
 			})
-			eqs = equatizeExpression(eqs, e.Record, stack, loc)
+			eqs = equatizeExpression(eqs, e.Record, localDefs, stack, loc)
 			break
 		}
 	case *typed.Apply:
@@ -936,9 +1005,9 @@ func equatizeExpression(
 				},
 				expr: expr,
 			})
-			eqs = equatizeExpression(eqs, e.Func, stack, loc)
+			eqs = equatizeExpression(eqs, e.Func, localDefs, stack, loc)
 			for _, a := range e.Args {
-				eqs = equatizeExpression(eqs, a, stack, loc)
+				eqs = equatizeExpression(eqs, a, localDefs, stack, loc)
 			}
 			break
 		}
@@ -975,9 +1044,9 @@ func equatizeExpression(
 					right: e.Negative.GetType(),
 					expr:  expr,
 				})
-			eqs = equatizeExpression(eqs, e.Condition, stack, loc)
-			eqs = equatizeExpression(eqs, e.Positive, stack, loc)
-			eqs = equatizeExpression(eqs, e.Negative, stack, loc)
+			eqs = equatizeExpression(eqs, e.Condition, localDefs, stack, loc)
+			eqs = equatizeExpression(eqs, e.Positive, localDefs, stack, loc)
+			eqs = equatizeExpression(eqs, e.Negative, localDefs, stack, loc)
 			break
 		}
 	case *typed.Let:
@@ -990,27 +1059,9 @@ func equatizeExpression(
 					right: e.Body.GetType(),
 					expr:  expr,
 				})
-			eqs = equatizeDefinition(eqs, e.Definition, stack, loc)
-			eqs = equatizeExpression(eqs, e.Body, stack, loc)
-			break
-		}
-	case *typed.Lambda:
-		{
-			e := expr.(*typed.Lambda)
-			eqs = append(eqs, equation{
-				loc:  loc,
-				left: e.Type,
-				right: &typed.TFunc{
-					Location: e.Location,
-					Params:   common.Map(func(p typed.Pattern) typed.Type { return p.GetType() }, e.Params),
-					Return:   e.Body.GetType(),
-				},
-				expr: expr,
-			})
-			for _, p := range e.Params {
-				eqs = equatizePattern(eqs, p, loc)
-			}
-			eqs = equatizeExpression(eqs, e.Body, stack, loc)
+			eqs = equatizePattern(eqs, e.Pattern, loc)
+			eqs = equatizeExpression(eqs, e.Value, localDefs, stack, loc)
+			eqs = equatizeExpression(eqs, e.Body, localDefs, stack, loc)
 			break
 		}
 	case *typed.List:
@@ -1046,7 +1097,7 @@ func equatizeExpression(
 			})
 
 			for _, item := range e.Items {
-				eqs = equatizeExpression(eqs, item, stack, loc)
+				eqs = equatizeExpression(eqs, item, localDefs, stack, loc)
 			}
 			break
 		}
@@ -1069,7 +1120,7 @@ func equatizeExpression(
 			})
 
 			for _, f := range e.Fields {
-				eqs = equatizeExpression(eqs, f.Value, stack, loc)
+				eqs = equatizeExpression(eqs, f.Value, localDefs, stack, loc)
 			}
 			break
 		}
@@ -1094,7 +1145,7 @@ func equatizeExpression(
 
 			for _, cs := range e.Cases {
 				eqs = equatizePattern(eqs, cs.Pattern, loc)
-				eqs = equatizeExpression(eqs, cs.Expression, stack, loc)
+				eqs = equatizeExpression(eqs, cs.Expression, localDefs, stack, loc)
 			}
 			break
 		}
@@ -1111,7 +1162,7 @@ func equatizeExpression(
 				expr: expr,
 			})
 			for _, item := range e.Items {
-				eqs = equatizeExpression(eqs, item, stack, loc)
+				eqs = equatizeExpression(eqs, item, localDefs, stack, loc)
 			}
 			break
 		}
@@ -1134,7 +1185,7 @@ func equatizeExpression(
 			})
 
 			for _, f := range e.Fields {
-				eqs = equatizeExpression(eqs, f.Value, stack, loc)
+				eqs = equatizeExpression(eqs, f.Value, localDefs, stack, loc)
 			}
 			break
 		}
@@ -1157,9 +1208,9 @@ func equatizeExpression(
 			})
 
 			for _, f := range e.Fields {
-				eqs = equatizeExpression(eqs, f.Value, stack, loc)
+				eqs = equatizeExpression(eqs, f.Value, localDefs, stack, loc)
 			}
-			eqs = equatizeDefinition(eqs, e.Definition, stack, &e.Location)
+			eqs = equatizeDefinition(eqs, e.Definition, localDefsMap{}, stack, &e.Location)
 			break
 		}
 	case *typed.Constructor:
@@ -1175,7 +1226,7 @@ func equatizeExpression(
 				expr: e,
 			})
 			for _, a := range e.Args {
-				eqs = equatizeExpression(eqs, a, stack, loc)
+				eqs = equatizeExpression(eqs, a, localDefs, stack, loc)
 			}
 			break
 		}
@@ -1183,13 +1234,22 @@ func equatizeExpression(
 		{
 			e := expr.(*typed.NativeCall)
 			for _, a := range e.Args {
-				eqs = equatizeExpression(eqs, a, stack, loc)
+				eqs = equatizeExpression(eqs, a, localDefs, stack, loc)
 			}
 			break
 		}
 	case *typed.Local:
 		{
-
+			e := expr.(*typed.Local)
+			if ld, ok := localDefs[e.Name]; ok {
+				eqs = equatizeDefinition(eqs, ld, maps.Clone(localDefs), stack, &e.Location)
+				eqs = append(eqs, equation{
+					loc:   loc,
+					left:  e.Type,
+					right: ld.GetType(),
+					expr:  e,
+				})
+			}
 		}
 	case *typed.Global:
 		{
@@ -1200,7 +1260,7 @@ func equatizeExpression(
 				right: e.Definition.GetType(),
 				expr:  e,
 			})
-			eqs = equatizeDefinition(eqs, e.Definition, stack, &e.Location)
+			eqs = equatizeDefinition(eqs, e.Definition, localDefsMap{}, stack, &e.Location)
 			break
 		}
 	default:
@@ -1350,7 +1410,6 @@ func unify(x typed.Type, y typed.Type, loc ast.Location, subst map[uint64]typed.
 	default:
 		panic(common.SystemError{Message: "invalid case"})
 	}
-	//TODO: make locations chain, because this loc may point very deep in function calls
 	panic(common.Error{Location: loc, Message: fmt.Sprintf("%v cannot be matched with %v", x, y)})
 }
 
@@ -1437,7 +1496,9 @@ func OccursCheck(v *typed.TUnbound, typ typed.Type, subst map[uint64]typed.Type)
 }
 
 func applyDefinition(td *typed.Definition, subst map[uint64]typed.Type) *typed.Definition {
-	td.Pattern = applyPattern(td.Pattern, subst)
+	td.Params = common.Map(func(p typed.Pattern) typed.Pattern {
+		return applyPattern(p, subst)
+	}, td.Params)
 	td.Expression = applyExpression(td.Expression, subst)
 	return td
 }
@@ -1671,10 +1732,11 @@ func applyExpression(expr typed.Expression, subst map[uint64]typed.Type) typed.E
 		{
 			e := expr.(*typed.Let)
 			expr = &typed.Let{
-				Location:   e.Location,
-				Type:       applyType(e.Type, subst),
-				Definition: applyDefinition(e.Definition, subst),
-				Body:       apply(e.Body),
+				Location: e.Location,
+				Type:     applyType(e.Type, subst),
+				Pattern:  applyPattern(e.Pattern, subst),
+				Value:    apply(e.Value),
+				Body:     apply(e.Body),
 			}
 			break
 		}
@@ -1773,19 +1835,6 @@ func applyExpression(expr typed.Expression, subst map[uint64]typed.Type) typed.E
 			}
 			break
 		}
-	case *typed.Lambda:
-		{
-			e := expr.(*typed.Lambda)
-			expr = &typed.Lambda{
-				Location: e.Location,
-				Type:     applyType(e.Type, subst),
-				Params: common.Map(func(p typed.Pattern) typed.Pattern {
-					return applyPattern(p, subst)
-				}, e.Params),
-				Body: apply(e.Body),
-			}
-			break
-		}
 	case *typed.Constructor:
 		{
 			e := expr.(*typed.Constructor)
@@ -1837,4 +1886,120 @@ func applyExpression(expr typed.Expression, subst map[uint64]typed.Type) typed.E
 		panic(common.SystemError{Message: "invalid case"})
 	}
 	return expr
+}
+
+func extractVars(expr normalized.Expression, symbols symbolsMap, vars []ast.Identifier) []ast.Identifier {
+	switch expr.(type) {
+	case normalized.Access:
+		{
+			e := expr.(normalized.Access)
+			vars = append(vars, e.FieldName)
+			vars = extractVars(e.Record, symbols, vars)
+			break
+		}
+	case normalized.Apply:
+		{
+			e := expr.(normalized.Apply)
+			vars = extractVars(e.Func, symbols, vars)
+			for _, a := range e.Args {
+				vars = extractVars(a, symbols, vars)
+			}
+			break
+		}
+	case normalized.Const:
+		{
+			break
+		}
+	case normalized.If:
+		{
+			e := expr.(normalized.If)
+			vars = extractVars(e.Condition, symbols, vars)
+			vars = extractVars(e.Positive, symbols, vars)
+			vars = extractVars(e.Negative, symbols, vars)
+			break
+		}
+	case normalized.Let:
+		{
+			e := expr.(normalized.Let)
+			vars = extractVars(e.Value, symbols, vars)
+			vars = extractVars(e.Body, symbols, vars)
+			break
+		}
+	case normalized.List:
+		{
+			e := expr.(normalized.List)
+			for _, i := range e.Items {
+				vars = extractVars(i, symbols, vars)
+			}
+			break
+		}
+	case normalized.Record:
+		{
+			e := expr.(normalized.Record)
+			for _, f := range e.Fields {
+				vars = extractVars(f.Value, symbols, vars)
+			}
+			break
+		}
+	case normalized.Select:
+		{
+			e := expr.(normalized.Select)
+			vars = extractVars(e.Condition, symbols, vars)
+			for _, c := range e.Cases {
+				vars = extractVars(c.Expression, symbols, vars)
+			}
+			break
+		}
+	case normalized.Tuple:
+		{
+			e := expr.(normalized.Tuple)
+			for _, i := range e.Items {
+				vars = extractVars(i, symbols, vars)
+			}
+			break
+		}
+	case normalized.UpdateLocal:
+		{
+			e := expr.(normalized.UpdateLocal)
+			for _, f := range e.Fields {
+				vars = extractVars(f.Value, symbols, vars)
+			}
+			break
+		}
+	case normalized.UpdateGlobal:
+		{
+			e := expr.(normalized.UpdateGlobal)
+			for _, f := range e.Fields {
+				vars = extractVars(f.Value, symbols, vars)
+			}
+			break
+		}
+	case normalized.Constructor:
+		{
+			e := expr.(normalized.Constructor)
+			for _, a := range e.Args {
+				vars = extractVars(a, symbols, vars)
+			}
+			break
+		}
+	case normalized.NativeCall:
+		{
+			e := expr.(normalized.NativeCall)
+			for _, a := range e.Args {
+				vars = extractVars(a, symbols, vars)
+			}
+			break
+		}
+	case normalized.Var:
+		{
+			e := expr.(normalized.Var)
+			if _, ok := symbols[ast.Identifier(e.Name)]; ok {
+				vars = append(vars, ast.Identifier(e.Name))
+			}
+			break
+		}
+	default:
+		panic(common.SystemError{Message: "invalid case"})
+	}
+	return vars
 }

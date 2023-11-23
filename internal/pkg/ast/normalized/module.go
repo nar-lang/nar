@@ -6,7 +6,8 @@ import (
 
 type Definition struct {
 	Id         uint64
-	Pattern    Pattern
+	Name       ast.Identifier
+	Params     []Pattern
 	Expression Expression
 	Type       Type
 	Location   ast.Location
@@ -16,5 +17,5 @@ type Definition struct {
 type Module struct {
 	Name         ast.QualifiedIdentifier
 	Dependencies []ast.QualifiedIdentifier
-	Definitions  map[ast.Identifier]Definition
+	Definitions  []Definition
 }

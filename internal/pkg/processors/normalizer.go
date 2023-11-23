@@ -10,10 +10,12 @@ import (
 	"strings"
 )
 
+var lastDefinitionId = uint64(0)
+
 func Normalize(
 	moduleName ast.QualifiedIdentifier,
 	modules map[ast.QualifiedIdentifier]parsed.Module,
-	normalizedModules map[ast.QualifiedIdentifier]normalized.Module,
+	normalizedModules map[ast.QualifiedIdentifier]*normalized.Module,
 ) {
 	if _, ok := normalizedModules[moduleName]; ok {
 		return
@@ -29,21 +31,12 @@ func Normalize(
 	unwrapImports(&m, modules)
 	modules[moduleName] = m
 
-	o := normalized.Module{
-		Name:        m.Name,
-		Definitions: map[ast.Identifier]normalized.Definition{},
+	o := &normalized.Module{
+		Name: m.Name,
 	}
 
 	for _, def := range m.Definitions {
-		nDef := normalizeDefinition(modules, m, def)
-		named, isNamed := def.Pattern.(parsed.PNamed)
-		if !isNamed {
-			panic(common.Error{
-				Location: def.Pattern.GetLocation(),
-				Message:  "only named pattern available at top level",
-			})
-		}
-		o.Definitions[named.Name] = nDef
+		o.Definitions = append(o.Definitions, normalizeDefinition(modules, m, def))
 	}
 
 	for _, imp := range m.Imports {
@@ -77,6 +70,13 @@ func flattenDataTypes(m *parsed.Module) {
 				Name: common.MakeExternalIdentifier(m.Name, it.Name),
 				Args: typeArgs,
 			}
+			if len(option.Params) > 0 {
+				type_ = parsed.TFunc{
+					Location: it.Location,
+					Params:   option.Params,
+					Return:   type_,
+				}
+			}
 			var body parsed.Expression = parsed.Constructor{
 				Location:   option.Location,
 				DataName:   common.MakeExternalIdentifier(m.Name, it.Name),
@@ -92,24 +92,18 @@ func flattenDataTypes(m *parsed.Module) {
 				),
 			}
 
-			if len(option.Params) > 0 {
-				body = parsed.Lambda{
-					Params: common.Map(
-						func(i int) parsed.Pattern {
-							return parsed.PNamed{Location: option.Location, Name: ast.Identifier(fmt.Sprintf("p%d", i))}
-						},
-						common.Range(0, len(option.Params)),
-					),
-					Body: body,
-				}
-				type_ = parsed.TFunc{
-					Params: option.Params,
-					Return: type_,
-				}
-			}
+			params := common.Map(
+				func(i int) parsed.Pattern {
+					return parsed.PNamed{Location: option.Location, Name: ast.Identifier(fmt.Sprintf("p%d", i))}
+				},
+				common.Range(0, len(option.Params)),
+			)
 
 			m.Definitions = append(m.Definitions, parsed.Definition{
-				Pattern:    parsed.PNamed{Location: option.Location, Name: option.Name},
+				Location:   option.Location,
+				Hidden:     option.Hidden || it.Hidden,
+				Name:       option.Name,
+				Params:     params,
 				Expression: body,
 				Type:       type_,
 			})
@@ -133,7 +127,7 @@ func unwrapImports(module *parsed.Module, modules map[ast.QualifiedIdentifier]pa
 		var exp []string
 
 		for _, d := range m.Definitions {
-			n := string(d.Pattern.(parsed.PNamed).Name)
+			n := string(d.Name)
 			if imp.ExposingAll || slices.Contains(imp.Exposing, n) {
 				exp = append(exp, n)
 			}
@@ -179,18 +173,19 @@ func unwrapImports(module *parsed.Module, modules map[ast.QualifiedIdentifier]pa
 	}
 }
 
-var nextDefinitionId = uint64(0)
-
 func normalizeDefinition(
 	modules map[ast.QualifiedIdentifier]parsed.Module, module parsed.Module, def parsed.Definition,
 ) normalized.Definition {
-	nextDefinitionId++
+	lastDefinitionId++
 	o := normalized.Definition{
-		Id:       nextDefinitionId,
+		Id:       lastDefinitionId,
+		Name:     def.Name,
 		Location: def.Location,
 		Hidden:   def.Hidden,
 	}
-	o.Pattern = normalizePattern(modules, module, def.Pattern)
+	o.Params = common.Map(func(x parsed.Pattern) normalized.Pattern {
+		return normalizePattern(modules, module, x)
+	}, def.Params)
 	o.Expression = normalizeExpression(modules, module, def.Expression)
 	o.Type = normalizeType(modules, module, def.Type)
 	return o
@@ -250,7 +245,7 @@ func normalizePattern(
 				Location:       e.Location,
 				Type:           normalizeType(modules, module, e.Type),
 				ModuleName:     mod.Name,
-				DefinitionName: def.Pattern.(parsed.PNamed).Name,
+				DefinitionName: def.Name,
 				Values:         common.Map(normalize, e.Values),
 			}
 		}
@@ -353,9 +348,10 @@ func normalizeExpression(
 		{
 			e := expr.(parsed.Let)
 			return normalized.Let{
-				Location:   e.Location,
-				Definition: normalizeDefinition(modules, module, e.Definition),
-				Body:       normalize(e.Body),
+				Location: e.Location,
+				Pattern:  normalizePattern(modules, module, e.Pattern),
+				Value:    normalize(e.Value),
+				Body:     normalize(e.Body),
 			}
 		}
 	case parsed.List:
@@ -420,7 +416,7 @@ func normalizeExpression(
 				return normalized.UpdateGlobal{
 					Location:       e.Location,
 					ModuleName:     m.Name,
-					DefinitionName: d.Pattern.(parsed.PNamed).Name,
+					DefinitionName: d.Name,
 					Fields: common.Map(func(i parsed.RecordField) normalized.RecordField {
 						return normalized.RecordField{
 							Location: i.Location,
@@ -557,7 +553,7 @@ func normalizeExpression(
 			}
 			if m, d, ok := findParsedDefinition(modules, module, e.Name); ok {
 				o.ModuleName = m.Name
-				o.DefinitionName = d.Pattern.(parsed.PNamed).Name
+				o.DefinitionName = d.Name
 			}
 			return o
 		}
@@ -578,7 +574,7 @@ func normalizeExpression(
 				return normalized.Var{
 					Location:       e.Location,
 					ModuleName:     m.Name,
-					DefinitionName: d.Pattern.(parsed.PNamed).Name,
+					DefinitionName: d.Name,
 				}
 			}
 		}
@@ -675,8 +671,7 @@ func findParsedDefinition(
 	modules map[ast.QualifiedIdentifier]parsed.Module, module parsed.Module, name ast.QualifiedIdentifier,
 ) (parsed.Module, parsed.Definition, bool) {
 	var defNameEq = func(x parsed.Definition) bool {
-		n, ok := x.Pattern.(parsed.PNamed)
-		return ok && ast.QualifiedIdentifier(n.Name) == name
+		return ast.QualifiedIdentifier(x.Name) == name
 	}
 
 	if def, ok := common.Find(defNameEq, module.Definitions); ok {

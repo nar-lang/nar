@@ -40,7 +40,7 @@ func Compile(
 	}()
 
 	parsedModules := map[ast.QualifiedIdentifier]parsed.Module{}
-	normalizedModules := map[ast.QualifiedIdentifier]normalized.Module{}
+	normalizedModules := map[ast.QualifiedIdentifier]*normalized.Module{}
 	typedModules := map[ast.QualifiedIdentifier]*typed.Module{}
 
 	bin := bytecode.Binary{

@@ -40,8 +40,9 @@ func (If) _expression() {}
 
 type Let struct {
 	ast.Location
-	Definition Definition
-	Body       Expression
+	Pattern Pattern
+	Value   Expression
+	Body    Expression
 }
 
 func (Let) _expression() {}

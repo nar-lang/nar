@@ -9,8 +9,6 @@ import (
 	"slices"
 )
 
-var lambdaIndex = uint64(0)
-
 func Compose(
 	moduleName ast.QualifiedIdentifier,
 	modules map[ast.QualifiedIdentifier]*typed.Module,
@@ -29,54 +27,39 @@ func Compose(
 		Compose(depPath, modules, binary)
 	}
 
-	var names []ast.Identifier
-	for n := range m.Definitions {
-		names = append(names, n)
-	}
-	slices.Sort(names)
-	for _, name := range names {
-		extId := common.MakeExternalIdentifier(m.Name, name)
+	for _, def := range m.Definitions {
+		extId := common.MakeExternalIdentifier(m.Name, def.Name)
 		binary.FuncsMap[extId] = bytecode.Pointer(len(binary.Funcs))
 		binary.Funcs = append(binary.Funcs, bytecode.Func{})
 	}
 
-	for _, name := range names {
-		def := m.Definitions[name]
-		pathId := common.MakeExternalIdentifier(m.Name, name)
+	for _, def := range m.Definitions {
+		pathId := common.MakeExternalIdentifier(m.Name, def.Name)
+
 		ptr := binary.FuncsMap[pathId]
 		if binary.Funcs[ptr].Ops == nil {
-			binary.Funcs[ptr] = composeDefinition(def.Expression, binary)
+			binary.Funcs[ptr] = composeDefinition(def, binary)
 			if !def.Hidden {
-				binary.Exports[common.MakeExternalIdentifier(m.Name, name)] = ptr
+				binary.Exports[pathId] = ptr
 			}
 		}
 	}
 }
 
-func composeDefinition(def typed.Expression, binary *bytecode.Binary) bytecode.Func {
-	if fn, ok := def.(*typed.Lambda); ok {
-		var ops []bytecode.Op
-		var locations []ast.Location
-		for i := len(fn.Params) - 1; i >= 0; i-- {
-			p := fn.Params[i]
-			ops, locations = composePattern(p, ops, locations, binary)
-			ops, locations = match(0, p.GetLocation(), ops, locations)
-		}
-		ops, locations = composeExpression(fn.Body, ops, locations, binary)
-		return bytecode.Func{
-			NumArgs:   uint32(len(fn.Params)),
-			Ops:       ops,
-			FilePath:  def.GetLocation().FilePath,
-			Locations: locations,
-		}
-	} else {
-		ops, locations := composeExpression(def, nil, nil, binary)
-		return bytecode.Func{
-			NumArgs:   0,
-			Ops:       ops,
-			FilePath:  def.GetLocation().FilePath,
-			Locations: locations,
-		}
+func composeDefinition(def *typed.Definition, binary *bytecode.Binary) bytecode.Func {
+	var ops []bytecode.Op
+	var locations []ast.Location
+	for i := len(def.Params) - 1; i >= 0; i-- {
+		p := def.Params[i]
+		ops, locations = composePattern(p, ops, locations, binary)
+		ops, locations = match(0, p.GetLocation(), ops, locations)
+	}
+	ops, locations = composeExpression(def.Expression, nil, nil, binary)
+	return bytecode.Func{
+		NumArgs:   uint32(len(def.Params)),
+		Ops:       ops,
+		FilePath:  def.Location.FilePath,
+		Locations: locations,
 	}
 }
 
@@ -174,17 +157,6 @@ func composeExpression(
 			ops, locations = makeObject(bytecode.ObjectKindData, len(e.Args), e.Location, ops, locations)
 			break
 		}
-	case *typed.Lambda:
-		{
-			e := expr.(*typed.Lambda)
-			ptr := bytecode.Pointer(len(binary.Funcs))
-			binary.Funcs = append(binary.Funcs, bytecode.Func{})
-			lambdaIndex++
-			binary.FuncsMap[ast.ExternalIdentifier(fmt.Sprintf("$%v", lambdaIndex))] = ptr
-			binary.Funcs[ptr] = composeDefinition(e, binary)
-			ops, locations = loadGlobal(ptr, e.Location, ops, locations)
-			break
-		}
 	case *typed.UpdateLocal:
 		{
 			e := expr.(*typed.UpdateLocal)
@@ -211,8 +183,8 @@ func composeExpression(
 	case *typed.Let:
 		{
 			e := expr.(*typed.Let)
-			ops, locations = composeExpression(e.Definition.Expression, ops, locations, binary)
-			ops, locations = composePattern(e.Definition.Pattern, ops, locations, binary)
+			ops, locations = composeExpression(e.Value, ops, locations, binary)
+			ops, locations = composePattern(e.Pattern, ops, locations, binary)
 			ops, locations = match(0, e.Location, ops, locations)
 			ops, locations = composeExpression(e.Body, ops, locations, binary)
 			break

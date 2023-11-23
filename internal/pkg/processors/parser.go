@@ -909,47 +909,42 @@ func parseExpression(src *Source) parsed.Expression {
 		name := readIdentifier(src, false)
 		typeCursor := src.cursor
 		patterns, ret := parseSignature(src)
-		var def parsed.Definition
+		var pattern parsed.Pattern
+		var value parsed.Expression
 		if nil != name && nil != patterns {
 			if !readExact(src, SeqEqual) {
 				setErrorSource(*src, "expected `=` here")
 			}
-			body := parseExpression(src)
-			if nil == body {
+			value = parseExpression(src)
+			if nil == value {
 				setErrorSource(*src, "expected function body here")
 			}
-			def = parsed.Definition{
-				Pattern: parsed.PNamed{
-					Location: loc(src, defCursor),
-					Name:     ast.Identifier(*name),
-				},
-				Expression: parsed.Lambda{
-					Params: patterns,
-					Return: ret,
-					Body:   body,
-				},
-				Type: parsed.TFunc{
-					Location: loc(src, typeCursor),
-					Params:   common.Map(func(x parsed.Pattern) parsed.Type { return x.GetType() }, patterns),
-					Return:   ret,
-				},
+			value = parsed.Lambda{
+				Location: loc(src, defCursor),
+				Params:   patterns,
+				Body:     value,
+				Return:   ret,
 			}
+			pattern = parsed.PNamed{
+				Location: loc(src, defCursor),
+				Name:     ast.Identifier(*name),
+			}.WithType(parsed.TFunc{
+				Location: loc(src, typeCursor),
+				Params:   common.Map(func(x parsed.Pattern) parsed.Type { return x.GetType() }, patterns),
+				Return:   ret,
+			})
 		} else {
 			src.cursor = defCursor
-			pattern := parsePattern(src)
+			pattern = parsePattern(src)
 			if nil == pattern {
 				setErrorSource(*src, "expected pattern here")
 			}
 			if !readExact(src, SeqEqual) {
 				setErrorSource(*src, "expected `=` here")
 			}
-			expr := parseExpression(src)
-			if nil == expr {
+			value = parseExpression(src)
+			if nil == value {
 				setErrorSource(*src, "expected expression here")
-			}
-			def = parsed.Definition{
-				Pattern:    pattern,
-				Expression: expr,
 			}
 		}
 
@@ -964,7 +959,12 @@ func parseExpression(src *Source) parsed.Expression {
 		if nil == body {
 			setErrorSource(*src, "expected expression here")
 		}
-		return finishParseExpression(src, parsed.Let{Location: loc(src, cursor), Definition: def, Body: body})
+		return finishParseExpression(src, parsed.Let{
+			Location: loc(src, cursor),
+			Pattern:  pattern,
+			Value:    value,
+			Body:     body,
+		})
 	}
 
 	//select
@@ -1392,7 +1392,6 @@ func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Defin
 	}
 	hidden := readExact(src, KwHidden)
 	extern := readExact(src, KwExtern)
-	nameCursor := src.cursor
 	name := readIdentifier(src, false)
 	var type_ parsed.Type
 	var expr parsed.Expression
@@ -1420,7 +1419,6 @@ func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Defin
 			}
 		}
 	} else {
-		exprCursor := typeCursor
 		if extern {
 			expr = parsed.NativeCall{
 				Location: loc(src, typeCursor),
@@ -1436,19 +1434,10 @@ func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Defin
 			if !readExact(src, SeqEqual) {
 				setErrorSource(*src, "expected `=` here")
 			}
-			exprCursor = src.cursor
 			expr = parseExpression(src)
 			if nil == expr {
 				setErrorSource(*src, "expected expression here")
 			}
-
-		}
-
-		expr = parsed.Lambda{
-			Location: loc(src, exprCursor),
-			Params:   params,
-			Return:   ret,
-			Body:     expr,
 		}
 
 		type_ = parsed.TFunc{
@@ -1461,7 +1450,8 @@ func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Defin
 	return &parsed.Definition{
 		Location:   loc(src, cursor),
 		Hidden:     hidden,
-		Pattern:    parsed.PNamed{Location: loc(src, nameCursor), Name: ast.Identifier(*name)},
+		Name:       ast.Identifier(*name),
+		Params:     params,
 		Expression: expr,
 		Type:       type_,
 	}

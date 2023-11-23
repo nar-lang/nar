@@ -41,7 +41,8 @@ type Infix struct {
 type Definition struct {
 	Location   ast.Location
 	Hidden     bool
-	Pattern    Pattern
+	Name       ast.Identifier
+	Params     []Pattern
 	Expression Expression
 	Type       Type
 }
