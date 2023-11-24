@@ -6,6 +6,7 @@ import (
 
 type Error struct {
 	Location ast.Location
+	Extra    []ast.Location
 	Message  string
 }
 

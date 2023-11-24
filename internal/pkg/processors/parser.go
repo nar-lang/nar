@@ -908,10 +908,12 @@ func parseExpression(src *Source) parsed.Expression {
 		defCursor := src.cursor
 		name := readIdentifier(src, false)
 		typeCursor := src.cursor
-		patterns, ret := parseSignature(src)
+		params, ret := parseSignature(src)
 		var pattern parsed.Pattern
 		var value parsed.Expression
-		if nil != name && nil != patterns {
+		var fnType parsed.Type
+		isDef := nil != name && nil != params
+		if isDef {
 			if !readExact(src, SeqEqual) {
 				setErrorSource(*src, "expected `=` here")
 			}
@@ -919,20 +921,15 @@ func parseExpression(src *Source) parsed.Expression {
 			if nil == value {
 				setErrorSource(*src, "expected function body here")
 			}
-			value = parsed.Lambda{
-				Location: loc(src, defCursor),
-				Params:   patterns,
-				Body:     value,
-				Return:   ret,
-			}
 			pattern = parsed.PNamed{
 				Location: loc(src, defCursor),
 				Name:     ast.Identifier(*name),
-			}.WithType(parsed.TFunc{
+			}
+			fnType = parsed.TFunc{
 				Location: loc(src, typeCursor),
-				Params:   common.Map(func(x parsed.Pattern) parsed.Type { return x.GetType() }, patterns),
+				Params:   common.Map(func(x parsed.Pattern) parsed.Type { return x.GetType() }, params),
 				Return:   ret,
-			})
+			}
 		} else {
 			src.cursor = defCursor
 			pattern = parsePattern(src)
@@ -955,16 +952,27 @@ func parseExpression(src *Source) parsed.Expression {
 			setErrorSource(*src, "expected `let` or `in` here")
 		}
 
-		body := parseExpression(src)
-		if nil == body {
+		nested := parseExpression(src)
+		if nil == nested {
 			setErrorSource(*src, "expected expression here")
 		}
-		return finishParseExpression(src, parsed.Let{
-			Location: loc(src, cursor),
-			Pattern:  pattern,
-			Value:    value,
-			Body:     body,
-		})
+		if isDef {
+			return finishParseExpression(src, parsed.LetDef{
+				Location: loc(src, cursor),
+				Name:     ast.Identifier(*name),
+				Params:   params,
+				Body:     value,
+				FnType:   fnType,
+				Nested:   nested,
+			})
+		} else {
+			return finishParseExpression(src, parsed.LetMatch{
+				Location: loc(src, cursor),
+				Pattern:  pattern,
+				Value:    value,
+				Nested:   nested,
+			})
+		}
 	}
 
 	//select

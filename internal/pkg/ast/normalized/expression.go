@@ -38,14 +38,25 @@ type If struct {
 
 func (If) _expression() {}
 
-type Let struct {
+type LetMatch struct {
 	ast.Location
 	Pattern Pattern
 	Value   Expression
-	Body    Expression
+	Nested  Expression
 }
 
-func (Let) _expression() {}
+func (LetMatch) _expression() {}
+
+type LetDef struct {
+	ast.Location
+	Name   ast.Identifier
+	Params []Pattern
+	Body   Expression
+	FnType Type
+	Nested Expression
+}
+
+func (LetDef) _expression() {}
 
 type List struct {
 	ast.Location
@@ -130,11 +141,17 @@ type NativeCall struct {
 
 func (NativeCall) _expression() {}
 
-type Var struct {
+type Local struct {
 	ast.Location
-	Name           ast.QualifiedIdentifier
+	Name ast.Identifier
+}
+
+func (Local) _expression() {}
+
+type Global struct {
+	ast.Location
 	ModuleName     ast.QualifiedIdentifier
 	DefinitionName ast.Identifier
 }
 
-func (Var) _expression() {}
+func (Global) _expression() {}

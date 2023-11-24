@@ -13,14 +13,15 @@ import (
 	"strings"
 )
 
-var lastLambdaId = uint64(0)
+//TODO: int constant should have num type to match float equation
+
 var unboundIndex = uint64(0)
 var annotations []struct {
 	fmt.Stringer
 	typed.Type
 }
 
-const dumpDebugOutput = true
+const dumpDebugOutput = false
 
 type symbolsMap map[ast.Identifier]typed.Type
 type localDefsMap map[ast.Identifier]*typed.Definition
@@ -133,7 +134,7 @@ func annotateDefinition(
 	modules map[ast.QualifiedIdentifier]*normalized.Module,
 	typedModules map[ast.QualifiedIdentifier]*typed.Module,
 	moduleName ast.QualifiedIdentifier,
-	def normalized.Definition,
+	def *normalized.Definition,
 	stack []*typed.Definition,
 ) (*typed.Definition, symbolsMap, typeParamsMap) {
 	o := &typed.Definition{
@@ -370,9 +371,9 @@ func annotateExpression(
 			}
 			break
 		}
-	case normalized.Let:
+	case normalized.LetMatch:
 		{
-			e := expr.(normalized.Let)
+			e := expr.(normalized.LetMatch)
 
 			localSymbols := maps.Clone(symbols)
 			localTypeParams := maps.Clone(typeParams)
@@ -382,47 +383,8 @@ func annotateExpression(
 				Type:     annotateType(localTypeParams, nil, e.Location, true),
 				Pattern:  annotatePattern(localSymbols, localTypeParams, modules, typedModules, moduleName, e.Pattern, true, stack),
 				Value:    annotateExpression(localSymbols, localTypeParams, modules, typedModules, moduleName, e.Value, stack),
-				Body:     annotateExpression(localSymbols, localTypeParams, modules, typedModules, moduleName, e.Body, stack),
+				Body:     annotateExpression(localSymbols, localTypeParams, modules, typedModules, moduleName, e.Nested, stack),
 			}
-			break
-		}
-	case normalized.Lambda:
-		{
-			e := expr.(normalized.Lambda)
-			lastLambdaId++
-			name := ast.Identifier(fmt.Sprintf("_lambda_%v", lastLambdaId))
-			vars := extractVars(e.Body, symbols, nil)
-
-			lastDefinitionId++
-			modules[moduleName].Definitions = append(modules[moduleName].Definitions, normalized.Definition{
-				Id:   lastDefinitionId,
-				Name: name,
-				Params: append(
-					common.Map(func(v ast.Identifier) normalized.Pattern {
-						return normalized.PNamed{Location: e.Location, Name: v}
-					}, vars),
-					e.Params...),
-				Expression: e.Body,
-				Type:       nil, //TODO: allow typed lambdas
-				Location:   e.Location,
-				Hidden:     true,
-			})
-
-			o = annotate(normalized.Apply{
-				Location: ast.Location{},
-				Func: normalized.Var{
-					Location:       e.Location,
-					ModuleName:     moduleName,
-					DefinitionName: name,
-				},
-				Args: common.Map(func(v ast.Identifier) normalized.Expression {
-					return normalized.Var{
-						Location: e.Location,
-						Name:     ast.QualifiedIdentifier(v),
-					}
-				}, vars),
-			})
-
 			break
 		}
 	case normalized.List:
@@ -555,33 +517,36 @@ func annotateExpression(
 			}
 			break
 		}
-	case normalized.Var:
+	case normalized.Local:
 		{
-			e := expr.(normalized.Var)
-
-			if localType, ok := symbols[ast.Identifier(e.Name)]; ok {
-				o = &typed.Local{
-					Location: e.Location,
-					Type:     localType,
-					Name:     ast.Identifier(e.Name),
-				}
-			} else if e.DefinitionName != "" {
-				def := getAnnotatedGlobal(e.ModuleName, e.DefinitionName, modules, typedModules, stack)
-
-				o = &typed.Global{
-					Location:       e.Location,
-					Type:           def.GetType(),
-					ModuleName:     e.ModuleName,
-					DefinitionName: e.DefinitionName,
-					Definition:     def,
-				}
-			} else {
-				panic(common.Error{
-					Location: e.Location,
-					Message:  fmt.Sprintf("unknown identifier `%s`", e.Name),
-				})
+			e := expr.(normalized.Local)
+			localType, ok := symbols[e.Name]
+			if !ok {
+				panic(common.Error{Location: e.Location, Message: fmt.Sprintf("local variable `%s` not found", e.Name)})
 			}
+			o = &typed.Local{
+				Location: e.Location,
+				Type:     localType,
+				Name:     e.Name,
+			}
+			break
+		}
+	case normalized.Global:
+		{
+			e := expr.(normalized.Global)
+			def := getAnnotatedGlobal(e.ModuleName, e.DefinitionName, modules, typedModules, stack)
 
+			dt := def.GetType()
+			if dt == nil {
+				dt = annotateType(typeParams, nil, e.Location, false)
+			}
+			o = &typed.Global{
+				Location:       e.Location,
+				Type:           dt,
+				ModuleName:     e.ModuleName,
+				DefinitionName: e.DefinitionName,
+				Definition:     def,
+			}
 			break
 		}
 	default:
@@ -602,7 +567,7 @@ func getAnnotatedGlobal(
 	typedModules map[ast.QualifiedIdentifier]*typed.Module,
 	stack []*typed.Definition,
 ) *typed.Definition {
-	nDef, ok := common.Find(func(definition normalized.Definition) bool {
+	nDef, ok := common.Find(func(definition *normalized.Definition) bool {
 		return definition.Name == definitionName
 	}, modules[moduleName].Definitions)
 	if !ok {
@@ -1369,7 +1334,10 @@ func unify(x typed.Type, y typed.Type, loc ast.Location, subst map[uint64]typed.
 				ex := x.(*typed.TRecord)
 				if len(ex.Fields) != len(ey.Fields) {
 					//TODO: prefer intersection match?
-					panic(common.Error{Location: ex.Location, Message: "record fields number mismatch"})
+					panic(common.Error{
+						Location: ex.Location,
+						Extra:    []ast.Location{ey.Location},
+						Message:  "record fields number mismatch"})
 				}
 				for i, f := range ex.Fields {
 					unify(f, ey.Fields[i], loc, subst)
@@ -1383,7 +1351,10 @@ func unify(x typed.Type, y typed.Type, loc ast.Location, subst map[uint64]typed.
 			if ey, ok := y.(*typed.TTuple); ok {
 				ex := x.(*typed.TTuple)
 				if len(ex.Items) != len(ey.Items) {
-					panic(common.Error{Location: ex.Location, Message: "tuple lengths mismatch"})
+					panic(common.Error{
+						Location: ex.Location,
+						Extra:    []ast.Location{ey.Location},
+						Message:  "tuple lengths mismatch"})
 				}
 				for i, p := range ex.Items {
 					unify(p, ey.Items[i], loc, subst)
@@ -1410,7 +1381,11 @@ func unify(x typed.Type, y typed.Type, loc ast.Location, subst map[uint64]typed.
 	default:
 		panic(common.SystemError{Message: "invalid case"})
 	}
-	panic(common.Error{Location: loc, Message: fmt.Sprintf("%v cannot be matched with %v", x, y)})
+	panic(common.Error{
+		Location: loc,
+		Extra:    []ast.Location{x.GetLocation(), y.GetLocation()},
+		Message:  fmt.Sprintf("%v cannot be matched with %v", x, y),
+	})
 }
 
 func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc ast.Location, subst map[uint64]typed.Type) {
@@ -1427,6 +1402,7 @@ func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc ast.Location, subst map
 		if OccursCheck(v, typ, subst) {
 			panic(common.Error{
 				Location: loc,
+				Extra:    []ast.Location{v.Location, typ.GetLocation()},
 				Message:  fmt.Sprintf("ambigous type: %v vs %v", applyType(v, subst), applyType(typ, subst)),
 			})
 		}
@@ -1886,120 +1862,4 @@ func applyExpression(expr typed.Expression, subst map[uint64]typed.Type) typed.E
 		panic(common.SystemError{Message: "invalid case"})
 	}
 	return expr
-}
-
-func extractVars(expr normalized.Expression, symbols symbolsMap, vars []ast.Identifier) []ast.Identifier {
-	switch expr.(type) {
-	case normalized.Access:
-		{
-			e := expr.(normalized.Access)
-			vars = append(vars, e.FieldName)
-			vars = extractVars(e.Record, symbols, vars)
-			break
-		}
-	case normalized.Apply:
-		{
-			e := expr.(normalized.Apply)
-			vars = extractVars(e.Func, symbols, vars)
-			for _, a := range e.Args {
-				vars = extractVars(a, symbols, vars)
-			}
-			break
-		}
-	case normalized.Const:
-		{
-			break
-		}
-	case normalized.If:
-		{
-			e := expr.(normalized.If)
-			vars = extractVars(e.Condition, symbols, vars)
-			vars = extractVars(e.Positive, symbols, vars)
-			vars = extractVars(e.Negative, symbols, vars)
-			break
-		}
-	case normalized.Let:
-		{
-			e := expr.(normalized.Let)
-			vars = extractVars(e.Value, symbols, vars)
-			vars = extractVars(e.Body, symbols, vars)
-			break
-		}
-	case normalized.List:
-		{
-			e := expr.(normalized.List)
-			for _, i := range e.Items {
-				vars = extractVars(i, symbols, vars)
-			}
-			break
-		}
-	case normalized.Record:
-		{
-			e := expr.(normalized.Record)
-			for _, f := range e.Fields {
-				vars = extractVars(f.Value, symbols, vars)
-			}
-			break
-		}
-	case normalized.Select:
-		{
-			e := expr.(normalized.Select)
-			vars = extractVars(e.Condition, symbols, vars)
-			for _, c := range e.Cases {
-				vars = extractVars(c.Expression, symbols, vars)
-			}
-			break
-		}
-	case normalized.Tuple:
-		{
-			e := expr.(normalized.Tuple)
-			for _, i := range e.Items {
-				vars = extractVars(i, symbols, vars)
-			}
-			break
-		}
-	case normalized.UpdateLocal:
-		{
-			e := expr.(normalized.UpdateLocal)
-			for _, f := range e.Fields {
-				vars = extractVars(f.Value, symbols, vars)
-			}
-			break
-		}
-	case normalized.UpdateGlobal:
-		{
-			e := expr.(normalized.UpdateGlobal)
-			for _, f := range e.Fields {
-				vars = extractVars(f.Value, symbols, vars)
-			}
-			break
-		}
-	case normalized.Constructor:
-		{
-			e := expr.(normalized.Constructor)
-			for _, a := range e.Args {
-				vars = extractVars(a, symbols, vars)
-			}
-			break
-		}
-	case normalized.NativeCall:
-		{
-			e := expr.(normalized.NativeCall)
-			for _, a := range e.Args {
-				vars = extractVars(a, symbols, vars)
-			}
-			break
-		}
-	case normalized.Var:
-		{
-			e := expr.(normalized.Var)
-			if _, ok := symbols[ast.Identifier(e.Name)]; ok {
-				vars = append(vars, ast.Identifier(e.Name))
-			}
-			break
-		}
-	default:
-		panic(common.SystemError{Message: "invalid case"})
-	}
-	return vars
 }

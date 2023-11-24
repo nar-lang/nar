@@ -17,5 +17,5 @@ type Definition struct {
 type Module struct {
 	Name         ast.QualifiedIdentifier
 	Dependencies []ast.QualifiedIdentifier
-	Definitions  []Definition
+	Definitions  []*Definition
 }

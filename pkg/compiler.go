@@ -11,10 +11,11 @@ import (
 	"oak-compiler/internal/pkg/common"
 	"oak-compiler/internal/pkg/processors"
 	"os"
+	"strings"
 )
 
 func Compile(
-	moduleUrls []string, outPath string, debug bool, cachePath string, log io.Writer,
+	moduleUrls []string, outPath string, debug bool, upgrade bool, cachePath string, log io.Writer,
 ) (err error) {
 	defer func() {
 		x := recover()
@@ -24,7 +25,15 @@ func Compile(
 				{
 					e := x.(common.Error)
 					line, col := e.Location.GetLineAndColumn()
-					err = fmt.Errorf("%s:%d:%d %s\n", e.Location.FilePath, line, col, e.Message)
+					sb := strings.Builder{}
+					sb.WriteString(fmt.Sprintf("%s:%d:%d %s\n", e.Location.FilePath, line, col, e.Message))
+					if len(e.Extra) > 0 {
+						for _, extra := range e.Extra {
+							line, col = extra.GetLineAndColumn()
+							sb.WriteString(fmt.Sprintf("  + %s:%d:%d\n", extra.FilePath, line, col))
+						}
+					}
+					err = fmt.Errorf(sb.String())
 					return
 				}
 			case common.SystemError:
@@ -34,12 +43,13 @@ func Compile(
 					break
 				}
 			default:
+				panic(x)
 				err = fmt.Errorf("%v", x)
 			}
 		}
 	}()
 
-	parsedModules := map[ast.QualifiedIdentifier]parsed.Module{}
+	parsedModules := map[ast.QualifiedIdentifier]*parsed.Module{}
 	normalizedModules := map[ast.QualifiedIdentifier]*normalized.Module{}
 	typedModules := map[ast.QualifiedIdentifier]*typed.Module{}
 
@@ -52,7 +62,7 @@ func Compile(
 
 	var loadedPackages []processors.LoadedPackage
 	for _, url := range moduleUrls {
-		loadedPackages = processors.LoadPackage(url, cachePath, log, loadedPackages)
+		loadedPackages = processors.LoadPackage(url, cachePath, log, upgrade, loadedPackages)
 	}
 
 	for i := len(loadedPackages) - 1; i >= 0; i-- {
@@ -64,7 +74,7 @@ func Compile(
 					Message: fmt.Sprintf("module name collision: `%s`", existedModule.Name),
 				})
 			}
-			parsedModules[parsedModule.Name] = parsedModule
+			parsedModules[parsedModule.Name] = &parsedModule
 		}
 	}
 
@@ -80,5 +90,7 @@ func Compile(
 	}
 
 	bin.Build(file, debug)
+
+	_, _ = fmt.Fprintf(log, "compilation finished successfully\n")
 	return nil
 }

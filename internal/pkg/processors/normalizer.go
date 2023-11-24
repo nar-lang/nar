@@ -2,6 +2,7 @@ package processors
 
 import (
 	"fmt"
+	"maps"
 	"oak-compiler/internal/pkg/ast"
 	"oak-compiler/internal/pkg/ast/normalized"
 	"oak-compiler/internal/pkg/ast/parsed"
@@ -11,10 +12,11 @@ import (
 )
 
 var lastDefinitionId = uint64(0)
+var lastLambdaId = uint64(0)
 
 func Normalize(
 	moduleName ast.QualifiedIdentifier,
-	modules map[ast.QualifiedIdentifier]parsed.Module,
+	modules map[ast.QualifiedIdentifier]*parsed.Module,
 	normalizedModules map[ast.QualifiedIdentifier]*normalized.Module,
 ) {
 	if _, ok := normalizedModules[moduleName]; ok {
@@ -27,16 +29,20 @@ func Normalize(
 		Normalize(imp.ModuleIdentifier, modules, normalizedModules)
 	}
 
-	flattenDataTypes(&m)
-	unwrapImports(&m, modules)
+	flattenDataTypes(m)
+	unwrapImports(m, modules)
 	modules[moduleName] = m
 
 	o := &normalized.Module{
 		Name: m.Name,
 	}
 
+	lastLambdaId = 0
+
 	for _, def := range m.Definitions {
-		o.Definitions = append(o.Definitions, normalizeDefinition(modules, m, def))
+		nDef, params := normalizeDefinition(modules, m, def)
+		nDef.Expression = flattenLambdas(nDef.Expression, o, params)
+		o.Definitions = append(o.Definitions, &nDef)
 	}
 
 	for _, imp := range m.Imports {
@@ -44,6 +50,411 @@ func Normalize(
 	}
 
 	normalizedModules[m.Name] = o
+}
+
+func extractLocals(pattern normalized.Pattern, locals map[ast.Identifier]struct{}) {
+	switch pattern.(type) {
+	case normalized.PAlias:
+		{
+			e := pattern.(normalized.PAlias)
+			locals[e.Alias] = struct{}{}
+			extractLocals(e.Nested, locals)
+			break
+		}
+	case normalized.PAny:
+		{
+			break
+		}
+	case normalized.PCons:
+		{
+			e := pattern.(normalized.PCons)
+			extractLocals(e.Head, locals)
+			extractLocals(e.Tail, locals)
+			break
+		}
+	case normalized.PConst:
+		{
+			break
+		}
+	case normalized.PDataOption:
+		{
+			e := pattern.(normalized.PDataOption)
+			for _, v := range e.Values {
+				extractLocals(v, locals)
+			}
+			break
+		}
+	case normalized.PList:
+		{
+			e := pattern.(normalized.PList)
+			for _, v := range e.Items {
+				extractLocals(v, locals)
+			}
+			break
+		}
+	case normalized.PNamed:
+		{
+			e := pattern.(normalized.PNamed)
+			locals[e.Name] = struct{}{}
+			break
+		}
+	case normalized.PRecord:
+		{
+			e := pattern.(normalized.PRecord)
+			for _, v := range e.Fields {
+				locals[v.Name] = struct{}{}
+			}
+			break
+		}
+	case normalized.PTuple:
+		{
+			e := pattern.(normalized.PTuple)
+			for _, v := range e.Items {
+				extractLocals(v, locals)
+			}
+			break
+		}
+	default:
+		panic(common.SystemError{Message: "impossible case"})
+	}
+}
+
+func extractLambda(
+	loc ast.Location, params []normalized.Pattern, body normalized.Expression,
+	m *normalized.Module, locals map[ast.Identifier]struct{},
+) (def *normalized.Definition, usedLocals []ast.Identifier, replacement normalized.Expression) {
+	lastLambdaId++
+	lambdaName := ast.Identifier(fmt.Sprintf("_lambda_%d", lastLambdaId))
+	usedLocals = extractUsedLocals(body, locals)
+
+	lastDefinitionId++
+	def = &normalized.Definition{
+		Id:   lastDefinitionId,
+		Name: lambdaName,
+		Params: append(
+			common.Map(func(x ast.Identifier) normalized.Pattern {
+				return normalized.PNamed{Location: loc, Name: x}
+			}, usedLocals),
+			params...),
+		Expression: body,
+		Location:   loc,
+		Hidden:     true,
+	}
+	m.Definitions = append(m.Definitions, def)
+
+	replacement = normalized.Global{
+		Location:       loc,
+		ModuleName:     m.Name,
+		DefinitionName: def.Name,
+	}
+
+	if len(usedLocals) > 0 {
+		replacement = normalized.Apply{
+			Location: loc,
+			Func:     replacement,
+			Args: common.Map(func(x ast.Identifier) normalized.Expression {
+				return normalized.Local{
+					Location: loc,
+					Name:     x,
+				}
+			}, usedLocals),
+		}
+	}
+
+	return
+}
+
+func flattenLambdas(
+	expr normalized.Expression, m *normalized.Module, locals map[ast.Identifier]struct{},
+) normalized.Expression {
+	switch expr.(type) {
+	case normalized.Lambda:
+		{
+			e := expr.(normalized.Lambda)
+			_, _, replacement := extractLambda(e.Location, e.Params, e.Body, m, locals)
+			return replacement
+		}
+	case normalized.LetDef:
+		{
+			e := expr.(normalized.LetDef)
+			def, usedLocals, replacement := extractLambda(e.Location, e.Params, e.Body, m, locals)
+
+			if len(usedLocals) > 0 {
+				replName := ast.Identifier(fmt.Sprintf("_lambda_closue_%d", lastLambdaId))
+				replaceMap := map[ast.Identifier]normalized.Expression{}
+				replaceMap[e.Name] = normalized.Local{
+					Location: e.Location,
+					Name:     replName,
+				}
+
+				let := normalized.LetMatch{
+					Location: e.Location,
+					Pattern: normalized.PNamed{
+						Location: e.Location,
+						Name:     replName,
+					},
+					Value:  replacement,
+					Nested: replaceLocals(def.Expression, replaceMap),
+				}
+				def.Expression = let
+
+				let.Nested = replaceLocals(e.Nested, replaceMap)
+				let.Nested = flattenLambdas(let.Nested, m, locals)
+				return let
+			} else {
+				replaceMap := map[ast.Identifier]normalized.Expression{}
+				replaceMap[e.Name] = replacement
+
+				def.Expression = replaceLocals(def.Expression, replaceMap)
+
+				return flattenLambdas(replaceLocals(e.Nested, replaceMap), m, locals)
+			}
+		}
+	case normalized.LetMatch:
+		{
+			e := expr.(normalized.LetMatch)
+			innerLocals := maps.Clone(locals)
+			extractLocals(e.Pattern, innerLocals)
+			e.Value = flattenLambdas(e.Value, m, innerLocals)
+			e.Nested = flattenLambdas(e.Nested, m, innerLocals)
+			return e
+		}
+	case normalized.Access:
+		{
+			e := expr.(normalized.Access)
+			e.Record = flattenLambdas(e.Record, m, locals)
+			return e
+		}
+	case normalized.Apply:
+		{
+			e := expr.(normalized.Apply)
+			e.Func = flattenLambdas(e.Func, m, locals)
+			for i, a := range e.Args {
+				e.Args[i] = flattenLambdas(a, m, locals)
+			}
+			return e
+		}
+	case normalized.If:
+		{
+			e := expr.(normalized.If)
+			e.Condition = flattenLambdas(e.Condition, m, locals)
+			e.Positive = flattenLambdas(e.Positive, m, locals)
+			e.Negative = flattenLambdas(e.Negative, m, locals)
+			return e
+		}
+	case normalized.List:
+		{
+			e := expr.(normalized.List)
+			for i, a := range e.Items {
+				e.Items[i] = flattenLambdas(a, m, locals)
+			}
+			return e
+		}
+	case normalized.Record:
+		{
+			e := expr.(normalized.Record)
+			for i, a := range e.Fields {
+				e.Fields[i].Value = flattenLambdas(a.Value, m, locals)
+			}
+			return e
+		}
+	case normalized.Select:
+		{
+			e := expr.(normalized.Select)
+			e.Condition = flattenLambdas(e.Condition, m, locals)
+			for i, a := range e.Cases {
+				innerLocals := maps.Clone(locals)
+				extractLocals(a.Pattern, innerLocals)
+				e.Cases[i].Expression = flattenLambdas(a.Expression, m, innerLocals)
+			}
+			return e
+		}
+	case normalized.Tuple:
+		{
+			e := expr.(normalized.Tuple)
+			for i, a := range e.Items {
+				e.Items[i] = flattenLambdas(a, m, locals)
+			}
+			return e
+		}
+	case normalized.UpdateLocal:
+		{
+			e := expr.(normalized.UpdateLocal)
+			for i, a := range e.Fields {
+				e.Fields[i].Value = flattenLambdas(a.Value, m, locals)
+			}
+			return e
+		}
+	case normalized.UpdateGlobal:
+		{
+			e := expr.(normalized.UpdateGlobal)
+			for i, a := range e.Fields {
+				e.Fields[i].Value = flattenLambdas(a.Value, m, locals)
+			}
+			return e
+		}
+	case normalized.Constructor:
+		{
+			e := expr.(normalized.Constructor)
+			for i, a := range e.Args {
+				e.Args[i] = flattenLambdas(a, m, locals)
+			}
+			return e
+		}
+	case normalized.NativeCall:
+		{
+			e := expr.(normalized.NativeCall)
+			for i, a := range e.Args {
+				e.Args[i] = flattenLambdas(a, m, locals)
+			}
+			return e
+		}
+	case normalized.Const:
+		{
+			return expr
+		}
+	case normalized.Global:
+		{
+			return expr
+		}
+	case normalized.Local:
+		{
+			return expr
+		}
+	default:
+		panic(common.SystemError{Message: "invalid case"})
+	}
+}
+
+func replaceLocals(expr normalized.Expression, replace map[ast.Identifier]normalized.Expression) normalized.Expression {
+	switch expr.(type) {
+	case normalized.Lambda:
+		{
+			e := expr.(normalized.Lambda)
+			e.Body = replaceLocals(e.Body, replace)
+			return e
+		}
+	case normalized.LetDef:
+		{
+			e := expr.(normalized.LetDef)
+			e.Body = replaceLocals(e.Body, replace)
+			e.Nested = replaceLocals(e.Nested, replace)
+			return e
+		}
+	case normalized.LetMatch:
+		{
+			e := expr.(normalized.LetMatch)
+			e.Value = replaceLocals(e.Value, replace)
+			e.Nested = replaceLocals(e.Nested, replace)
+			return e
+		}
+	case normalized.Access:
+		{
+			e := expr.(normalized.Access)
+			e.Record = replaceLocals(e.Record, replace)
+			return e
+		}
+	case normalized.Apply:
+		{
+			e := expr.(normalized.Apply)
+			e.Func = replaceLocals(e.Func, replace)
+			for i, a := range e.Args {
+				e.Args[i] = replaceLocals(a, replace)
+			}
+			return e
+		}
+	case normalized.If:
+		{
+			e := expr.(normalized.If)
+			e.Condition = replaceLocals(e.Condition, replace)
+			e.Positive = replaceLocals(e.Positive, replace)
+			e.Negative = replaceLocals(e.Negative, replace)
+			return e
+		}
+	case normalized.List:
+		{
+			e := expr.(normalized.List)
+			for i, a := range e.Items {
+				e.Items[i] = replaceLocals(a, replace)
+			}
+			return e
+		}
+	case normalized.Record:
+		{
+			e := expr.(normalized.Record)
+			for i, a := range e.Fields {
+				e.Fields[i].Value = replaceLocals(a.Value, replace)
+			}
+			return e
+		}
+	case normalized.Select:
+		{
+			e := expr.(normalized.Select)
+			e.Condition = replaceLocals(e.Condition, replace)
+			for i, a := range e.Cases {
+				e.Cases[i].Expression = replaceLocals(a.Expression, replace)
+			}
+			return e
+		}
+	case normalized.Tuple:
+		{
+			e := expr.(normalized.Tuple)
+			for i, a := range e.Items {
+				e.Items[i] = replaceLocals(a, replace)
+			}
+			return e
+		}
+	case normalized.UpdateLocal:
+		{
+			e := expr.(normalized.UpdateLocal)
+			for i, a := range e.Fields {
+				e.Fields[i].Value = replaceLocals(a.Value, replace)
+			}
+			return e
+		}
+	case normalized.UpdateGlobal:
+		{
+			e := expr.(normalized.UpdateGlobal)
+			for i, a := range e.Fields {
+				e.Fields[i].Value = replaceLocals(a.Value, replace)
+			}
+			return e
+		}
+	case normalized.Constructor:
+		{
+			e := expr.(normalized.Constructor)
+			for i, a := range e.Args {
+				e.Args[i] = replaceLocals(a, replace)
+			}
+			return e
+		}
+	case normalized.NativeCall:
+		{
+			e := expr.(normalized.NativeCall)
+			for i, a := range e.Args {
+				e.Args[i] = replaceLocals(a, replace)
+			}
+			return e
+		}
+	case normalized.Const:
+		{
+			return expr
+		}
+	case normalized.Global:
+		{
+			return expr
+		}
+	case normalized.Local:
+		{
+			e := expr.(normalized.Local)
+			if r, ok := replace[e.Name]; ok {
+				return r
+			}
+			return expr
+		}
+	default:
+		panic(common.SystemError{Message: "invalid case"})
+	}
 }
 
 func flattenDataTypes(m *parsed.Module) {
@@ -111,7 +522,7 @@ func flattenDataTypes(m *parsed.Module) {
 	}
 }
 
-func unwrapImports(module *parsed.Module, modules map[ast.QualifiedIdentifier]parsed.Module) {
+func unwrapImports(module *parsed.Module, modules map[ast.QualifiedIdentifier]*parsed.Module) {
 	for i, imp := range module.Imports {
 		m := modules[imp.ModuleIdentifier]
 		modName := m.Name
@@ -174,8 +585,8 @@ func unwrapImports(module *parsed.Module, modules map[ast.QualifiedIdentifier]pa
 }
 
 func normalizeDefinition(
-	modules map[ast.QualifiedIdentifier]parsed.Module, module parsed.Module, def parsed.Definition,
-) normalized.Definition {
+	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module, def parsed.Definition,
+) (normalized.Definition, map[ast.Identifier]struct{}) {
 	lastDefinitionId++
 	o := normalized.Definition{
 		Id:       lastDefinitionId,
@@ -183,23 +594,28 @@ func normalizeDefinition(
 		Location: def.Location,
 		Hidden:   def.Hidden,
 	}
+	params := map[ast.Identifier]struct{}{}
 	o.Params = common.Map(func(x parsed.Pattern) normalized.Pattern {
-		return normalizePattern(modules, module, x)
+		return normalizePattern(params, modules, module, x)
 	}, def.Params)
-	o.Expression = normalizeExpression(modules, module, def.Expression)
+	locals := maps.Clone(params)
+	o.Expression = normalizeExpression(locals, modules, module, def.Expression)
 	o.Type = normalizeType(modules, module, def.Type)
-	return o
+	return o, params
 }
 
 func normalizePattern(
-	modules map[ast.QualifiedIdentifier]parsed.Module, module parsed.Module, pattern parsed.Pattern,
+	locals map[ast.Identifier]struct{},
+	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module,
+	pattern parsed.Pattern,
 ) normalized.Pattern {
-	normalize := func(p parsed.Pattern) normalized.Pattern { return normalizePattern(modules, module, p) }
+	normalize := func(p parsed.Pattern) normalized.Pattern { return normalizePattern(locals, modules, module, p) }
 
 	switch pattern.(type) {
 	case parsed.PAlias:
 		{
 			e := pattern.(parsed.PAlias)
+			locals[e.Alias] = struct{}{}
 			return normalized.PAlias{
 				Location: e.Location,
 				Type:     normalizeType(modules, module, e.Type),
@@ -261,6 +677,7 @@ func normalizePattern(
 	case parsed.PNamed:
 		{
 			e := pattern.(parsed.PNamed)
+			locals[e.Name] = struct{}{}
 			return normalized.PNamed{
 				Location: e.Location,
 				Type:     normalizeType(modules, module, e.Type),
@@ -292,10 +709,12 @@ func normalizePattern(
 }
 
 func normalizeExpression(
-	modules map[ast.QualifiedIdentifier]parsed.Module, module parsed.Module, expr parsed.Expression,
+	locals map[ast.Identifier]struct{},
+	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module,
+	expr parsed.Expression,
 ) normalized.Expression {
 	normalize := func(e parsed.Expression) normalized.Expression {
-		return normalizeExpression(modules, module, e)
+		return normalizeExpression(locals, modules, module, e)
 	}
 	switch expr.(type) {
 	case parsed.Access:
@@ -344,14 +763,31 @@ func normalizeExpression(
 				Negative:  normalize(e.Negative),
 			}
 		}
-	case parsed.Let:
+	case parsed.LetMatch:
 		{
-			e := expr.(parsed.Let)
-			return normalized.Let{
+			e := expr.(parsed.LetMatch)
+			innerLocals := maps.Clone(locals)
+			return normalized.LetMatch{
 				Location: e.Location,
-				Pattern:  normalizePattern(modules, module, e.Pattern),
-				Value:    normalize(e.Value),
-				Body:     normalize(e.Body),
+				Pattern:  normalizePattern(innerLocals, modules, module, e.Pattern),
+				Value:    normalizeExpression(innerLocals, modules, module, e.Value),
+				Nested:   normalizeExpression(innerLocals, modules, module, e.Nested),
+			}
+		}
+	case parsed.LetDef:
+		{
+			e := expr.(parsed.LetDef)
+			innerLocals := maps.Clone(locals)
+			innerLocals[e.Name] = struct{}{}
+			return normalized.LetDef{
+				Location: e.Location,
+				Name:     e.Name,
+				Params: common.Map(func(x parsed.Pattern) normalized.Pattern {
+					return normalizePattern(innerLocals, modules, module, x)
+				}, e.Params),
+				FnType: normalizeType(modules, module, e.FnType),
+				Body:   normalizeExpression(innerLocals, modules, module, e.Body),
+				Nested: normalizeExpression(innerLocals, modules, module, e.Nested),
 			}
 		}
 	case parsed.List:
@@ -393,10 +829,11 @@ func normalizeExpression(
 				Location:  e.Location,
 				Condition: normalize(e.Condition),
 				Cases: common.Map(func(i parsed.SelectCase) normalized.SelectCase {
+					innerLocals := maps.Clone(locals)
 					return normalized.SelectCase{
 						Location:   e.Location,
-						Pattern:    normalizePattern(modules, module, i.Pattern),
-						Expression: normalize(i.Expression),
+						Pattern:    normalizePattern(innerLocals, modules, module, i.Pattern),
+						Expression: normalizeExpression(innerLocals, modules, module, i.Expression),
 					}
 				}, e.Cases),
 			}
@@ -444,8 +881,8 @@ func normalizeExpression(
 			e := expr.(parsed.Lambda)
 			return normalized.Lambda{
 				Location: e.Location,
-				Params: common.Map(func(p parsed.Pattern) normalized.Pattern {
-					return normalizePattern(modules, module, p)
+				Params: common.Map(func(x parsed.Pattern) normalized.Pattern {
+					return normalizePattern(locals, modules, module, x)
 				}, e.Params),
 				Body: normalize(e.Body),
 			}
@@ -482,7 +919,8 @@ func normalizeExpression(
 
 					for i := len(operators) - 1; i >= 0; i-- {
 						o2 := operators[i]
-						if o2.Fn.Precedence > o1.Fn.Precedence || (o2.Fn.Precedence == o1.Fn.Precedence && o1.Fn.Associativity == parsed.Left) {
+						if o2.Fn.Precedence > o1.Fn.Precedence ||
+							(o2.Fn.Precedence == o1.Fn.Precedence && o1.Fn.Associativity == parsed.Left) {
 							output = append(output, o2)
 							operators = operators[:len(operators)-1]
 						} else {
@@ -523,7 +961,7 @@ func normalizeExpression(
 
 					return normalized.Apply{
 						Location: e.Location,
-						Func: normalized.Var{
+						Func: normalized.Global{
 							Location:       e.Location,
 							ModuleName:     m.Name,
 							DefinitionName: infixA.Alias,
@@ -547,15 +985,22 @@ func normalizeExpression(
 	case parsed.Var:
 		{
 			e := expr.(parsed.Var)
-			o := normalized.Var{
-				Location: e.Location,
-				Name:     e.Name,
+			if _, ok := locals[ast.Identifier(e.Name)]; ok {
+				return normalized.Local{
+					Location: e.Location,
+					Name:     ast.Identifier(e.Name),
+				}
 			}
+
 			if m, d, ok := findParsedDefinition(modules, module, e.Name); ok {
-				o.ModuleName = m.Name
-				o.DefinitionName = d.Name
+				return normalized.Global{
+					Location:       e.Location,
+					ModuleName:     m.Name,
+					DefinitionName: d.Name,
+				}
 			}
-			return o
+
+			panic(common.Error{Location: e.Location, Message: fmt.Sprintf("identifier `%s` no found", e.Name)})
 		}
 	case parsed.InfixVar:
 		{
@@ -571,7 +1016,7 @@ func normalizeExpression(
 					Message:  "infix alias not found",
 				})
 			} else {
-				return normalized.Var{
+				return normalized.Global{
 					Location:       e.Location,
 					ModuleName:     m.Name,
 					DefinitionName: d.Name,
@@ -582,8 +1027,151 @@ func normalizeExpression(
 	panic(common.SystemError{Message: "impossible case"})
 }
 
+func extractUsedLocals(
+	expr normalized.Expression, definedLocals map[ast.Identifier]struct{},
+) []ast.Identifier {
+	usedLocals := map[ast.Identifier]struct{}{}
+	extractUsedLocalsSet(expr, definedLocals, usedLocals)
+	var uniqueLocals []ast.Identifier
+	for k := range usedLocals {
+		uniqueLocals = append(uniqueLocals, k)
+	}
+	return uniqueLocals
+}
+
+func extractUsedLocalsSet(
+	expr normalized.Expression, definedLocals map[ast.Identifier]struct{}, usedLocals map[ast.Identifier]struct{},
+) {
+	switch expr.(type) {
+	case normalized.Local:
+		{
+			e := expr.(normalized.Local)
+			if _, ok := definedLocals[e.Name]; ok {
+				usedLocals[e.Name] = struct{}{}
+			}
+		}
+	case normalized.Access:
+		{
+			e := expr.(normalized.Access)
+			extractUsedLocalsSet(e.Record, definedLocals, usedLocals)
+			break
+		}
+	case normalized.Apply:
+		{
+			e := expr.(normalized.Apply)
+			extractUsedLocalsSet(e.Func, definedLocals, usedLocals)
+			for _, a := range e.Args {
+				extractUsedLocalsSet(a, definedLocals, usedLocals)
+			}
+			break
+		}
+	case normalized.Const:
+		{
+			break
+		}
+	case normalized.If:
+		{
+			e := expr.(normalized.If)
+			extractUsedLocalsSet(e.Condition, definedLocals, usedLocals)
+			extractUsedLocalsSet(e.Positive, definedLocals, usedLocals)
+			extractUsedLocalsSet(e.Negative, definedLocals, usedLocals)
+			break
+		}
+	case normalized.LetMatch:
+		{
+			e := expr.(normalized.LetMatch)
+			extractUsedLocalsSet(e.Value, definedLocals, usedLocals)
+			extractUsedLocalsSet(e.Nested, definedLocals, usedLocals)
+			break
+		}
+	case normalized.LetDef:
+		{
+			e := expr.(normalized.LetDef)
+			extractUsedLocalsSet(e.Body, definedLocals, usedLocals)
+			extractUsedLocalsSet(e.Nested, definedLocals, usedLocals)
+			break
+		}
+	case normalized.List:
+		{
+			e := expr.(normalized.List)
+			for _, i := range e.Items {
+				extractUsedLocalsSet(i, definedLocals, usedLocals)
+			}
+			break
+		}
+	case normalized.Record:
+		{
+			e := expr.(normalized.Record)
+			for _, f := range e.Fields {
+				extractUsedLocalsSet(f.Value, definedLocals, usedLocals)
+			}
+			break
+		}
+	case normalized.Select:
+		{
+			e := expr.(normalized.Select)
+			extractUsedLocalsSet(e.Condition, definedLocals, usedLocals)
+			for _, c := range e.Cases {
+				extractUsedLocalsSet(c.Expression, definedLocals, usedLocals)
+			}
+			break
+		}
+	case normalized.Tuple:
+		{
+			e := expr.(normalized.Tuple)
+			for _, i := range e.Items {
+				extractUsedLocalsSet(i, definedLocals, usedLocals)
+			}
+			break
+		}
+	case normalized.UpdateLocal:
+		{
+			e := expr.(normalized.UpdateLocal)
+			for _, f := range e.Fields {
+				extractUsedLocalsSet(f.Value, definedLocals, usedLocals)
+			}
+			break
+		}
+	case normalized.UpdateGlobal:
+		{
+			e := expr.(normalized.UpdateGlobal)
+			for _, f := range e.Fields {
+				extractUsedLocalsSet(f.Value, definedLocals, usedLocals)
+			}
+			break
+		}
+	case normalized.Constructor:
+		{
+			e := expr.(normalized.Constructor)
+			for _, a := range e.Args {
+				extractUsedLocalsSet(a, definedLocals, usedLocals)
+			}
+			break
+		}
+	case normalized.NativeCall:
+		{
+			e := expr.(normalized.NativeCall)
+			for _, a := range e.Args {
+				extractUsedLocalsSet(a, definedLocals, usedLocals)
+			}
+			break
+		}
+	case normalized.Global:
+		{
+			break
+		}
+	case normalized.Lambda:
+		{
+			e := expr.(normalized.Lambda)
+			extractUsedLocalsSet(e.Body, definedLocals, usedLocals)
+		}
+	default:
+		panic(common.SystemError{Message: "invalid case"})
+	}
+}
+
 func normalizeType(
-	modules map[ast.QualifiedIdentifier]parsed.Module, module parsed.Module, t parsed.Type,
+	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module, t parsed.Type,
 ) normalized.Type {
 	if t == nil {
 		return nil //TODO: find places where it can happen and check there
@@ -668,8 +1256,8 @@ func normalizeType(
 }
 
 func findParsedDefinition(
-	modules map[ast.QualifiedIdentifier]parsed.Module, module parsed.Module, name ast.QualifiedIdentifier,
-) (parsed.Module, parsed.Definition, bool) {
+	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module, name ast.QualifiedIdentifier,
+) (*parsed.Module, parsed.Definition, bool) {
 	var defNameEq = func(x parsed.Definition) bool {
 		return ast.QualifiedIdentifier(x.Name) == name
 	}
@@ -687,12 +1275,12 @@ func findParsedDefinition(
 		}
 	}
 
-	return parsed.Module{}, parsed.Definition{}, false
+	return nil, parsed.Definition{}, false
 }
 
 func findInfixFn(
-	modules map[ast.QualifiedIdentifier]parsed.Module, module parsed.Module, name ast.InfixIdentifier,
-) (parsed.Module, parsed.Infix, bool) {
+	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module, name ast.InfixIdentifier,
+) (*parsed.Module, parsed.Infix, bool) {
 	var infNameEq = func(x parsed.Infix) bool { return x.Name == name }
 	if inf, ok := common.Find(infNameEq, module.InfixFns); ok {
 		return module, inf, true
@@ -703,12 +1291,12 @@ func findInfixFn(
 			return findInfixFn(nil, modules[imp.ModuleIdentifier], name)
 		}
 	}
-	return parsed.Module{}, parsed.Infix{}, false
+	return nil, parsed.Infix{}, false
 }
 
 func findParsedType(
-	modules map[ast.QualifiedIdentifier]parsed.Module,
-	module parsed.Module,
+	modules map[ast.QualifiedIdentifier]*parsed.Module,
+	module *parsed.Module,
 	name ast.QualifiedIdentifier,
 	args []parsed.Type,
 ) (parsed.Type, bool) {

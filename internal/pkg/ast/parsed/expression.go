@@ -38,15 +38,25 @@ type If struct {
 
 func (If) _expression() {}
 
-type Let struct {
+type LetMatch struct {
 	ast.Location
-	Pattern   Pattern
-	Value     Expression
-	Body      Expression
-	ValueType Type
+	Pattern Pattern
+	Value   Expression
+	Nested  Expression
 }
 
-func (Let) _expression() {}
+func (LetMatch) _expression() {}
+
+type LetDef struct {
+	ast.Location
+	Name   ast.Identifier
+	Params []Pattern
+	Body   Expression
+	FnType Type
+	Nested Expression
+}
+
+func (LetDef) _expression() {}
 
 type List struct {
 	ast.Location
