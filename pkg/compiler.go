@@ -11,8 +11,11 @@ import (
 	"oak-compiler/internal/pkg/common"
 	"oak-compiler/internal/pkg/processors"
 	"os"
+	"slices"
 	"strings"
 )
+
+//TODO: introduce `export` keyword and compile only exported functions and its dependencies
 
 func Compile(
 	moduleUrls []string, outPath string, debug bool, upgrade bool, cachePath string, log io.Writer,
@@ -24,14 +27,28 @@ func Compile(
 			case common.Error:
 				{
 					e := x.(common.Error)
-					line, col := e.Location.GetLineAndColumn()
 					sb := strings.Builder{}
-					sb.WriteString(fmt.Sprintf("%s:%d:%d %s\n", e.Location.FilePath, line, col, e.Message))
-					if len(e.Extra) > 0 {
-						for _, extra := range e.Extra {
-							line, col = extra.GetLineAndColumn()
-							sb.WriteString(fmt.Sprintf("  + %s:%d:%d\n", extra.FilePath, line, col))
+					if e.Location.FilePath != "" {
+						line, col := e.Location.GetLineAndColumn()
+						sb.WriteString(fmt.Sprintf("%s:%d:%d %s\n", e.Location.FilePath, line, col, e.Message))
+					}
+
+					var uniqueExtra []ast.Location
+					for _, e := range e.Extra {
+						if !slices.ContainsFunc(uniqueExtra, func(x ast.Location) bool {
+							return x.FilePath == e.FilePath && x.Position == e.Position
+						}) {
+							uniqueExtra = append(uniqueExtra, e)
 						}
+					}
+
+					for _, extra := range uniqueExtra {
+						line, col := extra.GetLineAndColumn()
+						sb.WriteString(fmt.Sprintf("  -> %s:%d:%d\n", extra.FilePath, line, col))
+					}
+
+					if e.Location.FilePath == "" {
+						sb.WriteString(fmt.Sprintf("%s\n", e.Message))
 					}
 					err = fmt.Errorf(sb.String())
 					return

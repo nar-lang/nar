@@ -13,8 +13,6 @@ import (
 	"strings"
 )
 
-//TODO: int constant should have num type to match float equation
-
 var unboundIndex = uint64(0)
 var annotations []struct {
 	fmt.Stringer
@@ -106,7 +104,7 @@ func Solve(
 			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
 		}
 
-		subst := unifyAll(eqs)
+		subst := unifyAll(eqs, []ast.Location{def.Location})
 
 		if dumpDebugOutput {
 			sb.WriteString("\n\nUnified\n---\n| Left | Right |\n|---|---|")
@@ -522,7 +520,9 @@ func annotateExpression(
 			e := expr.(normalized.Local)
 			localType, ok := symbols[e.Name]
 			if !ok {
-				panic(common.Error{Location: e.Location, Message: fmt.Sprintf("local variable `%s` not found", e.Name)})
+				panic(common.Error{
+					Location: e.Location, Message: fmt.Sprintf("local variable `%s` not found", e.Name),
+				})
 			}
 			o = &typed.Local{
 				Location: e.Location,
@@ -585,40 +585,15 @@ func getAnnotatedGlobal(
 	}
 
 	return def
+}
 
-	/*typedModule, ok := typedModules[moduleName]
-	if !ok {
-		typedModule = &typed.Module{
-			Name:         moduleName,
-			Dependencies: modules[moduleName].Dependencies,
-		}
-		typedModules[moduleName] = typedModule
+func newAnnotatedType(loc ast.Location, constraint typed.Constraint) *typed.TUnbound {
+	unboundIndex++
+	return &typed.TUnbound{
+		Location:   loc,
+		Index:      unboundIndex,
+		Constraint: constraint,
 	}
-
-	def, ok := common.Find(func(definition *typed.Definition) bool {
-		return definition.Name == definitionName
-	}, typedModule.Definitions)
-
-	if ok {
-		def, ok = common.Find(func(definition *typed.Definition) bool {
-			return definition.Id == def.Id
-		}, stack)
-	}
-	if ok {
-		return def
-	}
-
-	nDef, ok := common.Find(func(definition normalized.Definition) bool {
-		return definition.Name == definitionName
-	}, modules[moduleName].Definitions)
-	if !ok {
-		panic(common.SystemError{
-			Message: fmt.Sprintf("definition `%s` not found", definitionName),
-		})
-	}
-	def, _, _ = annotateDefinition(symbolsMap{}, typeParamsMap{}, modules, typedModules, moduleName, nDef, stack)
-
-	return def*/
 }
 
 func annotateType(
@@ -632,11 +607,7 @@ func annotateType(
 
 	var r typed.Type
 	if t == nil {
-		unboundIndex++
-		r = &typed.TUnbound{
-			Location: location,
-			Index:    unboundIndex,
-		}
+		r = newAnnotatedType(location, typed.ConstraintNone)
 	} else {
 
 		switch t.(type) {
@@ -702,12 +673,20 @@ func annotateType(
 		case normalized.TTypeParameter:
 			{
 				e := t.(normalized.TTypeParameter)
-				//TODO: constraints
+
+				constraint := typed.ConstraintNone
+				if strings.HasPrefix(string(e.Name), string(typed.ConstraintNumber)) {
+					constraint = typed.ConstraintNumber
+				}
+				if strings.HasPrefix(string(e.Name), string(typed.ConstraintComparable)) {
+					constraint = typed.ConstraintComparable
+				}
 
 				if id, ok := typeParams[e.Name]; ok {
 					r = &typed.TUnbound{
-						Location: e.Location,
-						Index:    id,
+						Location:   e.Location,
+						Index:      id,
+						Constraint: constraint,
 					}
 				} else {
 					if typeMapSource {
@@ -718,7 +697,9 @@ func annotateType(
 						}{e, r})
 						typeParams[e.Name] = r.(*typed.TUnbound).Index
 					} else {
-						panic(common.Error{Location: e.Location, Message: "unknown type parameter"})
+						panic(common.Error{
+							Location: e.Location, Message: "unknown type parameter",
+						})
 					}
 				}
 				break
@@ -1239,7 +1220,7 @@ func getConstType(cv ast.ConstValue, location ast.Location) typed.Type {
 	case ast.CChar:
 		return &typed.TExternal{Location: location, Name: common.OakCoreCharChar}
 	case ast.CInt:
-		return &typed.TExternal{Location: location, Name: common.OakCoreBasicsInt}
+		return newAnnotatedType(location, typed.ConstraintNumber)
 	case ast.CFloat:
 		return &typed.TExternal{Location: location, Name: common.OakCoreBasicsFloat}
 	case ast.CString:
@@ -1250,7 +1231,7 @@ func getConstType(cv ast.ConstValue, location ast.Location) typed.Type {
 	panic(common.SystemError{Message: "invalid case"})
 }
 
-func unifyAll(eqs []equation) map[uint64]typed.Type {
+func unifyAll(eqs []equation, loc []ast.Location) map[uint64]typed.Type {
 	var i int
 	defer func() {
 		err := recover()
@@ -1260,20 +1241,24 @@ func unifyAll(eqs []equation) map[uint64]typed.Type {
 	}()
 	subst := map[uint64]typed.Type{}
 	for _, eq := range eqs {
-		loc := eq.left.GetLocation()
+		var extra []ast.Location
+		if eq.loc != nil {
+			extra = append(extra, *eq.loc)
+		}
+		if eq.left != nil {
+			extra = append(extra, eq.left.GetLocation())
+		}
 		if eq.expr != nil {
-			loc = eq.expr.GetLocation()
+			extra = append(extra, eq.expr.GetLocation())
 		}
 		if eq.pattern != nil {
-			loc = eq.pattern.GetLocation()
+			extra = append(extra, eq.pattern.GetLocation())
 		}
 		if eq.def != nil {
-			loc = eq.def.Expression.GetLocation()
+			extra = append(extra, eq.def.Location)
 		}
-		if eq.loc != nil {
-			loc = *eq.loc
-		}
-		unify(eq.left, eq.right, loc, subst)
+
+		unify(eq.left, eq.right, append(loc, extra...), subst)
 		i++
 	}
 	return subst
@@ -1295,7 +1280,7 @@ func balanceFn(f *typed.TFunc, sz int) *typed.TFunc {
 	}
 }
 
-func unify(x typed.Type, y typed.Type, loc ast.Location, subst map[uint64]typed.Type) {
+func unify(x typed.Type, y typed.Type, loc []ast.Location, subst map[uint64]typed.Type) {
 	if x.EqualsTo(y) {
 		return
 	}
@@ -1321,9 +1306,9 @@ func unify(x typed.Type, y typed.Type, loc ast.Location, subst map[uint64]typed.
 				}
 				ex = balanceFn(ex, len(ey.Params))
 				for i, p := range ex.Params {
-					unify(p, ey.Params[i], loc, subst)
+					unify(p, ey.Params[i], append(loc, p.GetLocation(), ey.Params[i].GetLocation()), subst)
 				}
-				unify(ex.Return, ey.Return, loc, subst)
+				unify(ex.Return, ey.Return, append(loc, ex.GetLocation(), ey.GetLocation()), subst)
 				return
 			}
 			break
@@ -1335,12 +1320,11 @@ func unify(x typed.Type, y typed.Type, loc ast.Location, subst map[uint64]typed.
 				if len(ex.Fields) != len(ey.Fields) {
 					//TODO: prefer intersection match?
 					panic(common.Error{
-						Location: ex.Location,
-						Extra:    []ast.Location{ey.Location},
-						Message:  "record fields number mismatch"})
+						Extra:   []ast.Location{ex.Location, ey.Location},
+						Message: "record fields number mismatch"})
 				}
 				for i, f := range ex.Fields {
-					unify(f, ey.Fields[i], loc, subst)
+					unify(f, ey.Fields[i], append(loc, f.GetLocation(), ey.Fields[i].GetLocation()), subst)
 				}
 				return
 			}
@@ -1352,12 +1336,11 @@ func unify(x typed.Type, y typed.Type, loc ast.Location, subst map[uint64]typed.
 				ex := x.(*typed.TTuple)
 				if len(ex.Items) != len(ey.Items) {
 					panic(common.Error{
-						Location: ex.Location,
-						Extra:    []ast.Location{ey.Location},
-						Message:  "tuple lengths mismatch"})
+						Extra:   []ast.Location{ex.Location, ey.Location},
+						Message: "tuple sizes mismatch"})
 				}
 				for i, p := range ex.Items {
-					unify(p, ey.Items[i], loc, subst)
+					unify(p, ey.Items[i], append(loc, p.GetLocation(), ey.Items[i].GetLocation()), subst)
 				}
 				return
 			}
@@ -1370,7 +1353,7 @@ func unify(x typed.Type, y typed.Type, loc ast.Location, subst map[uint64]typed.
 				if ex.Name == ey.Name {
 					if len(ex.Args) == len(ey.Args) {
 						for i, p := range ex.Args {
-							unify(p, ey.Args[i], loc, subst)
+							unify(p, ey.Args[i], append(loc, p.GetLocation(), ey.Args[i].GetLocation()), subst)
 						}
 					}
 					return
@@ -1382,13 +1365,12 @@ func unify(x typed.Type, y typed.Type, loc ast.Location, subst map[uint64]typed.
 		panic(common.SystemError{Message: "invalid case"})
 	}
 	panic(common.Error{
-		Location: loc,
-		Extra:    []ast.Location{x.GetLocation(), y.GetLocation()},
-		Message:  fmt.Sprintf("%v cannot be matched with %v", x, y),
+		Extra:   append(loc, x.GetLocation(), y.GetLocation()),
+		Message: fmt.Sprintf("%v cannot be matched with %v", x, y),
 	})
 }
 
-func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc ast.Location, subst map[uint64]typed.Type) {
+func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc []ast.Location, subst map[uint64]typed.Type) {
 	if x, ok := subst[v.Index]; ok {
 		unify(x, typ, loc, subst)
 		return
@@ -1401,9 +1383,8 @@ func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc ast.Location, subst map
 		}
 		if OccursCheck(v, typ, subst) {
 			panic(common.Error{
-				Location: loc,
-				Extra:    []ast.Location{v.Location, typ.GetLocation()},
-				Message:  fmt.Sprintf("ambigous type: %v vs %v", applyType(v, subst), applyType(typ, subst)),
+				Extra:   append(loc, v.Location, typ.GetLocation()),
+				Message: fmt.Sprintf("ambigous type: %v vs %v", applyType(v, subst), applyType(typ, subst)),
 			})
 		}
 	}
@@ -1466,7 +1447,7 @@ func OccursCheck(v *typed.TUnbound, typ typed.Type, subst map[uint64]typed.Type)
 			break
 		}
 	default:
-		panic("invalid case")
+		panic(common.SystemError{Message: "invalid case"})
 	}
 	return false
 }

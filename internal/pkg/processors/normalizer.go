@@ -18,15 +18,20 @@ func Normalize(
 	moduleName ast.QualifiedIdentifier,
 	modules map[ast.QualifiedIdentifier]*parsed.Module,
 	normalizedModules map[ast.QualifiedIdentifier]*normalized.Module,
-) {
+) bool {
 	if _, ok := normalizedModules[moduleName]; ok {
-		return
+		return true
 	}
 
-	m := modules[moduleName]
+	m, ok := modules[moduleName]
+	if !ok {
+		return false
+	}
 
 	for _, imp := range m.Imports {
-		Normalize(imp.ModuleIdentifier, modules, normalizedModules)
+		if !Normalize(imp.ModuleIdentifier, modules, normalizedModules) {
+			panic(common.Error{Location: imp.Location, Message: fmt.Sprintf("module `%s` not found", imp.ModuleIdentifier)})
+		}
 	}
 
 	flattenDataTypes(m)
@@ -50,6 +55,7 @@ func Normalize(
 	}
 
 	normalizedModules[m.Name] = o
+	return true
 }
 
 func extractLocals(pattern normalized.Pattern, locals map[ast.Identifier]struct{}) {
@@ -164,6 +170,14 @@ func extractLambda(
 	return
 }
 
+func extractParameters(def *normalized.Definition) map[ast.Identifier]struct{} {
+	params := map[ast.Identifier]struct{}{}
+	for _, p := range def.Params {
+		extractLocals(p, params)
+	}
+	return params
+}
+
 func flattenLambdas(
 	expr normalized.Expression, m *normalized.Module, locals map[ast.Identifier]struct{},
 ) normalized.Expression {
@@ -171,7 +185,8 @@ func flattenLambdas(
 	case normalized.Lambda:
 		{
 			e := expr.(normalized.Lambda)
-			_, _, replacement := extractLambda(e.Location, e.Params, e.Body, m, locals)
+			def, _, replacement := extractLambda(e.Location, e.Params, e.Body, m, locals)
+			def.Expression = flattenLambdas(def.Expression, m, extractParameters(def))
 			return replacement
 		}
 	case normalized.LetDef:
@@ -194,9 +209,11 @@ func flattenLambdas(
 						Name:     replName,
 					},
 					Value:  replacement,
-					Nested: replaceLocals(def.Expression, replaceMap),
+					Nested: def.Expression,
 				}
 				def.Expression = let
+				def.Expression = replaceLocals(def.Expression, replaceMap)
+				def.Expression = flattenLambdas(def.Expression, m, extractParameters(def))
 
 				let.Nested = replaceLocals(e.Nested, replaceMap)
 				let.Nested = flattenLambdas(let.Nested, m, locals)
@@ -206,6 +223,7 @@ func flattenLambdas(
 				replaceMap[e.Name] = replacement
 
 				def.Expression = replaceLocals(def.Expression, replaceMap)
+				def.Expression = flattenLambdas(def.Expression, m, extractParameters(def))
 
 				return flattenLambdas(replaceLocals(e.Nested, replaceMap), m, locals)
 			}
@@ -478,8 +496,9 @@ func flattenDataTypes(m *parsed.Module) {
 		})
 		for _, option := range it.Options {
 			var type_ parsed.Type = parsed.TExternal{
-				Name: common.MakeExternalIdentifier(m.Name, it.Name),
-				Args: typeArgs,
+				Location: it.Location,
+				Name:     common.MakeExternalIdentifier(m.Name, it.Name),
+				Args:     typeArgs,
 			}
 			if len(option.Params) > 0 {
 				type_ = parsed.TFunc{
@@ -1247,7 +1266,7 @@ func normalizeType(
 			e := t.(parsed.TNamed)
 			x, ok := findParsedType(modules, module, e.Name, e.Args)
 			if !ok {
-				panic(common.Error{Location: e.Location, Message: "type not found"})
+				panic(common.Error{Location: e.Location, Message: fmt.Sprintf("type `%s` not found", e.Name)})
 			}
 			return normalizeType(modules, module, x)
 		}
