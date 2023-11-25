@@ -847,7 +847,6 @@ func parseExpression(src *Source) parsed.Expression {
 		return finishParseExpression(src, parsed.InfixVar{Location: loc(src, cursor), Infix: *infix})
 	}
 
-	//TODO: make prefix operator like infix
 	//negate
 	if readExact(src, SeqMinus) {
 		nested := parseExpression(src)
@@ -1014,7 +1013,7 @@ func parseExpression(src *Source) parsed.Expression {
 
 	//accessor
 	if readExact(src, SeqDot) {
-		name := readIdentifier(src, false) //TODO: make nested access
+		name := readIdentifier(src, false)
 		if nil == name {
 			setErrorSource(*src, "expected accessor name here")
 		}

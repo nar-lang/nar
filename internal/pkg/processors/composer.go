@@ -244,7 +244,7 @@ func composeExpression(
 				ops, locations = jump(0, cs.Location, ops, locations)
 			}
 
-			/* TODO: invalid situation, generate crash?
+			/* invalid situation, generate crash?
 			// this can happen only if compiler failed to check that cases are not exhausting select condition
 
 			//last case jump out

@@ -7,8 +7,6 @@ import (
 	"strings"
 )
 
-//TODO: check constraints
-
 type Constraint string
 
 const (

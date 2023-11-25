@@ -6,27 +6,14 @@ import (
 	"fmt"
 	"github.com/go-git/go-git/v5"
 	"io"
+	"oak-compiler/internal/pkg/ast"
 	"oak-compiler/internal/pkg/common"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-type Package struct {
-	Name         string   `json:"name"`
-	Version      string   `json:"version"`
-	OakVersion   string   `json:"oak-version"`
-	Dependencies []string `json:"dependencies"`
-}
-
-type LoadedPackage struct {
-	Url     string
-	Dir     string
-	Package Package
-	Sources []string
-}
-
-func LoadPackage(url, cacheDir string, log io.Writer, upgrade bool, loadedPackages []LoadedPackage) []LoadedPackage {
+func LoadPackage(url, cacheDir string, log io.Writer, upgrade bool, loadedPackages []ast.LoadedPackage) []ast.LoadedPackage {
 	absBaseDir, err := filepath.Abs(".")
 	if err != nil {
 		panic(common.SystemError{Message: err.Error()})
@@ -35,8 +22,8 @@ func LoadPackage(url, cacheDir string, log io.Writer, upgrade bool, loadedPackag
 }
 
 func loadPackage(
-	url string, cacheDir string, baseDir string, log io.Writer, upgrade bool, loadedPackages []LoadedPackage,
-) []LoadedPackage {
+	url string, cacheDir string, baseDir string, log io.Writer, upgrade bool, loadedPackages []ast.LoadedPackage,
+) []ast.LoadedPackage {
 	absPath := filepath.Clean(filepath.Join(baseDir, url))
 	loadedPackages, loaded := loadPackageWithPath(url, absPath, cacheDir, log, upgrade, loadedPackages)
 
@@ -80,8 +67,8 @@ func loadPackage(
 }
 
 func loadPackageWithPath(
-	url string, absPath string, cacheDir string, log io.Writer, upgrade bool, loadedPackage []LoadedPackage,
-) ([]LoadedPackage, bool) {
+	url string, absPath string, cacheDir string, log io.Writer, upgrade bool, loadedPackage []ast.LoadedPackage,
+) ([]ast.LoadedPackage, bool) {
 	packageFilePath := filepath.Join(absPath, "oak.json")
 	fileData, err := os.ReadFile(packageFilePath)
 
@@ -95,7 +82,7 @@ func loadPackageWithPath(
 		})
 	}
 
-	var pkg Package
+	var pkg ast.Package
 	err = json.Unmarshal(fileData, &pkg)
 	if err != nil {
 		panic(common.SystemError{
@@ -130,7 +117,7 @@ func loadPackageWithPath(
 		})
 	}
 
-	loadedPackage = append(loadedPackage, LoadedPackage{Url: url, Dir: absPath, Package: pkg, Sources: src})
+	loadedPackage = append(loadedPackage, ast.LoadedPackage{Url: url, Dir: absPath, Package: pkg, Sources: src})
 
 	for _, depUrl := range pkg.Dependencies {
 		loadedPackage = loadPackage(depUrl, cacheDir, absPath, log, upgrade, loadedPackage)

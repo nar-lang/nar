@@ -11,15 +11,14 @@ import (
 	"oak-compiler/internal/pkg/common"
 	"oak-compiler/internal/pkg/processors"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
 
-//TODO: introduce `export` keyword and compile only exported functions and its dependencies
-
 func Compile(
 	moduleUrls []string, outPath string, debug bool, upgrade bool, cachePath string, log io.Writer,
-) (err error) {
+) (err error, packages []ast.LoadedPackage) {
 	defer func() {
 		x := recover()
 		if x != nil {
@@ -60,7 +59,6 @@ func Compile(
 					break
 				}
 			default:
-				panic(x)
 				err = fmt.Errorf("%v", x)
 			}
 		}
@@ -77,7 +75,7 @@ func Compile(
 		ConstMap:  map[bytecode.PackedConst]bytecode.ConstHash{},
 	}
 
-	var loadedPackages []processors.LoadedPackage
+	var loadedPackages []ast.LoadedPackage
 	for _, url := range moduleUrls {
 		loadedPackages = processors.LoadPackage(url, cachePath, log, upgrade, loadedPackages)
 	}
@@ -101,6 +99,12 @@ func Compile(
 		processors.Compose(m.Name, typedModules, &bin)
 	}
 
+	outDir := filepath.Dir(outPath)
+	err = os.MkdirAll(outDir, os.ModePerm)
+	if err != nil {
+		panic(common.SystemError{Message: err.Error()})
+	}
+
 	file, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY, 0640)
 	if err != nil {
 		panic(common.SystemError{Message: err.Error()})
@@ -108,6 +112,6 @@ func Compile(
 
 	bin.Build(file, debug)
 
-	_, _ = fmt.Fprintf(log, "compilation finished successfully\n")
-	return nil
+	_, _ = fmt.Fprintf(log, "compiled successfully\n")
+	return nil, loadedPackages
 }

@@ -842,7 +842,6 @@ func normalizeExpression(
 		}
 	case parsed.Select:
 		{
-			//TODO: Check if all cases are exhausting condition
 			e := expr.(parsed.Select)
 			return normalized.Select{
 				Location:  e.Location,
@@ -1193,7 +1192,7 @@ func normalizeType(
 	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module, t parsed.Type,
 ) normalized.Type {
 	if t == nil {
-		return nil //TODO: find places where it can happen and check there
+		return nil
 	}
 	normalize := func(x parsed.Type) normalized.Type {
 		return normalizeType(modules, module, x)

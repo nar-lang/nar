@@ -85,7 +85,7 @@ func Solve(
 		td, _, _ := annotateDefinition(symbolsMap{}, typeParamsMap{}, modules, localTyped, m.Name, def, nil)
 
 		if dumpDebugOutput {
-			_ = os.MkdirAll(filepath.Dir(fp), 0700)
+			_ = os.MkdirAll(filepath.Dir(fp), os.ModePerm)
 			sb.WriteString(fmt.Sprintf("\n\nDefinition\n---\n`%s`", td))
 			sb.WriteString("\n\nAnnotations\n---\n| Node | Type |\n|---|---|")
 			for _, t := range annotations {
