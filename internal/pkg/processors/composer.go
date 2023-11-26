@@ -54,7 +54,7 @@ func composeDefinition(def *typed.Definition, binary *bytecode.Binary) bytecode.
 		ops, locations = composePattern(p, ops, locations, binary)
 		ops, locations = match(0, p.GetLocation(), ops, locations)
 	}
-	ops, locations = composeExpression(def.Expression, nil, nil, binary)
+	ops, locations = composeExpression(def.Expression, ops, locations, binary)
 	return bytecode.Func{
 		NumArgs:   uint32(len(def.Params)),
 		Ops:       ops,
