@@ -1375,6 +1375,16 @@ func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc []ast.Location, subst m
 		unify(x, typ, loc, subst)
 		return
 	} else {
+		if v.Constraint == typed.ConstraintNumber {
+			if ext, ok := typ.(*typed.TExternal); ok && ext.Name == common.OakCoreBasicsFloat {
+				subst[v.Index] = typ
+				return
+			}
+			if ext, ok := typ.(*typed.TExternal); ok && ext.Name == common.OakCoreBasicsInt {
+				subst[v.Index] = typ
+				return
+			}
+		}
 		if y, ok := typ.(*typed.TUnbound); ok {
 			if uy, c := subst[y.Index]; c {
 				unify(v, uy, loc, subst)
@@ -1479,7 +1489,7 @@ func applyType(t typed.Type, subst map[uint64]typed.Type) typed.Type {
 	case *typed.TRecord:
 		{
 			e := t.(*typed.TRecord)
-			var fields map[ast.Identifier]typed.Type
+			fields := map[ast.Identifier]typed.Type{}
 			for n, x := range e.Fields {
 				fields[n] = apply(x)
 			}
