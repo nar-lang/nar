@@ -352,6 +352,13 @@ func parseChar(src *Source) *rune {
 	}
 	src.cursor++
 
+	if src.text[src.cursor-2] == SmbEscape {
+		if !isOk(src) || SmbQuoteChar != src.text[src.cursor] {
+			setErrorSource(*src, "expected "+string(SmbQuoteChar)+"here")
+		}
+		src.cursor++
+	}
+
 	r := src.text[src.cursor-2]
 	skipComment(src)
 	return &r
@@ -366,6 +373,7 @@ var controlCharsReplacer = strings.NewReplacer(
 	"\\r", "\r",
 	"\\t", "\t",
 	"\\v", "\v",
+	"\\\"", "\"",
 )
 
 func parseString(src *Source) *string {
@@ -1040,6 +1048,7 @@ func parseExpression(src *Source) parsed.Expression {
 		name := readIdentifier(src, true)
 		if nil != name && !readExact(src, SeqBar) {
 			src.cursor = recCursor
+			name = nil
 		}
 
 		var fields []parsed.RecordField
