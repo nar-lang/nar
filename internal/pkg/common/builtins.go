@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	OakCoreBasicsNeg    = MakeExternalIdentifier("Oak.Core.Basics", "neg")
+	OakCoreMathNeg      = MakeExternalIdentifier("Oak.Core.Math", "neg")
 	OakCoreCharChar     = MakeExternalIdentifier("Oak.Core.Char", "Char")
 	OakCoreBasicsInt    = MakeExternalIdentifier("Oak.Core.Basics", "Int")
 	OakCoreBasicsFloat  = MakeExternalIdentifier("Oak.Core.Basics", "Float")

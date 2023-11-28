@@ -997,7 +997,7 @@ func normalizeExpression(
 			e := expr.(parsed.Negate)
 			return normalized.NativeCall{
 				Location: e.Location,
-				Name:     common.OakCoreBasicsNeg,
+				Name:     common.OakCoreMathNeg,
 				Args:     []normalized.Expression{normalize(e.Nested)},
 			}
 		}
