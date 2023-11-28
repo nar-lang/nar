@@ -9,9 +9,12 @@ import (
 	"slices"
 )
 
+//TODO: OPTIMIZE: swap-pop*N -> swap-pop(N)
+
 func Compose(
 	moduleName ast.QualifiedIdentifier,
 	modules map[ast.QualifiedIdentifier]*typed.Module,
+	debug bool,
 	binary *bytecode.Binary,
 ) {
 	binary.HashString("")
@@ -24,7 +27,7 @@ func Compose(
 
 	m := modules[moduleName]
 	for _, depPath := range m.Dependencies {
-		Compose(depPath, modules, binary)
+		Compose(depPath, modules, debug, binary)
 	}
 
 	for _, def := range m.Definitions {
@@ -39,7 +42,7 @@ func Compose(
 		ptr := binary.FuncsMap[pathId]
 		if binary.Funcs[ptr].Ops == nil {
 			binary.Funcs[ptr] = composeDefinition(def, binary)
-			if !def.Hidden {
+			if !def.Hidden || debug {
 				binary.Exports[pathId] = ptr
 			}
 		}
@@ -49,12 +52,19 @@ func Compose(
 func composeDefinition(def *typed.Definition, binary *bytecode.Binary) bytecode.Func {
 	var ops []bytecode.Op
 	var locations []ast.Location
-	for i := len(def.Params) - 1; i >= 0; i-- {
-		p := def.Params[i]
-		ops, locations = composePattern(p, ops, locations, binary)
-		ops, locations = match(0, p.GetLocation(), ops, locations)
+
+	if nc, ok := def.Expression.(*typed.NativeCall); !ok {
+		for i := len(def.Params) - 1; i >= 0; i-- {
+			p := def.Params[i]
+			ops, locations = composePattern(p, ops, locations, binary)
+			ops, locations = match(0, p.GetLocation(), ops, locations)
+			ops, locations = swapPop(p.GetLocation(), bytecode.SwapPopModePop, ops, locations)
+		}
+		ops, locations = composeExpression(def.Expression, ops, locations, binary)
+	} else {
+		ops, locations = call(string(nc.Name), len(nc.Args), nc.Location, ops, locations, binary)
 	}
-	ops, locations = composeExpression(def.Expression, ops, locations, binary)
+
 	return bytecode.Func{
 		NumArgs:   uint32(len(def.Params)),
 		Ops:       ops,
@@ -186,6 +196,7 @@ func composeExpression(
 			ops, locations = composeExpression(e.Value, ops, locations, binary)
 			ops, locations = composePattern(e.Pattern, ops, locations, binary)
 			ops, locations = match(0, e.Location, ops, locations)
+			ops, locations = swapPop(e.Location, bytecode.SwapPopModePop, ops, locations)
 			ops, locations = composeExpression(e.Body, ops, locations, binary)
 			break
 		}
@@ -194,21 +205,17 @@ func composeExpression(
 			e := expr.(*typed.If)
 			ops, locations = composeExpression(e.Condition, ops, locations, binary)
 			ops, locations = composePattern(&typed.PDataOption{
-				Location:   ast.Location{},
-				Type:       nil,
-				Name:       "",
-				Definition: nil,
-				Args:       nil,
+				Location: e.Location,
+				Name:     common.OakCoreBasicsTrue,
 			}, ops, locations, binary)
 			matchOpIndex := len(ops)
-			ops, locations = match(0, e.Location, ops, locations)
+			ops, locations = match(0, e.Location, ops, locations) //jump to negative branch
 
 			ops, locations = composeExpression(e.Positive, ops, locations, binary)
 			jumpOpIndex := len(ops)
-			ops, locations = jump(0, e.Location, ops, locations)
+			ops, locations = jump(0, e.Location, ops, locations) //jump to the end
 
 			negBranchIndex := len(ops)
-			ops, locations = unloadLocal("", e.Location, ops, locations, binary) //unload condition
 			ops, locations = composeExpression(e.Negative, ops, locations, binary)
 
 			ifEndIndex := len(ops)
@@ -220,6 +227,8 @@ func composeExpression(
 			jumpOp := ops[jumpOpIndex].(bytecode.Jump) //jump to the end
 			jumpOp.Delta = int32(ifEndIndex - jumpOpIndex - 1)
 			ops[jumpOpIndex] = jumpOp
+
+			ops, locations = swapPop(e.Location, bytecode.SwapPopModeBoth, ops, locations)
 			break
 		}
 	case *typed.Select:
@@ -235,7 +244,6 @@ func composeExpression(
 					ops[prevMatchOpIndex] = matchOp
 				}
 
-				ops, locations = duplicate(cs.Pattern.GetLocation(), ops, locations) //copy condition
 				ops, locations = composePattern(cs.Pattern, ops, locations, binary)
 				prevMatchOpIndex = len(ops)
 				ops, locations = match(0, cs.Location, ops, locations)
@@ -244,17 +252,6 @@ func composeExpression(
 				ops, locations = jump(0, cs.Location, ops, locations)
 			}
 
-			/* invalid situation, generate crash?
-			// this can happen only if compiler failed to check that cases are not exhausting select condition
-
-			//last case jump out
-			matchOp := ops[prevMatchOpIndex].(bytecode.Match) //jump to next case
-			matchOp.JumpDelta = int32(len(ops) - prevMatchOpIndex - 1)
-			ops[prevMatchOpIndex] = matchOp
-			*/
-
-			ops, locations = unloadLocal("", e.GetLocation(), ops, locations, binary) //unload condition
-
 			selectEndIndex := len(ops)
 			for _, jumpOpIndex := range jumpToEndIndices {
 				jumpOp := ops[jumpOpIndex].(bytecode.Jump) //jump to the end
@@ -262,6 +259,7 @@ func composeExpression(
 				ops[jumpOpIndex] = jumpOp
 			}
 
+			ops, locations = swapPop(e.Location, bytecode.SwapPopModeBoth, ops, locations)
 			break
 		}
 	default:
@@ -430,13 +428,6 @@ func loadGlobal(
 		append(locations, loc)
 }
 
-func unloadLocal(
-	name string, loc ast.Location, ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary,
-) ([]bytecode.Op, []ast.Location) {
-	return append(ops, bytecode.UnloadLocal{Name: binary.HashString(name)}),
-		append(locations, loc)
-}
-
 func makePattern(
 	kind bytecode.PatternKind, name string, numNested int,
 	loc ast.Location, ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary,
@@ -493,9 +484,9 @@ func jump(delta int, loc ast.Location,
 		append(locations, loc)
 }
 
-func duplicate(loc ast.Location,
+func swapPop(loc ast.Location, mode bytecode.SwapPopMode,
 	ops []bytecode.Op, locations []ast.Location,
 ) ([]bytecode.Op, []ast.Location) {
-	return append(ops, bytecode.Duplicate{}),
+	return append(ops, bytecode.SwapPop{Mode: mode}),
 		append(locations, loc)
 }

@@ -14,6 +14,8 @@ var (
 	OakCoreBasicsBool   = MakeExternalIdentifier("Oak.Core.Basics", "Bool")
 	OakCoreStringString = MakeExternalIdentifier("Oak.Core.String", "String")
 	OakCoreListList     = MakeExternalIdentifier("Oak.Core.List", "List")
+
+	OakCoreBasicsTrue = MakeDataOptionIdentifier(OakCoreBasicsBool, "True")
 )
 
 func MakeExternalIdentifier(moduleName ast.QualifiedIdentifier, name ast.Identifier) ast.ExternalIdentifier {

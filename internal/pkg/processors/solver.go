@@ -1554,7 +1554,7 @@ func applyPattern(pattern typed.Pattern, subst map[uint64]typed.Type) typed.Patt
 				Location: e.Location,
 				Type:     applyType(e.Type, subst),
 				Head:     apply(e.Head),
-				Tail:     apply(e.Head),
+				Tail:     apply(e.Tail),
 			}
 			break
 		}

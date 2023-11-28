@@ -7,8 +7,24 @@ type Pointer uint32
 type PatternKind uint8
 type ConstKind uint8
 type StackKind uint8
+type SwapPopMode uint8
 type ObjectKind uint8
 
+const (
+	opKindNone OpKind = iota
+	OpKindLoadLocal
+	OpKindLoadGlobal
+	OpKindLoadConst
+	OpKindSwapPop
+	OpKindApply
+	OpKindCall
+	OpKindMatch
+	OpKindJump
+	OpKindMakeObject
+	OpKindMakePattern
+	OpKindAccess
+	OpKindUpdate
+)
 const (
 	patternKindNone PatternKind = iota
 	PatternKindAlias
@@ -42,20 +58,9 @@ const (
 	ObjectKindData
 )
 const (
-	opKindNone OpKind = iota
-	OpKindLoadLocal
-	OpKindLoadGlobal
-	OpKindLoadConst
-	OpKindUnloadLocal
-	OpKindApply
-	OpKindCall
-	OpKindMatch
-	OpKindJump
-	OpKindMakeObject
-	OpKindMakePattern
-	OpKindAccess
-	OpKindUpdate
-	OpKindDuplicate
+	swapPopModeNone SwapPopMode = iota
+	SwapPopModeBoth
+	SwapPopModePop
 )
 
 type Op interface {
@@ -96,17 +101,6 @@ func (op LoadConst) Word() uint64 {
 		(uint64(op.Value) << 32)
 }
 
-// UnloadLocal moves an object from the top of the stack to the named local.
-// If Name is 0 (means empty string), object should be discarded
-type UnloadLocal struct {
-	Name StringHash
-}
-
-func (op UnloadLocal) Word() uint64 {
-	return uint64(OpKindUnloadLocal) |
-		(uint64(op.Name) << 32)
-}
-
 // Apply executes the function from the top of the stack.
 // Arguments are taken from the top of the stack in reverse order
 // (topmost object is the last arg). Returned value is left on the top of the stack.
@@ -138,7 +132,7 @@ func (op Call) Word() uint64 {
 // Match tries to match pattern with object on the top of the stack.
 // If it cannot be matched it moves on delta ops
 // If it matches successfully - locals are extracted from pattern
-// Matched object is popped from stack
+// Matched object is left on the top of the stack in both cases
 type Match struct {
 	JumpDelta int32
 }
@@ -211,9 +205,12 @@ func (op Update) Word() uint64 {
 		(uint64(op.Field) << 32)
 }
 
-// Duplicate copies topmost object on the stack to the top of the stack
-type Duplicate struct{}
+// SwapPop removes second object from the top of the stack and leaves first object on the top of the stack
+type SwapPop struct {
+	Mode SwapPopMode
+}
 
-func (op Duplicate) Word() uint64 {
-	return uint64(OpKindDuplicate)
+func (op SwapPop) Word() uint64 {
+	return uint64(OpKindSwapPop) |
+		(uint64(op.Mode) << 8)
 }

@@ -5,6 +5,7 @@ type Package struct {
 	Version      string   `json:"version"`
 	OakVersion   string   `json:"oak-version"`
 	Dependencies []string `json:"dependencies"`
+	Main         string   `json:"main"`
 }
 
 type LoadedPackage struct {

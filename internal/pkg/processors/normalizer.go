@@ -46,7 +46,7 @@ func Normalize(
 
 	for _, def := range m.Definitions {
 		nDef, params := normalizeDefinition(modules, m, def)
-		nDef.Expression = flattenLambdas(nDef.Expression, o, params)
+		nDef.Expression = flattenLambdas(nDef.Name, nDef.Expression, o, params)
 		o.Definitions = append(o.Definitions, &nDef)
 	}
 
@@ -126,12 +126,12 @@ func extractLocals(pattern normalized.Pattern, locals map[ast.Identifier]struct{
 }
 
 func extractLambda(
-	loc ast.Location, params []normalized.Pattern, body normalized.Expression,
+	loc ast.Location, parentName ast.Identifier, params []normalized.Pattern, body normalized.Expression,
 	m *normalized.Module, locals map[ast.Identifier]struct{},
 ) (def *normalized.Definition, usedLocals []ast.Identifier, replacement normalized.Expression) {
 	lastLambdaId++
-	lambdaName := ast.Identifier(fmt.Sprintf("_lambda_%d", lastLambdaId))
-	usedLocals = extractUsedLocals(body, locals)
+	lambdaName := ast.Identifier(fmt.Sprintf("_lmbd_%v_%d", parentName, lastLambdaId))
+	usedLocals = extractUsedLocals(body, locals, extractParamNames(params))
 
 	lastDefinitionId++
 	def = &normalized.Definition{
@@ -170,29 +170,30 @@ func extractLambda(
 	return
 }
 
-func extractParameters(def *normalized.Definition) map[ast.Identifier]struct{} {
-	params := map[ast.Identifier]struct{}{}
-	for _, p := range def.Params {
-		extractLocals(p, params)
+func extractParamNames(params []normalized.Pattern) map[ast.Identifier]struct{} {
+	paramNames := map[ast.Identifier]struct{}{}
+	for _, p := range params {
+		extractLocals(p, paramNames)
 	}
-	return params
+	return paramNames
 }
 
 func flattenLambdas(
+	parentName ast.Identifier,
 	expr normalized.Expression, m *normalized.Module, locals map[ast.Identifier]struct{},
 ) normalized.Expression {
 	switch expr.(type) {
 	case normalized.Lambda:
 		{
 			e := expr.(normalized.Lambda)
-			def, _, replacement := extractLambda(e.Location, e.Params, e.Body, m, locals)
-			def.Expression = flattenLambdas(def.Expression, m, extractParameters(def))
+			def, _, replacement := extractLambda(e.Location, parentName, e.Params, e.Body, m, locals)
+			def.Expression = flattenLambdas(def.Name, def.Expression, m, extractParamNames(def.Params))
 			return replacement
 		}
 	case normalized.LetDef:
 		{
 			e := expr.(normalized.LetDef)
-			def, usedLocals, replacement := extractLambda(e.Location, e.Params, e.Body, m, locals)
+			def, usedLocals, replacement := extractLambda(e.Location, parentName, e.Params, e.Body, m, locals)
 
 			if len(usedLocals) > 0 {
 				replName := ast.Identifier(fmt.Sprintf("_lambda_closue_%d", lastLambdaId))
@@ -213,19 +214,19 @@ func flattenLambdas(
 				}
 				def.Expression = let
 				def.Expression = replaceLocals(def.Expression, replaceMap)
-				def.Expression = flattenLambdas(def.Expression, m, extractParameters(def))
+				def.Expression = flattenLambdas(def.Name, def.Expression, m, extractParamNames(def.Params))
 
 				let.Nested = replaceLocals(e.Nested, replaceMap)
-				let.Nested = flattenLambdas(let.Nested, m, locals)
+				let.Nested = flattenLambdas(parentName, let.Nested, m, locals)
 				return let
 			} else {
 				replaceMap := map[ast.Identifier]normalized.Expression{}
 				replaceMap[e.Name] = replacement
 
 				def.Expression = replaceLocals(def.Expression, replaceMap)
-				def.Expression = flattenLambdas(def.Expression, m, extractParameters(def))
+				def.Expression = flattenLambdas(def.Name, def.Expression, m, extractParamNames(def.Params))
 
-				return flattenLambdas(replaceLocals(e.Nested, replaceMap), m, locals)
+				return flattenLambdas(parentName, replaceLocals(e.Nested, replaceMap), m, locals)
 			}
 		}
 	case normalized.LetMatch:
@@ -233,38 +234,38 @@ func flattenLambdas(
 			e := expr.(normalized.LetMatch)
 			innerLocals := maps.Clone(locals)
 			extractLocals(e.Pattern, innerLocals)
-			e.Value = flattenLambdas(e.Value, m, innerLocals)
-			e.Nested = flattenLambdas(e.Nested, m, innerLocals)
+			e.Value = flattenLambdas(parentName, e.Value, m, innerLocals)
+			e.Nested = flattenLambdas(parentName, e.Nested, m, innerLocals)
 			return e
 		}
 	case normalized.Access:
 		{
 			e := expr.(normalized.Access)
-			e.Record = flattenLambdas(e.Record, m, locals)
+			e.Record = flattenLambdas(parentName, e.Record, m, locals)
 			return e
 		}
 	case normalized.Apply:
 		{
 			e := expr.(normalized.Apply)
-			e.Func = flattenLambdas(e.Func, m, locals)
+			e.Func = flattenLambdas(parentName, e.Func, m, locals)
 			for i, a := range e.Args {
-				e.Args[i] = flattenLambdas(a, m, locals)
+				e.Args[i] = flattenLambdas(parentName, a, m, locals)
 			}
 			return e
 		}
 	case normalized.If:
 		{
 			e := expr.(normalized.If)
-			e.Condition = flattenLambdas(e.Condition, m, locals)
-			e.Positive = flattenLambdas(e.Positive, m, locals)
-			e.Negative = flattenLambdas(e.Negative, m, locals)
+			e.Condition = flattenLambdas(parentName, e.Condition, m, locals)
+			e.Positive = flattenLambdas(parentName, e.Positive, m, locals)
+			e.Negative = flattenLambdas(parentName, e.Negative, m, locals)
 			return e
 		}
 	case normalized.List:
 		{
 			e := expr.(normalized.List)
 			for i, a := range e.Items {
-				e.Items[i] = flattenLambdas(a, m, locals)
+				e.Items[i] = flattenLambdas(parentName, a, m, locals)
 			}
 			return e
 		}
@@ -272,18 +273,18 @@ func flattenLambdas(
 		{
 			e := expr.(normalized.Record)
 			for i, a := range e.Fields {
-				e.Fields[i].Value = flattenLambdas(a.Value, m, locals)
+				e.Fields[i].Value = flattenLambdas(parentName, a.Value, m, locals)
 			}
 			return e
 		}
 	case normalized.Select:
 		{
 			e := expr.(normalized.Select)
-			e.Condition = flattenLambdas(e.Condition, m, locals)
+			e.Condition = flattenLambdas(parentName, e.Condition, m, locals)
 			for i, a := range e.Cases {
 				innerLocals := maps.Clone(locals)
 				extractLocals(a.Pattern, innerLocals)
-				e.Cases[i].Expression = flattenLambdas(a.Expression, m, innerLocals)
+				e.Cases[i].Expression = flattenLambdas(parentName, a.Expression, m, innerLocals)
 			}
 			return e
 		}
@@ -291,7 +292,7 @@ func flattenLambdas(
 		{
 			e := expr.(normalized.Tuple)
 			for i, a := range e.Items {
-				e.Items[i] = flattenLambdas(a, m, locals)
+				e.Items[i] = flattenLambdas(parentName, a, m, locals)
 			}
 			return e
 		}
@@ -299,7 +300,7 @@ func flattenLambdas(
 		{
 			e := expr.(normalized.UpdateLocal)
 			for i, a := range e.Fields {
-				e.Fields[i].Value = flattenLambdas(a.Value, m, locals)
+				e.Fields[i].Value = flattenLambdas(parentName, a.Value, m, locals)
 			}
 			return e
 		}
@@ -307,7 +308,7 @@ func flattenLambdas(
 		{
 			e := expr.(normalized.UpdateGlobal)
 			for i, a := range e.Fields {
-				e.Fields[i].Value = flattenLambdas(a.Value, m, locals)
+				e.Fields[i].Value = flattenLambdas(parentName, a.Value, m, locals)
 			}
 			return e
 		}
@@ -315,7 +316,7 @@ func flattenLambdas(
 		{
 			e := expr.(normalized.Constructor)
 			for i, a := range e.Args {
-				e.Args[i] = flattenLambdas(a, m, locals)
+				e.Args[i] = flattenLambdas(parentName, a, m, locals)
 			}
 			return e
 		}
@@ -323,7 +324,7 @@ func flattenLambdas(
 		{
 			e := expr.(normalized.NativeCall)
 			for i, a := range e.Args {
-				e.Args[i] = flattenLambdas(a, m, locals)
+				e.Args[i] = flattenLambdas(parentName, a, m, locals)
 			}
 			return e
 		}
@@ -1018,7 +1019,7 @@ func normalizeExpression(
 				}
 			}
 
-			panic(common.Error{Location: e.Location, Message: fmt.Sprintf("identifier `%s` no found", e.Name)})
+			panic(common.Error{Location: e.Location, Message: fmt.Sprintf("identifier `%s` not found", e.Name)})
 		}
 	case parsed.InfixVar:
 		{
@@ -1046,19 +1047,23 @@ func normalizeExpression(
 }
 
 func extractUsedLocals(
-	expr normalized.Expression, definedLocals map[ast.Identifier]struct{},
+	expr normalized.Expression, definedLocals map[ast.Identifier]struct{}, params map[ast.Identifier]struct{},
 ) []ast.Identifier {
 	usedLocals := map[ast.Identifier]struct{}{}
 	extractUsedLocalsSet(expr, definedLocals, usedLocals)
 	var uniqueLocals []ast.Identifier
 	for k := range usedLocals {
-		uniqueLocals = append(uniqueLocals, k)
+		if _, ok := params[k]; !ok {
+			uniqueLocals = append(uniqueLocals, k)
+		}
 	}
 	return uniqueLocals
 }
 
 func extractUsedLocalsSet(
-	expr normalized.Expression, definedLocals map[ast.Identifier]struct{}, usedLocals map[ast.Identifier]struct{},
+	expr normalized.Expression,
+	definedLocals map[ast.Identifier]struct{},
+	usedLocals map[ast.Identifier]struct{},
 ) {
 	switch expr.(type) {
 	case normalized.Local:

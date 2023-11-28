@@ -10,6 +10,7 @@ import (
 	"oak-compiler/internal/pkg/common"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -117,6 +118,8 @@ func loadPackageWithPath(
 		})
 	}
 
+	slices.Sort(src)
+
 	loadedPackage = append(loadedPackage, ast.LoadedPackage{Url: url, Dir: absPath, Package: pkg, Sources: src})
 
 	for _, depUrl := range pkg.Dependencies {
@@ -134,7 +137,7 @@ func readDir(path, ext string, files []string) ([]string, error) {
 
 	for _, e := range entries {
 		if e.IsDir() {
-			files, err = readDir(path, ext, files)
+			files, err = readDir(filepath.Join(path, e.Name()), ext, files)
 			if err != nil {
 				return nil, err
 			}

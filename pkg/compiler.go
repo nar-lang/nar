@@ -96,7 +96,7 @@ func Compile(
 	for _, m := range parsedModules {
 		processors.Normalize(m.Name, parsedModules, normalizedModules)
 		processors.Solve(m.Name, normalizedModules, typedModules)
-		processors.Compose(m.Name, typedModules, &bin)
+		processors.Compose(m.Name, typedModules, debug, &bin)
 	}
 
 	outDir := filepath.Dir(outPath)

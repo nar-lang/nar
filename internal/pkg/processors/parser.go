@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"strings"
 	"unicode"
 )
 
@@ -351,13 +352,23 @@ func parseChar(src *Source) *rune {
 	}
 	src.cursor++
 
-	r := src.text[src.cursor-1]
+	r := src.text[src.cursor-2]
 	skipComment(src)
 	return &r
 }
 
-func parseString(src *Source) *string {
+var controlCharsReplacer = strings.NewReplacer(
+	"\\0", "\u0000",
+	"\\a", "\a",
+	"\\b", "\b",
+	"\\f", "\f",
+	"\\n", "\n",
+	"\\r", "\r",
+	"\\t", "\t",
+	"\\v", "\v",
+)
 
+func parseString(src *Source) *string {
 	if !isOk(src) {
 		return nil
 	}
@@ -368,7 +379,8 @@ func parseString(src *Source) *string {
 		return nil
 	}
 
-	skipNextQuote := true
+	src.cursor++
+	skipNextQuote := false
 	for {
 		if !isOk(src) {
 			setErrorSource(*src, "string is not closed before the end of file")
@@ -376,12 +388,13 @@ func parseString(src *Source) *string {
 		if SmbQuoteString == src.text[src.cursor] && !skipNextQuote {
 			break
 		}
-		src.cursor++
 		skipNextQuote = SmbEscape == src.text[src.cursor]
+		src.cursor++
 	}
 	src.cursor++
 	str := string(src.text[start+1 : src.cursor-1])
 	skipComment(src)
+	str = controlCharsReplacer.Replace(str)
 	return &str
 }
 

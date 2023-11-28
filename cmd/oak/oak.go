@@ -18,7 +18,6 @@ func main() {
 	cacheDir := flag.String("cache", defaultCacheDir, "package cache directory")
 	upgrade := flag.Bool("upgrade", false, "upgrade packages")
 	link := flag.String("link", "", "link program for specific platform (available: js)")
-	main := flag.String("main", "", "main function")
 	pack := flag.String("pack", "", "command to pack resulted executable.\n"+
 		"  examples\n"+"  js: `webpack-cli --entry build/index.source.js -o ./build`")
 	noClean := flag.Bool("no-clean", false, "don't clean up intermediate artifacts after packing")
@@ -27,13 +26,13 @@ func main() {
 	outStream := os.Stdout
 
 	linker := oakc.GetLinker(*link)
-	err, packagesPaths := oakc.Compile(
+	err, loadedPackages := oakc.Compile(
 		flag.Args(), linker.GetOutFileLocation(*out),
 		!*release, *upgrade, *cacheDir, outStream)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	err = linker.Link(*main, packagesPaths, *out, !*release, *upgrade, *cacheDir, outStream)
+	err = linker.Link(loadedPackages[0].Package.Main, loadedPackages, *out, !*release, *upgrade, *cacheDir, outStream)
 	if err != nil {
 		log.Fatal(err.Error())
 	}

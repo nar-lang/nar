@@ -38,7 +38,7 @@ enums:
     1: load_local
     2: load_global
     3: load_const
-    4: unload_local
+    4: swap_pop
     5: apply
     6: call
     7: match
@@ -47,7 +47,6 @@ enums:
     10: make_pattern
     11: access
     12: update
-    13: duplicate
   const_kind:
     1: unit
     2: char
@@ -75,6 +74,9 @@ enums:
   packed_const_kind:
     1: int
     2: float
+  swap_pop_mode:
+    1: both
+    2: pop
 types:
   strl:
     seq:
@@ -122,8 +124,12 @@ types:
         type: u1
         enum: pattern_kind
         if: kind == op_kind::make_pattern
+      - id: b_swap_pop_mode
+        type: u1
+        enum: swap_pop_mode
+        if: kind == op_kind::swap_pop
       - contents: [ 0x00 ]
-        if: kind != op_kind::load_const and kind != op_kind::apply and kind != op_kind::call and kind != op_kind::make_object and kind != op_kind::make_pattern
+        if: kind == op_kind::load_local or kind == op_kind::load_global or kind == op_kind::match or kind == op_kind::jump or kind == op_kind::access or kind == op_kind::update
 
       - id: c_const_kind
         type: u1
@@ -139,7 +145,7 @@ types:
 
       - id: a_string_hash
         type: u4
-        if: kind == op_kind::load_local or kind == op_kind::unload_local or kind == op_kind::call or kind == op_kind::make_pattern or kind == op_kind::access or kind == op_kind::update
+        if: kind == op_kind::load_local or kind == op_kind::call or kind == op_kind::make_pattern or kind == op_kind::access or kind == op_kind::update
       - id: a_pointer
         type: u4
         if: kind == op_kind::load_global
@@ -153,7 +159,7 @@ types:
         type: u4
         if: kind == op_kind::load_const
       - contents: [ 0x00, 0x00, 0x00, 0x00 ]
-        if: kind == op_kind::apply or kind == op_kind::duplicate
+        if: kind == op_kind::apply or kind == op_kind::swap_pop
   func:
     seq:
       - id: num_args

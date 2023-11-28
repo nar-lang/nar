@@ -14,6 +14,8 @@
 * [ ] `export` definition keyword and tree shaking
 * [ ] Nested record fields access
 * [ ] Prefix operators (like infix ones)
+* [ ] Do not require import if fully qualified name is used
+* [ ] Support of \uNNNN string characters
 
 ## Libraries
 * [x] Oak.Tests library
@@ -35,6 +37,7 @@
 * JavaScript
   * [x] Runtime
   * [x] Linker
+  * [ ] Clean runtime from dependencies
 * C99
   * [ ] Runtime (static library)
   * [ ] Linker
