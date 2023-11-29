@@ -1317,14 +1317,13 @@ func unify(x typed.Type, y typed.Type, loc []ast.Location, subst map[uint64]type
 		{
 			if ey, ok := y.(*typed.TRecord); ok {
 				ex := x.(*typed.TRecord)
-				if len(ex.Fields) != len(ey.Fields) {
-					//TODO: prefer intersection match?
-					panic(common.Error{
-						Extra:   []ast.Location{ex.Location, ey.Location},
-						Message: "record fields number mismatch"})
-				}
-				for i, f := range ex.Fields {
-					unify(f, ey.Fields[i], append(loc, f.GetLocation(), ey.Fields[i].GetLocation()), subst)
+				for ny, fy := range ey.Fields {
+					for nx, fx := range ex.Fields {
+						if ny == nx {
+							unify(fy, fx, append(loc, fy.GetLocation(), fx.GetLocation()), subst)
+							break
+						}
+					}
 				}
 				return
 			}

@@ -1038,7 +1038,7 @@ func parseExpression(src *Source) parsed.Expression {
 		if nil == name {
 			setErrorSource(*src, "expected accessor name here")
 		}
-		return parsed.Accessor{Location: loc(src, cursor), FieldName: ast.Identifier(*name)}
+		return finishParseExpression(src, parsed.Accessor{Location: loc(src, cursor), FieldName: ast.Identifier(*name)})
 	}
 
 	//record / update
