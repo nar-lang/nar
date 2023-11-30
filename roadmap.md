@@ -26,6 +26,7 @@
 * [ ] ...
 
 ## Quality Of Life
+* [ ] Documentation
 * [ ] Language server
 * [ ] Debugger
 * [ ] Formatter
