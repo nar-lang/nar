@@ -128,9 +128,10 @@ func extractLocals(pattern normalized.Pattern, locals map[ast.Identifier]struct{
 func extractLambda(
 	loc ast.Location, parentName ast.Identifier, params []normalized.Pattern, body normalized.Expression,
 	m *normalized.Module, locals map[ast.Identifier]struct{},
+	name ast.Identifier,
 ) (def *normalized.Definition, usedLocals []ast.Identifier, replacement normalized.Expression) {
 	lastLambdaId++
-	lambdaName := ast.Identifier(fmt.Sprintf("_lmbd_%v_%d", parentName, lastLambdaId))
+	lambdaName := ast.Identifier(fmt.Sprintf("_lmbd_%v_%d_%s", parentName, lastLambdaId, name))
 	usedLocals = extractUsedLocals(body, locals, extractParamNames(params))
 
 	lastDefinitionId++
@@ -186,14 +187,14 @@ func flattenLambdas(
 	case normalized.Lambda:
 		{
 			e := expr.(normalized.Lambda)
-			def, _, replacement := extractLambda(e.Location, parentName, e.Params, e.Body, m, locals)
+			def, _, replacement := extractLambda(e.Location, parentName, e.Params, e.Body, m, locals, "")
 			def.Expression = flattenLambdas(def.Name, def.Expression, m, extractParamNames(def.Params))
 			return replacement
 		}
 	case normalized.LetDef:
 		{
 			e := expr.(normalized.LetDef)
-			def, usedLocals, replacement := extractLambda(e.Location, parentName, e.Params, e.Body, m, locals)
+			def, usedLocals, replacement := extractLambda(e.Location, parentName, e.Params, e.Body, m, locals, e.Name)
 
 			if len(usedLocals) > 0 {
 				replName := ast.Identifier(fmt.Sprintf("_lambda_closue_%d", lastLambdaId))
@@ -995,10 +996,14 @@ func normalizeExpression(
 	case parsed.Negate:
 		{
 			e := expr.(parsed.Negate)
-			return normalized.NativeCall{
+			return normalized.Apply{
 				Location: e.Location,
-				Name:     common.OakCoreMathNeg,
-				Args:     []normalized.Expression{normalize(e.Nested)},
+				Func: normalized.Global{
+					Location:       e.Location,
+					ModuleName:     common.OakCoreMath,
+					DefinitionName: common.OakCoreMathNeg,
+				},
+				Args: []normalized.Expression{normalize(e.Nested)},
 			}
 		}
 	case parsed.Var:
@@ -1026,8 +1031,8 @@ func normalizeExpression(
 			e := expr.(parsed.InfixVar)
 			if m, i, ok := findInfixFn(modules, module, e.Infix); !ok {
 				panic(common.Error{
-					Location: i.AliasLocation,
-					Message:  "infix definition not found",
+					Location: e.Location,
+					Message:  fmt.Sprintf("infix definition `%s` not found", e.Infix),
 				})
 			} else if _, d, ok := findParsedDefinition(nil, m, ast.QualifiedIdentifier(i.Alias)); !ok {
 				panic(common.Error{

@@ -5,15 +5,24 @@ import (
 	"oak-compiler/internal/pkg/ast"
 )
 
+type Constraint ast.Identifier
+
+const (
+	ConstraintNone   Constraint = ""
+	ConstraintNumber Constraint = "number"
+)
+
 var (
-	OakCoreMathNeg      = MakeExternalIdentifier("Oak.Core.Math", "neg")
+	OakCoreMath         = ast.QualifiedIdentifier("Oak.Core.Math")
+	OakCoreMathNeg      = ast.Identifier("neg")
 	OakCoreCharChar     = MakeExternalIdentifier("Oak.Core.Char", "Char")
-	OakCoreBasicsInt    = MakeExternalIdentifier("Oak.Core.Basics", "Int")
-	OakCoreBasicsFloat  = MakeExternalIdentifier("Oak.Core.Basics", "Float")
+	OakCoreBasicsInt    = MakeExternalIdentifier("Oak.Core.Math", "Int")
+	OakCoreBasicsFloat  = MakeExternalIdentifier("Oak.Core.Math", "Float")
 	OakCoreBasicsUnit   = MakeExternalIdentifier("Oak.Core.Basics", "Unit")
 	OakCoreBasicsBool   = MakeExternalIdentifier("Oak.Core.Basics", "Bool")
 	OakCoreStringString = MakeExternalIdentifier("Oak.Core.String", "String")
 	OakCoreListList     = MakeExternalIdentifier("Oak.Core.List", "List")
+	Number              = MakeExternalIdentifier("", ast.Identifier(ConstraintNumber))
 
 	OakCoreBasicsTrue = MakeDataOptionIdentifier(OakCoreBasicsBool, "True")
 )
@@ -24,4 +33,8 @@ func MakeExternalIdentifier(moduleName ast.QualifiedIdentifier, name ast.Identif
 
 func MakeDataOptionIdentifier(dataName ast.ExternalIdentifier, optionName ast.Identifier) ast.DataOptionIdentifier {
 	return ast.DataOptionIdentifier(fmt.Sprintf("%s#%s", dataName, optionName))
+}
+
+func MakeExternalConstraint(constraint Constraint) ast.ExternalIdentifier {
+	return MakeExternalIdentifier("", ast.Identifier(constraint))
 }

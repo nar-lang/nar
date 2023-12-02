@@ -93,7 +93,14 @@ func Compile(
 		}
 	}
 
-	for _, m := range parsedModules {
+	var names []ast.QualifiedIdentifier
+	for name := range parsedModules {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	for _, name := range names {
+		m := parsedModules[name]
 		processors.Normalize(m.Name, parsedModules, normalizedModules)
 		processors.Solve(m.Name, normalizedModules, typedModules)
 		processors.Compose(m.Name, typedModules, debug, &bin)

@@ -476,7 +476,8 @@ func parseInfixIdentifier(src *Source, withParenthesis bool) *ast.InfixIdentifie
 	}
 
 	if withParenthesis && !readExact(src, SeqParenthesisClose) {
-		setErrorSource(*src, "expected `)` here")
+		src.cursor = cursor
+		return nil
 	}
 
 	if 0 == end-start {
@@ -830,13 +831,13 @@ func parseSignature(src *Source) ([]parsed.Pattern, parsed.Type) {
 	return patterns, ret
 }
 
-func parseExpression(src *Source) parsed.Expression {
+func parseExpression(src *Source, negate bool) parsed.Expression {
 	cursor := src.cursor
 
 	//const
 	const_ := parseConst(src)
 	if nil != const_ {
-		return finishParseExpression(src, parsed.Const{Location: loc(src, cursor), Value: const_})
+		return finishParseExpression(src, parsed.Const{Location: loc(src, cursor), Value: const_}, negate)
 	}
 
 	//list
@@ -844,7 +845,7 @@ func parseExpression(src *Source) parsed.Expression {
 		var items []parsed.Expression
 		if !readExact(src, SeqBracketsClose) {
 			for {
-				item := parseExpression(src)
+				item := parseExpression(src, false)
 				if nil == item {
 					setErrorSource(*src, "expected list item expression here")
 				}
@@ -859,23 +860,18 @@ func parseExpression(src *Source) parsed.Expression {
 				setErrorSource(*src, "expected `,` or `]` here")
 			}
 		}
-		return finishParseExpression(src, parsed.List{Location: loc(src, cursor), Items: items})
+		return finishParseExpression(src, parsed.List{Location: loc(src, cursor), Items: items}, negate)
+	}
+
+	//negate
+	if readExact(src, SeqMinus) {
+		return parseExpression(src, !negate)
 	}
 
 	//infix value
 	infix := parseInfixIdentifier(src, true)
 	if nil != infix {
-		return finishParseExpression(src, parsed.InfixVar{Location: loc(src, cursor), Infix: *infix})
-	}
-
-	//negate
-	if readExact(src, SeqMinus) {
-		nested := parseExpression(src)
-		if nil == nested {
-			setErrorSource(*src, "expected expression here")
-		}
-
-		return finishParseExpression(src, parsed.Negate{Location: loc(src, cursor), Nested: nested})
+		return finishParseExpression(src, parsed.InfixVar{Location: loc(src, cursor), Infix: *infix}, negate)
 	}
 
 	//lambda
@@ -891,36 +887,36 @@ func parseExpression(src *Source) parsed.Expression {
 			setErrorSource(*src, "expected `->` here")
 		}
 
-		body := parseExpression(src)
+		body := parseExpression(src, false)
 		if nil == body {
 			setErrorSource(*src, "expected lambda expression body here")
 		}
 		return finishParseExpression(src,
-			parsed.Lambda{Location: loc(src, cursor), Params: patterns, Body: body, Return: ret})
+			parsed.Lambda{Location: loc(src, cursor), Params: patterns, Body: body, Return: ret}, negate)
 	}
 
 	//if
 	if readExact(src, KwIf) {
-		condition := parseExpression(src)
+		condition := parseExpression(src, false)
 		if nil == condition {
 			setErrorSource(*src, "expected condition expression here")
 		}
 		if !readExact(src, KwThen) {
 			setErrorSource(*src, "expected `then` here")
 		}
-		positive := parseExpression(src)
+		positive := parseExpression(src, false)
 		if nil == positive {
 			setErrorSource(*src, "expected positive branch expression here")
 		}
 		if !readExact(src, KwElse) {
 			setErrorSource(*src, "expected `else` here")
 		}
-		negative := parseExpression(src)
+		negative := parseExpression(src, false)
 		if nil == negative {
 			setErrorSource(*src, "expected negative branch expression here")
 		}
 		return finishParseExpression(src,
-			parsed.If{Location: loc(src, cursor), Condition: condition, Positive: positive, Negative: negative})
+			parsed.If{Location: loc(src, cursor), Condition: condition, Positive: positive, Negative: negative}, negate)
 	}
 
 	//let
@@ -937,7 +933,7 @@ func parseExpression(src *Source) parsed.Expression {
 			if !readExact(src, SeqEqual) {
 				setErrorSource(*src, "expected `=` here")
 			}
-			value = parseExpression(src)
+			value = parseExpression(src, false)
 			if nil == value {
 				setErrorSource(*src, "expected function body here")
 			}
@@ -959,7 +955,7 @@ func parseExpression(src *Source) parsed.Expression {
 			if !readExact(src, SeqEqual) {
 				setErrorSource(*src, "expected `=` here")
 			}
-			value = parseExpression(src)
+			value = parseExpression(src, false)
 			if nil == value {
 				setErrorSource(*src, "expected expression here")
 			}
@@ -972,7 +968,7 @@ func parseExpression(src *Source) parsed.Expression {
 			setErrorSource(*src, "expected `let` or `in` here")
 		}
 
-		nested := parseExpression(src)
+		nested := parseExpression(src, false)
 		if nil == nested {
 			setErrorSource(*src, "expected expression here")
 		}
@@ -984,20 +980,20 @@ func parseExpression(src *Source) parsed.Expression {
 				Body:     value,
 				FnType:   fnType,
 				Nested:   nested,
-			})
+			}, negate)
 		} else {
 			return finishParseExpression(src, parsed.LetMatch{
 				Location: loc(src, cursor),
 				Pattern:  pattern,
 				Value:    value,
 				Nested:   nested,
-			})
+			}, negate)
 		}
 	}
 
 	//select
 	if readExact(src, KwSelect) {
-		condition := parseExpression(src)
+		condition := parseExpression(src, false)
 		if nil == condition {
 			setErrorSource(*src, "expected select condition expression here")
 		}
@@ -1019,7 +1015,7 @@ func parseExpression(src *Source) parsed.Expression {
 				setErrorSource(*src, "expected `->` here")
 			}
 
-			expr := parseExpression(src)
+			expr := parseExpression(src, false)
 			if nil == expr {
 				setErrorSource(*src, "expected case expression here")
 			}
@@ -1029,7 +1025,7 @@ func parseExpression(src *Source) parsed.Expression {
 		if 0 == len(cases) {
 			setErrorSource(*src, "expected case expression here")
 		}
-		return finishParseExpression(src, parsed.Select{Location: loc(src, cursor), Condition: condition, Cases: cases})
+		return finishParseExpression(src, parsed.Select{Location: loc(src, cursor), Condition: condition, Cases: cases}, negate)
 	}
 
 	//accessor
@@ -1038,7 +1034,7 @@ func parseExpression(src *Source) parsed.Expression {
 		if nil == name {
 			setErrorSource(*src, "expected accessor name here")
 		}
-		return finishParseExpression(src, parsed.Accessor{Location: loc(src, cursor), FieldName: ast.Identifier(*name)})
+		return finishParseExpression(src, parsed.Accessor{Location: loc(src, cursor), FieldName: ast.Identifier(*name)}, negate)
 	}
 
 	//record / update
@@ -1062,7 +1058,7 @@ func parseExpression(src *Source) parsed.Expression {
 			if !readExact(src, SeqEqual) {
 				setErrorSource(*src, "expected `=` here")
 			}
-			expr := parseExpression(src)
+			expr := parseExpression(src, false)
 			if nil == expr {
 				setErrorSource(*src, "expected record field value expression here")
 			}
@@ -1082,22 +1078,22 @@ func parseExpression(src *Source) parsed.Expression {
 		}
 
 		if nil == name {
-			return finishParseExpression(src, parsed.Record{Location: loc(src, cursor), Fields: fields})
+			return finishParseExpression(src, parsed.Record{Location: loc(src, cursor), Fields: fields}, negate)
 		} else {
 			return finishParseExpression(src,
-				parsed.Update{Location: loc(src, cursor), RecordName: *name, Fields: fields})
+				parsed.Update{Location: loc(src, cursor), RecordName: *name, Fields: fields}, negate)
 		}
 	}
 
 	//tuple / void / precedence
 	if readExact(src, SeqParenthesisOpen) {
 		if readExact(src, SeqParenthesisClose) {
-			return finishParseExpression(src, parsed.Const{Location: loc(src, cursor), Value: ast.CUnit{}})
+			return finishParseExpression(src, parsed.Const{Location: loc(src, cursor), Value: ast.CUnit{}}, negate)
 		}
 
 		var items []parsed.Expression
 		for {
-			expr := parseExpression(src)
+			expr := parseExpression(src, false)
 			if nil == expr {
 				setErrorSource(*src, "expected expression here")
 			}
@@ -1118,28 +1114,32 @@ func parseExpression(src *Source) parsed.Expression {
 				bop.InParentheses = true
 				expr = bop
 			}
-			return finishParseExpression(src, expr)
+			return finishParseExpression(src, expr, negate)
 		} else {
-			return finishParseExpression(src, parsed.Tuple{Location: loc(src, cursor), Items: items})
+			return finishParseExpression(src, parsed.Tuple{Location: loc(src, cursor), Items: items}, negate)
 		}
 	}
 
 	name := readIdentifier(src, true)
 	if nil != name {
-		return finishParseExpression(src, parsed.Var{Location: loc(src, cursor), Name: *name})
+		return finishParseExpression(src, parsed.Var{Location: loc(src, cursor), Name: *name}, negate)
 	}
 
 	return nil
 }
 
-func finishParseExpression(src *Source, expr parsed.Expression) parsed.Expression {
+func finishParseExpression(src *Source, expr parsed.Expression, negate bool) parsed.Expression {
 	cursor := src.cursor
 
 	infixOp := parseInfixIdentifier(src, false)
 	if nil != infixOp {
-		final := parseExpression(src)
+		final := parseExpression(src, false)
 		if nil == final {
 			setErrorSource(*src, "expected second operand expression of binary expression here")
+		}
+
+		if negate {
+			expr = parsed.Negate{Location: loc(src, cursor), Nested: expr}
 		}
 
 		items := []parsed.BinOpItem{{Expression: expr}, {Infix: *infixOp}}
@@ -1156,7 +1156,7 @@ func finishParseExpression(src *Source, expr parsed.Expression) parsed.Expressio
 	if readExact(src, SeqParenthesisOpen) {
 		var items []parsed.Expression
 		for {
-			item := parseExpression(src)
+			item := parseExpression(src, false)
 			if nil == item {
 				setErrorSource(*src, "expected function argument expression here")
 			}
@@ -1170,7 +1170,7 @@ func finishParseExpression(src *Source, expr parsed.Expression) parsed.Expressio
 			}
 			setErrorSource(*src, "expected `,` or `)` here")
 		}
-		return finishParseExpression(src, parsed.Apply{Location: loc(src, cursor), Func: expr, Args: items})
+		return finishParseExpression(src, parsed.Apply{Location: loc(src, cursor), Func: expr, Args: items}, negate)
 	}
 
 	if readExact(src, SeqDot) {
@@ -1181,7 +1181,11 @@ func finishParseExpression(src *Source, expr parsed.Expression) parsed.Expressio
 		return finishParseExpression(src, parsed.Access{
 			Location:  loc(src, cursor),
 			Record:    expr,
-			FieldName: ast.Identifier(*name)})
+			FieldName: ast.Identifier(*name),
+		}, negate)
+	}
+	if negate {
+		expr = parsed.Negate{Location: loc(src, cursor), Nested: expr}
 	}
 	return expr
 }
@@ -1442,7 +1446,7 @@ func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Defin
 			if !readExact(src, SeqEqual) {
 				setErrorSource(*src, "expected `=` here")
 			}
-			expr = parseExpression(src)
+			expr = parseExpression(src, false)
 			if nil == expr {
 				setErrorSource(*src, "expected expression here")
 			}
@@ -1463,7 +1467,7 @@ func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Defin
 			if !readExact(src, SeqEqual) {
 				setErrorSource(*src, "expected `=` here")
 			}
-			expr = parseExpression(src)
+			expr = parseExpression(src, false)
 			if nil == expr {
 				setErrorSource(*src, "expected expression here")
 			}

@@ -22,7 +22,7 @@ type PAlias struct {
 func (*PAlias) _pattern() {}
 
 func (p *PAlias) String() string {
-	return fmt.Sprintf("PAlias(%s,%v)", p.Alias, p.Nested)
+	return fmt.Sprintf("PAlias(%s,%v){%s}", p.Alias, p.Nested, p.Type)
 }
 
 func (p *PAlias) GetLocation() ast.Location {
@@ -41,7 +41,7 @@ type PAny struct {
 func (*PAny) _pattern() {}
 
 func (p *PAny) String() string {
-	return fmt.Sprintf("PAny()")
+	return fmt.Sprintf("PAny(){%s}", p.Type)
 }
 
 func (p *PAny) GetLocation() ast.Location {
@@ -61,7 +61,7 @@ type PCons struct {
 func (*PCons) _pattern() {}
 
 func (p *PCons) String() string {
-	return fmt.Sprintf("PCons(%v,%v)", p.Head, p.Tail)
+	return fmt.Sprintf("PCons(%v,%v){%s}", p.Head, p.Tail, p.Type)
 }
 
 func (p *PCons) GetLocation() ast.Location {
@@ -81,7 +81,7 @@ type PConst struct {
 func (*PConst) _pattern() {}
 
 func (p *PConst) String() string {
-	return fmt.Sprintf("PConst(%v)", p.Value)
+	return fmt.Sprintf("PConst(%v){%s}", p.Value, p.Type)
 }
 
 func (p *PConst) GetLocation() ast.Location {
@@ -103,7 +103,7 @@ type PDataOption struct {
 func (*PDataOption) _pattern() {}
 
 func (p *PDataOption) String() string {
-	return fmt.Sprintf("PDataOption(%s,%v)", p.Name, p.Args)
+	return fmt.Sprintf("PDataOption(%s,%v){%s}", p.Name, p.Args, p.Type)
 }
 
 func (p *PDataOption) GetLocation() ast.Location {
@@ -123,7 +123,7 @@ type PList struct {
 func (*PList) _pattern() {}
 
 func (p *PList) String() string {
-	return fmt.Sprintf("PList(%v)", p.Items)
+	return fmt.Sprintf("PList(%v){%s}", p.Items, p.Type)
 }
 
 func (p *PList) GetLocation() ast.Location {
@@ -143,7 +143,7 @@ type PNamed struct {
 func (*PNamed) _pattern() {}
 
 func (p *PNamed) String() string {
-	return fmt.Sprintf("PNamed(%s)", p.Name)
+	return fmt.Sprintf("PNamed(%s){%s}", p.Name, p.Type)
 }
 
 func (p *PNamed) GetLocation() ast.Location {
@@ -169,7 +169,7 @@ type PRecord struct {
 func (*PRecord) _pattern() {}
 
 func (p *PRecord) String() string {
-	return fmt.Sprintf("PRecord(%+v)", p.Fields)
+	return fmt.Sprintf("PRecord(%+v){%s}", p.Fields, p.Type)
 }
 
 func (p *PRecord) GetLocation() ast.Location {
@@ -189,7 +189,7 @@ type PTuple struct {
 func (*PTuple) _pattern() {}
 
 func (p *PTuple) String() string {
-	return fmt.Sprintf("PTuple(%v)", p.Items)
+	return fmt.Sprintf("PTuple(%v){%s}", p.Items, p.Type)
 }
 
 func (p *PTuple) GetLocation() ast.Location {

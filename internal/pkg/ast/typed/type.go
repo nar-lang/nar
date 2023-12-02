@@ -7,14 +7,6 @@ import (
 	"strings"
 )
 
-type Constraint string
-
-const (
-	ConstraintNone       Constraint = ""
-	ConstraintNumber     Constraint = "num"
-	ConstraintComparable Constraint = "cmp"
-)
-
 type Type interface {
 	fmt.Stringer
 	_type()
@@ -148,7 +140,7 @@ func (t *TExternal) String() string {
 	if tp != "" {
 		tp = "[" + tp + "]"
 	}
-	return fmt.Sprintf("%s%s", t.Name, tp)
+	return fmt.Sprintf("%v%v", t.Name, tp)
 }
 
 func (t *TExternal) EqualsTo(o Type) bool {
@@ -171,8 +163,7 @@ func (t *TExternal) EqualsTo(o Type) bool {
 
 type TUnbound struct {
 	ast.Location
-	Index      uint64
-	Constraint Constraint
+	Index int64
 }
 
 func (*TUnbound) _type() {}
@@ -181,16 +172,8 @@ func (t *TUnbound) GetLocation() ast.Location {
 	return t.Location
 }
 
-var unboundTypeMap = map[uint64]rune{}
-
 func (t *TUnbound) String() string {
-	if r, ok := unboundTypeMap[t.Index]; ok {
-		return fmt.Sprintf("%c", r)
-	}
-	r := 'a' + rune(len(unboundTypeMap))
-	unboundTypeMap[t.Index] = r
-
-	return string(r)
+	return fmt.Sprintf("_%d", t.Index)
 }
 
 func (t *TUnbound) EqualsTo(o Type) bool {

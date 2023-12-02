@@ -41,7 +41,7 @@ func Compose(
 
 		ptr := binary.FuncsMap[pathId]
 		if binary.Funcs[ptr].Ops == nil {
-			binary.Funcs[ptr] = composeDefinition(def, binary)
+			binary.Funcs[ptr] = composeDefinition(def, pathId, binary)
 			if !def.Hidden || debug {
 				binary.Exports[pathId] = ptr
 			}
@@ -49,11 +49,13 @@ func Compose(
 	}
 }
 
-func composeDefinition(def *typed.Definition, binary *bytecode.Binary) bytecode.Func {
+func composeDefinition(def *typed.Definition, pathId ast.ExternalIdentifier, binary *bytecode.Binary) bytecode.Func {
 	var ops []bytecode.Op
 	var locations []ast.Location
 
-	if nc, ok := def.Expression.(*typed.NativeCall); !ok {
+	if nc, ok := def.Expression.(*typed.NativeCall); ok && pathId == nc.Name {
+		ops, locations = call(string(nc.Name), len(nc.Args), nc.Location, ops, locations, binary)
+	} else {
 		for i := len(def.Params) - 1; i >= 0; i-- {
 			p := def.Params[i]
 			ops, locations = composePattern(p, ops, locations, binary)
@@ -61,8 +63,6 @@ func composeDefinition(def *typed.Definition, binary *bytecode.Binary) bytecode.
 			ops, locations = swapPop(p.GetLocation(), bytecode.SwapPopModePop, ops, locations)
 		}
 		ops, locations = composeExpression(def.Expression, ops, locations, binary)
-	} else {
-		ops, locations = call(string(nc.Name), len(nc.Args), nc.Location, ops, locations, binary)
 	}
 
 	return bytecode.Func{
@@ -99,7 +99,13 @@ func composeExpression(
 	case *typed.Const:
 		{
 			e := expr.(*typed.Const)
-			ops, locations = loadConstValue(e.Value, bytecode.StackKindObject, e.Location, ops, locations, binary)
+			v := e.Value
+			if iv, ok := v.(ast.CInt); ok {
+				if ex, ok := e.Type.(*typed.TExternal); ok && ex.Name == common.OakCoreBasicsFloat {
+					v = ast.CFloat{Value: float64(iv.Value)}
+				}
+			}
+			ops, locations = loadConstValue(v, bytecode.StackKindObject, e.Location, ops, locations, binary)
 			break
 		}
 	case *typed.Local:

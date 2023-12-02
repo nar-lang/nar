@@ -22,7 +22,7 @@ type Access struct {
 func (e *Access) _expression() {}
 
 func (e *Access) String() string {
-	return fmt.Sprintf("Access(%s,%v)", e.FieldName, e.Record)
+	return fmt.Sprintf("Access(%s,%v){%s}", e.FieldName, e.Record, e.Type)
 }
 
 func (e *Access) GetLocation() ast.Location {
@@ -43,7 +43,7 @@ type Apply struct {
 func (e *Apply) _expression() {}
 
 func (e *Apply) String() string {
-	return fmt.Sprintf("Apply(%v,%v)", e.Func, e.Args)
+	return fmt.Sprintf("Apply(%v,%v){%s}", e.Func, e.Args, e.Type)
 }
 
 func (e *Apply) GetLocation() ast.Location {
@@ -63,7 +63,7 @@ type Const struct {
 func (e *Const) _expression() {}
 
 func (e *Const) String() string {
-	return fmt.Sprintf("Const(%v)", e.Value)
+	return fmt.Sprintf("Const(%v){%s}", e.Value, e.Type)
 }
 
 func (e *Const) GetLocation() ast.Location {
@@ -83,7 +83,7 @@ type If struct {
 func (e *If) _expression() {}
 
 func (e *If) String() string {
-	return fmt.Sprintf("If(%v,%v,%v)", e.Condition, e.Positive, e.Negative)
+	return fmt.Sprintf("If(%v,%v,%v){%s}", e.Condition, e.Positive, e.Negative, e.Type)
 }
 
 func (e *If) GetLocation() ast.Location {
@@ -105,7 +105,7 @@ type Let struct {
 func (e *Let) _expression() {}
 
 func (e *Let) String() string {
-	return fmt.Sprintf("Let(%v,%v,%v)", e.Pattern, e.Value, e.Body)
+	return fmt.Sprintf("Let(%v,%v,%v){%s}", e.Pattern, e.Value, e.Body, e.Type)
 }
 
 func (e *Let) GetLocation() ast.Location {
@@ -125,7 +125,7 @@ type List struct {
 func (e *List) _expression() {}
 
 func (e *List) String() string {
-	return fmt.Sprintf("List(%v)", e.Items)
+	return fmt.Sprintf("List(%v){%s}", e.Items, e.Type)
 }
 
 func (e *List) GetLocation() ast.Location {
@@ -156,7 +156,7 @@ type Record struct {
 func (e *Record) _expression() {}
 
 func (e *Record) String() string {
-	return fmt.Sprintf("Record(%v)", e.Fields)
+	return fmt.Sprintf("Record(%v){%s}", e.Fields, e.Type)
 }
 
 func (e *Record) GetLocation() ast.Location {
@@ -188,7 +188,7 @@ type Select struct {
 func (e *Select) _expression() {}
 
 func (e *Select) String() string {
-	return fmt.Sprintf("Select(%v,%v)", e.Condition, e.Cases)
+	return fmt.Sprintf("Select(%v,%v){%s}", e.Condition, e.Cases, e.Type)
 }
 
 func (e *Select) GetLocation() ast.Location {
@@ -208,7 +208,7 @@ type Tuple struct {
 func (e *Tuple) _expression() {}
 
 func (e *Tuple) String() string {
-	return fmt.Sprintf("Tuple(%v)", e.Items)
+	return fmt.Sprintf("Tuple(%v){%s}", e.Items, e.Type)
 }
 
 func (e *Tuple) GetLocation() ast.Location {
@@ -229,7 +229,7 @@ type UpdateLocal struct {
 func (e *UpdateLocal) _expression() {}
 
 func (e *UpdateLocal) String() string {
-	return fmt.Sprintf("UpdateLocal(%v,%v)", e.RecordName, e.Fields)
+	return fmt.Sprintf("UpdateLocal(%v,%v){%s}", e.RecordName, e.Fields, e.Type)
 }
 
 func (e *UpdateLocal) GetLocation() ast.Location {
@@ -252,7 +252,7 @@ type UpdateGlobal struct {
 func (e *UpdateGlobal) _expression() {}
 
 func (e *UpdateGlobal) String() string {
-	return fmt.Sprintf("UpdateGlobal(%s.%s,%v)", e.ModuleName, e.DefinitionName, e.Fields)
+	return fmt.Sprintf("UpdateGlobal(%s.%s,%v){%s}", e.ModuleName, e.DefinitionName, e.Fields, e.Type)
 }
 
 func (e *UpdateGlobal) GetLocation() ast.Location {
@@ -274,7 +274,7 @@ type Constructor struct {
 func (e *Constructor) _expression() {}
 
 func (e *Constructor) String() string {
-	return fmt.Sprintf("Constructor(%s/%s,%v)", e.DataName, e.OptionName, e.Args)
+	return fmt.Sprintf("Constructor(%s/%s,%v){%s}", e.DataName, e.OptionName, e.Args, e.Type)
 }
 
 func (e *Constructor) GetLocation() ast.Location {
@@ -295,7 +295,7 @@ type NativeCall struct {
 func (e *NativeCall) _expression() {}
 
 func (e *NativeCall) String() string {
-	return fmt.Sprintf("NativeCall(%s,%v)", e.Name, e.Args)
+	return fmt.Sprintf("NativeCall(%s,%v){%s}", e.Name, e.Args, e.Type)
 }
 
 func (e *NativeCall) GetLocation() ast.Location {
@@ -315,7 +315,7 @@ type Local struct {
 func (e *Local) _expression() {}
 
 func (e *Local) String() string {
-	return fmt.Sprintf("Local(%s)", e.Name)
+	return fmt.Sprintf("Local(%s){%s}", e.Name, e.Type)
 }
 
 func (e *Local) GetLocation() ast.Location {
@@ -337,7 +337,7 @@ type Global struct {
 func (e *Global) _expression() {}
 
 func (e *Global) String() string {
-	return fmt.Sprintf("Global(%s.%s)", e.ModuleName, e.DefinitionName)
+	return fmt.Sprintf("Global(%s.%s){%s}", e.ModuleName, e.DefinitionName, e.Type)
 }
 
 func (e *Global) GetLocation() ast.Location {

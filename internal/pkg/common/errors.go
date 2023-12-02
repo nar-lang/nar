@@ -10,6 +10,11 @@ type Error struct {
 	Message  string
 }
 
+func (e Error) Error() string {
+	//TODO implement me
+	panic("implement me")
+}
+
 type SystemError struct {
 	Message string
 }
