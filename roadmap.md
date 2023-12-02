@@ -8,12 +8,12 @@
 * [x] Packages system
 
 ## Compiler v0.2
-* [ ] Check type constraints (`num` and `cmp`)
+* [x] Check type constraints (`number`)
 * [ ] Check if all cases are exhaustive
 * [ ] Check if function parameters are exhaustive (for data types)
 * [ ] `export` definition keyword and tree shaking
 * [ ] Nested record fields access
-* [ ] Prefix operators (like infix ones)
+* [ ] Prefix operators (like infix ones, neg is ugly)
 * [ ] Do not require import if fully qualified name is used
 * [ ] Support of \uNNNN string characters
 
@@ -21,8 +21,11 @@
 * [x] Oak.Tests library
 * [ ] Oak.Core library + tests
 * [ ] Oak.Program library + tests
-* [ ] Tests for compiler
 * [ ] Oak.Leaf library (game engine)
+  * [ ] Oak.Leaf.GL
+  * [ ] Oak.Leaf.Sprite
+  * [ ] Oak.Leaf.Input
+  * [ ] Oak.Leaf.UI
 * [ ] ...
 
 ## Quality Of Life

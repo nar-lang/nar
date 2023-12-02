@@ -33,6 +33,7 @@ const (
 	KwIn       = "in"
 	KwSelect   = "select"
 	KwCase     = "case"
+	KwEnd      = "end"
 
 	SeqComment          = "//"
 	SeqCommentStart     = "/*"
@@ -1003,6 +1004,9 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 		for {
 			caseCursor := src.cursor
 			if !readExact(src, KwCase) {
+				if !readExact(src, KwEnd) {
+					setErrorSource(*src, "expected `case` or `end` here")
+				}
 				break
 			}
 
