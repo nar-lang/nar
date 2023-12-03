@@ -1043,6 +1043,10 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 
 	//record / update
 	if readExact(src, SeqBracesOpen) {
+		if readExact(src, SeqBracesClose) {
+			return finishParseExpression(src, parsed.Record{Location: loc(src, cursor)}, negate)
+		}
+
 		recCursor := src.cursor
 
 		name := readIdentifier(src, true)
