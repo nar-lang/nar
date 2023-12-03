@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-var unboundIndex = int64(0)
+var unboundIndex = uint64(0)
 var annotations []struct {
 	fmt.Stringer
 	typed.Type
@@ -1232,9 +1232,9 @@ func getConstType(cv ast.ConstValue, location ast.Location) typed.Type {
 	panic(common.SystemError{Message: "invalid case"})
 }
 
-func unifyAll(eqs []equation, loc []ast.Location) (map[int64]typed.Type, error) {
+func unifyAll(eqs []equation, loc []ast.Location) (map[uint64]typed.Type, error) {
 	var i int
-	subst := map[int64]typed.Type{}
+	subst := map[uint64]typed.Type{}
 	for _, eq := range eqs {
 		var extra []ast.Location
 		if eq.loc != nil {
@@ -1280,7 +1280,7 @@ func balanceFn(f *typed.TFunc, sz int) *typed.TFunc {
 	}
 }
 
-func unify(x typed.Type, y typed.Type, loc []ast.Location, subst map[int64]typed.Type) error {
+func unify(x typed.Type, y typed.Type, loc []ast.Location, subst map[uint64]typed.Type) error {
 	if x.EqualsTo(y) {
 		return nil
 	}
@@ -1388,7 +1388,7 @@ func unify(x typed.Type, y typed.Type, loc []ast.Location, subst map[int64]typed
 	}
 }
 
-func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc []ast.Location, subst map[int64]typed.Type) error {
+func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc []ast.Location, subst map[uint64]typed.Type) error {
 	if x, ok := subst[v.Index]; ok {
 		return unify(x, typ, loc, subst)
 	} else {
@@ -1408,7 +1408,7 @@ func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc []ast.Location, subst m
 	return nil
 }
 
-func OccursCheck(v *typed.TUnbound, typ typed.Type, subst map[int64]typed.Type) bool {
+func OccursCheck(v *typed.TUnbound, typ typed.Type, subst map[uint64]typed.Type) bool {
 	if v.EqualsTo(typ) {
 		return true
 	}
@@ -1469,7 +1469,7 @@ func OccursCheck(v *typed.TUnbound, typ typed.Type, subst map[int64]typed.Type) 
 	return false
 }
 
-func applyDefinition(td *typed.Definition, subst map[int64]typed.Type) *typed.Definition {
+func applyDefinition(td *typed.Definition, subst map[uint64]typed.Type) *typed.Definition {
 	td.Params = common.Map(func(p typed.Pattern) typed.Pattern {
 		return applyPattern(p, subst)
 	}, td.Params)
@@ -1477,7 +1477,7 @@ func applyDefinition(td *typed.Definition, subst map[int64]typed.Type) *typed.De
 	return td
 }
 
-func applyType(t typed.Type, subst map[int64]typed.Type) typed.Type {
+func applyType(t typed.Type, subst map[uint64]typed.Type) typed.Type {
 	apply := func(x typed.Type) typed.Type {
 		return applyType(x, subst)
 	}
@@ -1539,7 +1539,7 @@ func applyType(t typed.Type, subst map[int64]typed.Type) typed.Type {
 	return t
 }
 
-func applyPattern(pattern typed.Pattern, subst map[int64]typed.Type) typed.Pattern {
+func applyPattern(pattern typed.Pattern, subst map[uint64]typed.Type) typed.Pattern {
 	apply := func(x typed.Pattern) typed.Pattern {
 		return applyPattern(x, subst)
 	}
@@ -1649,7 +1649,7 @@ func applyPattern(pattern typed.Pattern, subst map[int64]typed.Type) typed.Patte
 	return pattern
 }
 
-func applyExpression(expr typed.Expression, subst map[int64]typed.Type) typed.Expression {
+func applyExpression(expr typed.Expression, subst map[uint64]typed.Type) typed.Expression {
 	if expr == nil {
 		return nil
 	}

@@ -44,11 +44,16 @@ type TNamed struct {
 
 func (TNamed) _type() {}
 
+type TDataOption struct {
+	Name   ast.Identifier
+	Hidden bool
+}
+
 type TData struct {
 	ast.Location
 	Name    ast.ExternalIdentifier
 	Args    []Type
-	Options []ast.Identifier
+	Options []TDataOption
 }
 
 func (TData) _type() {}

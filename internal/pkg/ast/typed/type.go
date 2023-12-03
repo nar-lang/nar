@@ -163,7 +163,7 @@ func (t *TExternal) EqualsTo(o Type) bool {
 
 type TUnbound struct {
 	ast.Location
-	Index int64
+	Index uint64
 }
 
 func (*TUnbound) _type() {}

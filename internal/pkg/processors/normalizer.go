@@ -493,7 +493,12 @@ func flattenDataTypes(m *parsed.Module) {
 				Location: it.Location,
 				Name:     common.MakeExternalIdentifier(m.Name, it.Name),
 				Args:     typeArgs,
-				Options:  common.Map(func(x parsed.DataTypeOption) ast.Identifier { return x.Name }, it.Options),
+				Options: common.Map(func(x parsed.DataTypeOption) parsed.TDataOption {
+					return parsed.TDataOption{
+						Name:   x.Name,
+						Hidden: x.Hidden,
+					}
+				}, it.Options),
 			},
 		})
 		for _, option := range it.Options {
@@ -557,10 +562,8 @@ func unwrapImports(module *parsed.Module, modules map[ast.QualifiedIdentifier]*p
 		}
 
 		var exp []string
-
-		for _, d := range m.Definitions {
-			n := string(d.Name)
-			if imp.ExposingAll || slices.Contains(imp.Exposing, n) {
+		expose := func(n string, exn string) {
+			if imp.ExposingAll || slices.Contains(imp.Exposing, exn) {
 				exp = append(exp, n)
 			}
 			exp = append(exp, fmt.Sprintf("%s.%s", modName, n))
@@ -569,35 +572,28 @@ func unwrapImports(module *parsed.Module, modules map[ast.QualifiedIdentifier]*p
 			}
 		}
 
+		for _, d := range m.Definitions {
+			if !d.Hidden {
+				expose(string(d.Name), string(d.Name))
+			}
+		}
+
 		for _, a := range m.Aliases {
-			n := string(a.Name)
-			if imp.ExposingAll || slices.Contains(imp.Exposing, n) {
-				exp = append(exp, n)
+			if !a.Hidden {
+				expose(string(a.Name), string(a.Name))
 				if dt, ok := a.Type.(parsed.TData); ok {
 					for _, v := range dt.Options {
-						exp = append(exp, string(v))
-					}
-				}
-			}
-			exp = append(exp, fmt.Sprintf("%s.%s", modName, n))
-			if dt, ok := a.Type.(parsed.TData); ok {
-				for _, v := range dt.Options {
-					exp = append(exp, fmt.Sprintf("%s.%s", modName, v))
-					if shortModName != "" {
-						exp = append(exp, fmt.Sprintf("%s.%s", shortModName, v))
+						if !v.Hidden {
+							expose(string(v.Name), string(a.Name))
+						}
 					}
 				}
 			}
 		}
 
 		for _, a := range m.InfixFns {
-			n := string(a.Name)
-			if imp.ExposingAll || slices.Contains(imp.Exposing, n) {
-				exp = append(exp, n)
-			}
-			exp = append(exp, fmt.Sprintf("%s.%s", modName, n))
-			if shortModName != "" {
-				exp = append(exp, fmt.Sprintf("%s.%s", shortModName, n))
+			if !a.Hidden {
+				expose(string(a.Name), string(a.Name))
 			}
 		}
 		imp.Exposing = exp
