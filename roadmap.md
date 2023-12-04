@@ -18,7 +18,9 @@
 * [ ] Support of \uNNNN string characters
 
 ## Libraries
-* [x] Oak.Tests library
+* [ ] Oak.Tests library
+  * [x] Simple tests
+  * [ ] Fuzz tests
 * [ ] Oak.Core library + tests
 * [ ] Oak.Program library + tests
 * [ ] Oak.Leaf library (game engine)
