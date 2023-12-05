@@ -235,14 +235,13 @@ func parseFloat(src *Source) *float64 {
 			return nil
 		}
 		first += "." + second
-	} else if readSequence(src, "e") != nil || readSequence(src, "E") != nil {
+	}
+	if readSequence(src, "e") != nil || readSequence(src, "E") != nil {
 		var sign string
 		if readSequence(src, "-") != nil {
 			sign = "-"
 		} else if readSequence(src, "+") != nil {
 			sign = "+"
-		} else {
-			return nil
 		}
 		second, base := readIntegerPart(src, false)
 		if base == 0 {
