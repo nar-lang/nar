@@ -1020,6 +1020,22 @@ func normalizeExpression(
 				}
 			}
 
+			parts := strings.Split(string(e.Name), ".")
+			if len(parts) > 1 {
+				varAccess := parsed.Expression(parsed.Var{
+					Location: e.Location,
+					Name:     ast.QualifiedIdentifier(parts[0]),
+				})
+				for i := 1; i < len(parts); i++ {
+					varAccess = parsed.Access{
+						Location:  e.Location,
+						Record:    varAccess,
+						FieldName: ast.Identifier(parts[i]),
+					}
+				}
+				return normalizeExpression(locals, modules, module, varAccess)
+			}
+
 			panic(common.Error{Location: e.Location, Message: fmt.Sprintf("identifier `%s` not found", e.Name)})
 		}
 	case parsed.InfixVar:
@@ -1336,7 +1352,14 @@ func findParsedType(
 				Args:     args,
 			}, true
 		}
-		return applyTypeArgs(alias.Type, args)
+		if len(alias.Params) != len(args) {
+			return nil, false
+		}
+		typeMap := map[ast.Identifier]parsed.Type{}
+		for i, x := range alias.Params {
+			typeMap[x] = args[i]
+		}
+		return applyTypeArgs(alias.Type, typeMap), true
 	}
 
 	ids := strings.Split(string(name), ".")
@@ -1351,46 +1374,55 @@ func findParsedType(
 	return nil, false
 }
 
-func applyTypeArgs(t parsed.Type, args []parsed.Type) (parsed.Type, bool) {
+func applyTypeArgs(t parsed.Type, params map[ast.Identifier]parsed.Type) parsed.Type {
+	doMap := func(x parsed.Type) parsed.Type { return applyTypeArgs(x, params) }
+
 	switch t.(type) {
 	case parsed.TFunc:
-		return t, true
+		{
+			e := t.(parsed.TFunc)
+			e.Params = common.Map(doMap, e.Params)
+			e.Return = applyTypeArgs(e.Return, params)
+			return t
+		}
 	case parsed.TRecord:
-		return t, true
+		{
+			e := t.(parsed.TRecord)
+			for name, f := range e.Fields {
+				e.Fields[name] = applyTypeArgs(f, params)
+			}
+			return t
+		}
 	case parsed.TTuple:
-		return t, true
+		{
+			e := t.(parsed.TTuple)
+			e.Items = common.Map(doMap, e.Items)
+			return t
+		}
 	case parsed.TUnit:
-		return t, true
+		return t
 	case parsed.TData:
 		{
 			e := t.(parsed.TData)
-			if len(e.Args) != len(args) {
-				return nil, false
-			}
-			e.Args = args
-			return e, true
+			e.Args = common.Map(doMap, e.Args)
+			return e
 		}
 	case parsed.TNamed:
 		{
 			e := t.(parsed.TNamed)
-			if len(e.Args) != len(args) {
-				return nil, false
-			}
-			e.Args = args
-			return e, true
+			e.Args = common.Map(doMap, e.Args)
+			return e
 		}
 	case parsed.TExternal:
 		{
 			e := t.(parsed.TExternal)
-			if len(e.Args) != len(args) {
-				return nil, false
-			}
-			e.Args = args
-			return e, true
+			e.Args = common.Map(doMap, e.Args)
+			return e
 		}
 	case parsed.TTypeParameter:
 		{
-			return t, true
+			e := t.(parsed.TTypeParameter)
+			return params[e.Name]
 		}
 	}
 	panic(common.SystemError{Message: "impossible case"})

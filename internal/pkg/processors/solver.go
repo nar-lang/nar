@@ -115,7 +115,9 @@ func Solve(
 		}
 
 		if err != nil {
-			panic(err)
+			panic(common.SystemError{
+				Message: fmt.Sprintf("failed while trying to solve type of %s.%s:\n%s", m.Name, def.Name, err.Error()),
+			})
 		}
 
 		td = applyDefinition(td, subst)

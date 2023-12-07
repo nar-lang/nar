@@ -1449,7 +1449,12 @@ func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Defin
 				setErrorSource(*src, "expected definedReturn here")
 			}
 		}
-		if !extern {
+		if extern {
+			expr = parsed.NativeCall{
+				Location: loc(src, typeCursor),
+				Name:     common.MakeExternalIdentifier(modName, ast.Identifier(*name)),
+			}
+		} else {
 			if !readExact(src, SeqEqual) {
 				setErrorSource(*src, "expected `=` here")
 			}

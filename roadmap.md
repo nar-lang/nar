@@ -35,6 +35,7 @@
 * [ ] Language server
 * [ ] Debugger
 * [ ] Formatter
+* [ ] Compilation performance improvements
 * [ ] IDE support
   * [ ] Visual Studio Code
   * [ ] Jetbrains Family

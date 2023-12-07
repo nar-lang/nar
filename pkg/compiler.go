@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 )
 
 func Compile(
@@ -22,43 +21,9 @@ func Compile(
 	defer func() {
 		x := recover()
 		if x != nil {
-			switch x.(type) {
-			case common.Error:
-				{
-					e := x.(common.Error)
-					sb := strings.Builder{}
-					if e.Location.FilePath != "" {
-						line, col := e.Location.GetLineAndColumn()
-						sb.WriteString(fmt.Sprintf("%s:%d:%d %s\n", e.Location.FilePath, line, col, e.Message))
-					}
-
-					var uniqueExtra []ast.Location
-					for _, e := range e.Extra {
-						if !slices.ContainsFunc(uniqueExtra, func(x ast.Location) bool {
-							return x.FilePath == e.FilePath && x.Position == e.Position
-						}) {
-							uniqueExtra = append(uniqueExtra, e)
-						}
-					}
-
-					for _, extra := range uniqueExtra {
-						line, col := extra.GetLineAndColumn()
-						sb.WriteString(fmt.Sprintf("  -> %s:%d:%d\n", extra.FilePath, line, col))
-					}
-
-					if e.Location.FilePath == "" {
-						sb.WriteString(fmt.Sprintf("%s\n", e.Message))
-					}
-					err = fmt.Errorf(sb.String())
-					return
-				}
-			case common.SystemError:
-				{
-					e := x.(common.SystemError)
-					err = fmt.Errorf(e.Message)
-					break
-				}
-			default:
+			if e, ok := x.(error); ok {
+				err = e
+			} else {
 				err = fmt.Errorf("%v", x)
 			}
 		}
