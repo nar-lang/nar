@@ -1069,6 +1069,15 @@ func equatizeExpression(
 			})
 
 			for _, f := range e.Fields {
+				eqs = append(eqs, equation{
+					loc:   &f.Location,
+					left:  f.Type,
+					right: f.Value.GetType(),
+					expr:  expr,
+				})
+			}
+
+			for _, f := range e.Fields {
 				eqs = equatizeExpression(eqs, f.Value, localDefs, stack, loc)
 			}
 			break
@@ -1134,6 +1143,15 @@ func equatizeExpression(
 			})
 
 			for _, f := range e.Fields {
+				eqs = append(eqs, equation{
+					loc:   &f.Location,
+					left:  f.Type,
+					right: f.Value.GetType(),
+					expr:  expr,
+				})
+			}
+
+			for _, f := range e.Fields {
 				eqs = equatizeExpression(eqs, f.Value, localDefs, stack, loc)
 			}
 			break
@@ -1155,6 +1173,15 @@ func equatizeExpression(
 				},
 				expr: expr,
 			})
+
+			for _, f := range e.Fields {
+				eqs = append(eqs, equation{
+					loc:   &f.Location,
+					left:  f.Type,
+					right: f.Value.GetType(),
+					expr:  expr,
+				})
+			}
 
 			for _, f := range e.Fields {
 				eqs = equatizeExpression(eqs, f.Value, localDefs, stack, loc)
@@ -1256,10 +1283,12 @@ func unifyAll(eqs []equation, loc []ast.Location) (map[uint64]typed.Type, error)
 		}
 
 		err := unify(eq.left, eq.right, append(loc, extra...), subst)
-		if err != nil {
-			ce := err.(common.Error)
-			ce.Message += fmt.Sprintf(" (in equation %d)", i)
-			return subst, ce
+		if dumpDebugOutput {
+			if err != nil {
+				ce := err.(common.Error)
+				ce.Message += fmt.Sprintf(" (in equation %d)", i)
+				return subst, ce
+			}
 		}
 		i++
 	}
