@@ -83,7 +83,7 @@ expr_part ::= const |
                 lambda |
                 "if" expr "then" expr "else" expr |
                 "let" let_defs "in" expr |
-                "select" expr cases |
+                "select" expr cases "end" |
                 "."identifier |
                 "{" [identifier "|"] expr_kvs "}" |
                 "()" |
