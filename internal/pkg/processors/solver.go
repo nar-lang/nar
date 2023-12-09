@@ -125,6 +125,7 @@ func Solve(
 		if dumpDebugOutput {
 			sb.WriteString("\n\nSolved\n---\n")
 			sb.WriteString(fmt.Sprintf("\n `%v`", td.GetType()))
+			sb.WriteString(fmt.Sprintf("\n `%v`", td))
 			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
 		}
 
@@ -593,17 +594,10 @@ func getAnnotatedGlobal(
 
 func newAnnotatedType(loc ast.Location, constraint common.Constraint) typed.Type {
 	unboundIndex++
-
-	if constraint != common.ConstraintNone {
-		return &typed.TExternal{
-			Location: loc,
-			Name:     common.MakeExternalConstraint(constraint),
-		}
-	}
-
 	return &typed.TUnbound{
-		Location: loc,
-		Index:    unboundIndex,
+		Location:   loc,
+		Index:      unboundIndex,
+		Constraint: constraint,
 	}
 }
 
@@ -625,7 +619,6 @@ func annotateType(
 		r = newAnnotatedType(location, constraint)
 
 	} else {
-
 		switch t.(type) {
 		case normalized.TFunc:
 			{
@@ -1283,12 +1276,13 @@ func unifyAll(eqs []equation, loc []ast.Location) (map[uint64]typed.Type, error)
 		}
 
 		err := unify(eq.left, eq.right, append(loc, extra...), subst)
-		if dumpDebugOutput {
-			if err != nil {
-				ce := err.(common.Error)
+
+		if err != nil {
+			ce := err.(common.Error)
+			if dumpDebugOutput {
 				ce.Message += fmt.Sprintf(" (in equation %d)", i)
-				return subst, ce
 			}
+			return subst, ce
 		}
 		i++
 	}
@@ -1432,6 +1426,28 @@ func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc []ast.Location, subst m
 			return common.Error{
 				Extra:   append(loc, v.Location, typ.GetLocation()),
 				Message: fmt.Sprintf("ambigous type: %v vs %v", applyType(v, subst), applyType(typ, subst)),
+			}
+		}
+	}
+	if v.Constraint == common.ConstraintNumber {
+		switch typ.(type) {
+		case *typed.TExternal:
+			{
+				e := typ.(*typed.TExternal)
+				if e.Name != common.OakCoreBasicsInt && e.Name != common.OakCoreBasicsFloat {
+					return common.Error{
+						Extra:   append(loc, v.Location, typ.GetLocation()),
+						Message: fmt.Sprintf("number constrainted type cannot hold  %v", applyType(typ, subst)),
+					}
+				}
+				break
+			}
+		case *typed.TUnbound:
+			{
+				x := typ.(*typed.TUnbound)
+				x.Constraint = v.Constraint
+				typ = x
+				break
 			}
 		}
 	}

@@ -163,7 +163,8 @@ func (t *TExternal) EqualsTo(o Type) bool {
 
 type TUnbound struct {
 	ast.Location
-	Index uint64
+	Index      uint64
+	Constraint common.Constraint
 }
 
 func (*TUnbound) _type() {}
@@ -178,7 +179,7 @@ func (t *TUnbound) String() string {
 
 func (t *TUnbound) EqualsTo(o Type) bool {
 	if y, ok := o.(*TUnbound); ok {
-		return t.Index == y.Index
+		return t.Index == y.Index && t.Constraint == y.Constraint
 	}
 	return false
 }
