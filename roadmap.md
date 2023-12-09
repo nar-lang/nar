@@ -21,7 +21,7 @@
 * [ ] Oak.Tests library
   * [x] Simple tests
   * [ ] Fuzz tests
-* [ ] Oak.Core library + tests
+* [x] Oak.Core library + tests
 * [ ] Oak.Program library + tests
 * [ ] Oak.Leaf library (game engine)
   * [ ] Oak.Leaf.GL
