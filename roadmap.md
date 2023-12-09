@@ -6,8 +6,6 @@
 * [x] Type solver
 * [x] Bytecode compiler
 * [x] Packages system
-
-## Compiler v0.2
 * [x] Check type constraints (`number`)
 * [ ] Check if all cases are exhaustive
 * [ ] Check if function parameters are exhaustive (for data types)
