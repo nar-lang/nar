@@ -13,7 +13,9 @@
 * [ ] Nested record fields access
 * [ ] Prefix operators (like infix ones, neg is ugly)
 * [ ] Do not require import if fully qualified name is used
+* [ ] Do not require exposing import with name of the package, e.g. `import Oak.Core.String`~~`exposing (String)`~~`
 * [ ] Support of \uNNNN string characters
+* [ ] Make prelude with default imports
 
 ## Libraries
 * [ ] Oak.Tests library
