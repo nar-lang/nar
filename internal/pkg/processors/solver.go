@@ -1094,9 +1094,17 @@ func equatizeExpression(
 					})
 			}
 
+			eqs = equatizeExpression(eqs, e.Condition, localDefs, stack, loc)
+
 			for _, cs := range e.Cases {
 				eqs = equatizePattern(eqs, cs.Pattern, loc)
 				eqs = equatizeExpression(eqs, cs.Expression, localDefs, stack, loc)
+				eqs = append(eqs, equation{
+					loc:   &cs.Location,
+					left:  cs.Pattern.GetType(),
+					right: e.Condition.GetType(),
+					expr:  expr,
+				})
 			}
 			break
 		}
@@ -1437,7 +1445,7 @@ func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc []ast.Location, subst m
 				if e.Name != common.OakCoreBasicsInt && e.Name != common.OakCoreBasicsFloat {
 					return common.Error{
 						Extra:   append(loc, v.Location, typ.GetLocation()),
-						Message: fmt.Sprintf("number constrainted type cannot hold  %v", applyType(typ, subst)),
+						Message: fmt.Sprintf("number constrainted type cannot hold %v", applyType(typ, subst)),
 					}
 				}
 				break
