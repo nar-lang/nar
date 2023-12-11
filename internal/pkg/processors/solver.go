@@ -738,7 +738,7 @@ func equatizeDefinition(
 	}
 
 	for _, p := range td.Params {
-		eqs = equatizePattern(eqs, p, loc)
+		eqs = equatizePattern(eqs, p, stack, loc)
 	}
 
 	if td.Expression != nil {
@@ -749,7 +749,7 @@ func equatizeDefinition(
 	return eqs
 }
 
-func equatizePattern(eqs []equation, pattern typed.Pattern, loc *ast.Location) []equation {
+func equatizePattern(eqs []equation, pattern typed.Pattern, stack []*typed.Definition, loc *ast.Location) []equation {
 	switch pattern.(type) {
 	case *typed.PAlias:
 		{
@@ -761,7 +761,7 @@ func equatizePattern(eqs []equation, pattern typed.Pattern, loc *ast.Location) [
 					right:   e.Nested.GetType(),
 					pattern: pattern,
 				})
-			eqs = equatizePattern(eqs, e.Nested, loc)
+			eqs = equatizePattern(eqs, e.Nested, stack, loc)
 			break
 		}
 	case *typed.PAny:
@@ -788,8 +788,8 @@ func equatizePattern(eqs []equation, pattern typed.Pattern, loc *ast.Location) [
 					},
 					pattern: pattern,
 				})
-			eqs = equatizePattern(eqs, e.Head, loc)
-			eqs = equatizePattern(eqs, e.Tail, loc)
+			eqs = equatizePattern(eqs, e.Head, stack, loc)
+			eqs = equatizePattern(eqs, e.Tail, stack, loc)
 			break
 		}
 	case *typed.PConst:
@@ -825,9 +825,10 @@ func equatizePattern(eqs []equation, pattern typed.Pattern, loc *ast.Location) [
 					pattern: e,
 				})
 				for _, arg := range e.Args {
-					eqs = equatizePattern(eqs, arg, loc)
+					eqs = equatizePattern(eqs, arg, stack, loc)
 				}
 			}
+			eqs = equatizeDefinition(eqs, e.Definition, localDefsMap{}, stack, &e.Location)
 			break
 		}
 	case *typed.PList:
@@ -860,7 +861,7 @@ func equatizePattern(eqs []equation, pattern typed.Pattern, loc *ast.Location) [
 				pattern: pattern,
 			})
 			for _, item := range e.Items {
-				eqs = equatizePattern(eqs, item, loc)
+				eqs = equatizePattern(eqs, item, stack, loc)
 			}
 			break
 		}
@@ -902,7 +903,7 @@ func equatizePattern(eqs []equation, pattern typed.Pattern, loc *ast.Location) [
 			})
 
 			for _, item := range e.Items {
-				eqs = equatizePattern(eqs, item, loc)
+				eqs = equatizePattern(eqs, item, stack, loc)
 			}
 			break
 		}
@@ -1001,9 +1002,16 @@ func equatizeExpression(
 					right: e.Body.GetType(),
 					expr:  expr,
 				})
-			eqs = equatizePattern(eqs, e.Pattern, loc)
+			eqs = equatizePattern(eqs, e.Pattern, stack, loc)
 			eqs = equatizeExpression(eqs, e.Value, localDefs, stack, loc)
 			eqs = equatizeExpression(eqs, e.Body, localDefs, stack, loc)
+			eqs = append(eqs,
+				equation{
+					loc:   loc,
+					left:  e.Pattern.GetType(),
+					right: e.Value.GetType(),
+					expr:  expr,
+				})
 			break
 		}
 	case *typed.List:
@@ -1078,7 +1086,8 @@ func equatizeExpression(
 	case *typed.Select:
 		{
 			e := expr.(*typed.Select)
-			caseType := e.Type
+
+			eqs = equatizeExpression(eqs, e.Condition, localDefs, stack, loc)
 			for _, cs := range e.Cases {
 				eqs = append(eqs,
 					equation{
@@ -1088,23 +1097,15 @@ func equatizeExpression(
 						expr:  expr,
 					}, equation{
 						loc:   loc,
-						left:  caseType,
+						left:  e.Type,
 						right: cs.Expression.GetType(),
 						expr:  expr,
 					})
 			}
 
-			eqs = equatizeExpression(eqs, e.Condition, localDefs, stack, loc)
-
 			for _, cs := range e.Cases {
-				eqs = equatizePattern(eqs, cs.Pattern, loc)
+				eqs = equatizePattern(eqs, cs.Pattern, stack, loc)
 				eqs = equatizeExpression(eqs, cs.Expression, localDefs, stack, loc)
-				eqs = append(eqs, equation{
-					loc:   &cs.Location,
-					left:  cs.Pattern.GetType(),
-					right: e.Condition.GetType(),
-					expr:  expr,
-				})
 			}
 			break
 		}
