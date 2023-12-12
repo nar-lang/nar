@@ -19,7 +19,7 @@ const (
 	KwExposing = "exposing"
 	KwInfix    = "infix"
 	KwAlias    = "alias"
-	KwData     = "data"
+	KwType     = "type"
 	KwDef      = "def"
 	KwHidden   = "hidden"
 	KwExtern   = "extern"
@@ -1391,7 +1391,7 @@ func parseAlias(src *Source) *parsed.Alias {
 }
 
 func parseDataType(src *Source) *parsed.DataType {
-	if !readExact(src, KwData) {
+	if !readExact(src, KwType) {
 		return nil
 	}
 
