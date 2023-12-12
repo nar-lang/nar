@@ -12,17 +12,21 @@
 * [ ] `export` definition keyword and tree shaking
 * [ ] Nested record fields access
 * [ ] Prefix operators (like infix ones, neg is ugly)
-* [ ] Do not require import if fully qualified name is used
-* [ ] Do not require exposing import with name of the package, e.g. `import Oak.Core.String`~~`exposing (String)`~~`
 * [ ] Support of \uNNNN string characters
-* [ ] Make prelude with default imports
+* [ ] Imports improvements
+  * [ ] Do not require import if fully qualified name is used
+  * [ ] Do not require exposing import with name of the package, e.g. `import Oak.Core.String`~~`exposing (String)`~~`
+  * [ ] Non-ambiguous identifiers can omit imports, e.g. `List.map`
+  * [ ] Make prelude with default imports
 
 ## Libraries
+* [x] Oak.Core library + tests
+* [ ] Oak.Program library
+* [ ] Oak.Time
+* [ ] Oak.Random
 * [ ] Oak.Tests library
   * [x] Simple tests
   * [ ] Fuzz tests
-* [x] Oak.Core library + tests
-* [ ] Oak.Program library + tests
 * [ ] Oak.Leaf library (game engine)
   * [ ] Oak.Leaf.GL
   * [ ] Oak.Leaf.Sprite
