@@ -354,18 +354,6 @@ func annotateExpression(
 			}
 			break
 		}
-	case normalized.If:
-		{
-			e := expr.(normalized.If)
-			o = &typed.If{
-				Location:  e.Location,
-				Type:      annotateType("", typeParams, nil, e.Location, false),
-				Condition: annotate(e.Condition),
-				Positive:  annotate(e.Positive),
-				Negative:  annotate(e.Negative),
-			}
-			break
-		}
 	case normalized.LetMatch:
 		{
 			e := expr.(normalized.LetMatch)
@@ -963,33 +951,6 @@ func equatizeExpression(
 				right: getConstType(e.Value, e.Location),
 				expr:  e,
 			})
-			break
-		}
-	case *typed.If:
-		{
-			e := expr.(*typed.If)
-			eqs = append(eqs,
-				equation{
-					loc:   loc,
-					left:  e.Condition.GetType(),
-					right: &typed.TExternal{Location: e.Location, Name: common.OakCoreBasicsBool},
-					expr:  expr,
-				},
-				equation{
-					loc:   loc,
-					left:  e.Type,
-					right: e.Positive.GetType(),
-					expr:  expr,
-				},
-				equation{
-					loc:   loc,
-					left:  e.Type,
-					right: e.Negative.GetType(),
-					expr:  expr,
-				})
-			eqs = equatizeExpression(eqs, e.Condition, localDefs, stack, loc)
-			eqs = equatizeExpression(eqs, e.Positive, localDefs, stack, loc)
-			eqs = equatizeExpression(eqs, e.Negative, localDefs, stack, loc)
 			break
 		}
 	case *typed.Let:
@@ -1743,18 +1704,6 @@ func applyExpression(expr typed.Expression, subst map[uint64]typed.Type) typed.E
 				Location: e.Location,
 				Type:     applyType(e.Type, subst),
 				Value:    e.Value,
-			}
-			break
-		}
-	case *typed.If:
-		{
-			e := expr.(*typed.If)
-			expr = &typed.If{
-				Location:  e.Location,
-				Type:      applyType(e.Type, subst),
-				Condition: apply(e.Condition),
-				Positive:  apply(e.Positive),
-				Negative:  apply(e.Negative),
 			}
 			break
 		}

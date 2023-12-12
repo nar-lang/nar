@@ -254,14 +254,6 @@ func flattenLambdas(
 			}
 			return e
 		}
-	case normalized.If:
-		{
-			e := expr.(normalized.If)
-			e.Condition = flattenLambdas(parentName, e.Condition, m, locals)
-			e.Positive = flattenLambdas(parentName, e.Positive, m, locals)
-			e.Negative = flattenLambdas(parentName, e.Negative, m, locals)
-			return e
-		}
 	case normalized.List:
 		{
 			e := expr.(normalized.List)
@@ -381,14 +373,6 @@ func replaceLocals(expr normalized.Expression, replace map[ast.Identifier]normal
 			for i, a := range e.Args {
 				e.Args[i] = replaceLocals(a, replace)
 			}
-			return e
-		}
-	case normalized.If:
-		{
-			e := expr.(normalized.If)
-			e.Condition = replaceLocals(e.Condition, replace)
-			e.Positive = replaceLocals(e.Positive, replace)
-			e.Negative = replaceLocals(e.Negative, replace)
 			return e
 		}
 	case normalized.List:
@@ -773,11 +757,37 @@ func normalizeExpression(
 	case parsed.If:
 		{
 			e := expr.(parsed.If)
-			return normalized.If{
+			return normalized.Select{
 				Location:  e.Location,
 				Condition: normalize(e.Condition),
-				Positive:  normalize(e.Positive),
-				Negative:  normalize(e.Negative),
+				Cases: []normalized.SelectCase{
+					{
+						Location: e.Positive.GetLocation(),
+						Pattern: normalized.PDataOption{
+							Location: e.Positive.GetLocation(),
+							Type: normalized.TExternal{
+								Location: e.Positive.GetLocation(),
+								Name:     common.OakCoreBasicsBool,
+							},
+							ModuleName:     common.OakCoreBasicsName,
+							DefinitionName: common.OakCoreBasicsTrueName,
+						},
+						Expression: normalize(e.Positive),
+					},
+					{
+						Location: e.Negative.GetLocation(),
+						Pattern: normalized.PDataOption{
+							Location: e.Negative.GetLocation(),
+							Type: normalized.TExternal{
+								Location: e.Negative.GetLocation(),
+								Name:     common.OakCoreBasicsBool,
+							},
+							ModuleName:     common.OakCoreBasicsName,
+							DefinitionName: common.OakCoreBasicsFalseName,
+						},
+						Expression: normalize(e.Negative),
+					},
+				},
 			}
 		}
 	case parsed.LetMatch:
@@ -1107,14 +1117,6 @@ func extractUsedLocalsSet(
 		}
 	case normalized.Const:
 		{
-			break
-		}
-	case normalized.If:
-		{
-			e := expr.(normalized.If)
-			extractUsedLocalsSet(e.Condition, definedLocals, usedLocals)
-			extractUsedLocalsSet(e.Positive, definedLocals, usedLocals)
-			extractUsedLocalsSet(e.Negative, definedLocals, usedLocals)
 			break
 		}
 	case normalized.LetMatch:

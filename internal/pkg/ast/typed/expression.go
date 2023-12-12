@@ -74,26 +74,6 @@ func (e *Const) GetType() Type {
 	return e.Type
 }
 
-type If struct {
-	ast.Location
-	Type
-	Condition, Positive, Negative Expression
-}
-
-func (e *If) _expression() {}
-
-func (e *If) String() string {
-	return fmt.Sprintf("If(%v,%v,%v){%s}", e.Condition, e.Positive, e.Negative, e.Type)
-}
-
-func (e *If) GetLocation() ast.Location {
-	return e.Location
-}
-
-func (e *If) GetType() Type {
-	return e.Type
-}
-
 type Let struct {
 	ast.Location
 	Type

@@ -31,13 +31,6 @@ type Const struct {
 
 func (Const) _expression() {}
 
-type If struct {
-	ast.Location
-	Condition, Positive, Negative Expression
-}
-
-func (If) _expression() {}
-
 type LetMatch struct {
 	ast.Location
 	Pattern Pattern

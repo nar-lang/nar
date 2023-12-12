@@ -206,37 +206,6 @@ func composeExpression(
 			ops, locations = composeExpression(e.Body, ops, locations, binary)
 			break
 		}
-	case *typed.If:
-		{
-			e := expr.(*typed.If)
-			ops, locations = composeExpression(e.Condition, ops, locations, binary)
-			ops, locations = composePattern(&typed.PDataOption{
-				Location: e.Location,
-				Name:     common.OakCoreBasicsTrue,
-			}, ops, locations, binary)
-			matchOpIndex := len(ops)
-			ops, locations = match(0, e.Location, ops, locations) //jump to negative branch
-
-			ops, locations = composeExpression(e.Positive, ops, locations, binary)
-			jumpOpIndex := len(ops)
-			ops, locations = jump(0, e.Location, ops, locations) //jump to the end
-
-			negBranchIndex := len(ops)
-			ops, locations = composeExpression(e.Negative, ops, locations, binary)
-
-			ifEndIndex := len(ops)
-
-			matchOp := ops[matchOpIndex].(bytecode.Match) //jump to negative branch
-			matchOp.JumpDelta = int32(negBranchIndex - matchOpIndex - 1)
-			ops[matchOpIndex] = matchOp
-
-			jumpOp := ops[jumpOpIndex].(bytecode.Jump) //jump to the end
-			jumpOp.Delta = int32(ifEndIndex - jumpOpIndex - 1)
-			ops[jumpOpIndex] = jumpOp
-
-			ops, locations = swapPop(e.Location, bytecode.SwapPopModeBoth, ops, locations)
-			break
-		}
 	case *typed.Select:
 		{
 			e := expr.(*typed.Select)
