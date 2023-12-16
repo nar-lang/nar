@@ -3,6 +3,7 @@ package typed
 import (
 	"fmt"
 	"oak-compiler/internal/pkg/ast"
+	"oak-compiler/internal/pkg/common"
 )
 
 type Pattern interface {
@@ -95,7 +96,7 @@ func (p *PConst) GetType() Type {
 type PDataOption struct {
 	ast.Location
 	Type
-	DataName   ast.ExternalIdentifier
+	DataName   ast.FullIdentifier
 	OptionName ast.Identifier
 	Definition *Definition
 	Args       []Pattern
@@ -104,7 +105,10 @@ type PDataOption struct {
 func (*PDataOption) _pattern() {}
 
 func (p *PDataOption) String() string {
-	return fmt.Sprintf("PDataOption(%s,%v){%s}", p.DataName, p.Args, p.Type)
+	return fmt.Sprintf(
+		"PDataOption(%s,%v){%s}",
+		common.MakeDataOptionIdentifier(p.DataName, p.OptionName),
+		p.Args, p.Type)
 }
 
 func (p *PDataOption) GetLocation() ast.Location {

@@ -115,7 +115,7 @@ func (op Apply) Word() uint64 {
 		(uint64(op.NumArgs) << 8)
 }
 
-// Call executes an extern function.
+// Call executes native function.
 // Arguments are taken from the top of the stack in reverse order
 // (topmost object is last arg). Returned value is left on the top of the stack.
 type Call struct {

@@ -246,7 +246,7 @@ func (e *UpdateGlobal) GetType() Type {
 type Constructor struct {
 	ast.Location
 	Type
-	DataName   ast.ExternalIdentifier
+	DataName   ast.FullIdentifier
 	OptionName ast.Identifier
 	DataType   *TData
 	Args       []Expression
@@ -269,7 +269,7 @@ func (e *Constructor) GetType() Type {
 type NativeCall struct {
 	ast.Location
 	Type
-	Name ast.ExternalIdentifier
+	Name ast.FullIdentifier
 	Args []Expression
 }
 

@@ -33,8 +33,8 @@ func Compile(moduleUrls []string, outPath string, debug bool, upgrade bool, cach
 	typedModules := map[ast.QualifiedIdentifier]*typed.Module{}
 
 	bin := bytecode.Binary{
-		Exports:   map[ast.ExternalIdentifier]bytecode.Pointer{},
-		FuncsMap:  map[ast.ExternalIdentifier]bytecode.Pointer{},
+		Exports:   map[ast.FullIdentifier]bytecode.Pointer{},
+		FuncsMap:  map[ast.FullIdentifier]bytecode.Pointer{},
 		StringMap: map[string]bytecode.StringHash{},
 		ConstMap:  map[bytecode.PackedConst]bytecode.ConstHash{},
 	}

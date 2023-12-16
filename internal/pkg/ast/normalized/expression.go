@@ -129,7 +129,7 @@ func (Constructor) _expression() {}
 
 type NativeCall struct {
 	ast.Location
-	Name ast.ExternalIdentifier
+	Name ast.FullIdentifier
 	Args []Expression
 }
 

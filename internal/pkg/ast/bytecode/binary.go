@@ -12,9 +12,9 @@ type Binary struct {
 	Funcs   []Func
 	Strings []string
 	Consts  []PackedConst
-	Exports map[ast.ExternalIdentifier]Pointer
+	Exports map[ast.FullIdentifier]Pointer
 
-	FuncsMap  map[ast.ExternalIdentifier]Pointer
+	FuncsMap  map[ast.FullIdentifier]Pointer
 	StringMap map[string]StringHash
 	ConstMap  map[PackedConst]ConstHash
 
@@ -92,7 +92,7 @@ func (b *Binary) Build(writer io.Writer, debug bool) {
 		w(uint64(c.Pack()))
 	}
 
-	var names []ast.ExternalIdentifier
+	var names []ast.FullIdentifier
 	for n := range b.Exports {
 		names = append(names, n)
 	}

@@ -19,20 +19,20 @@ var (
 
 	OakCoreMath         = ast.QualifiedIdentifier("Oak.Core.Math")
 	OakCoreMathNeg      = ast.Identifier("neg")
-	OakCoreCharChar     = MakeExternalIdentifier("Oak.Core.Char", "Char")
-	OakCoreBasicsInt    = MakeExternalIdentifier("Oak.Core.Math", "Int")
-	OakCoreBasicsFloat  = MakeExternalIdentifier("Oak.Core.Math", "Float")
-	OakCoreBasicsUnit   = MakeExternalIdentifier(OakCoreBasicsName, "Unit")
-	OakCoreStringString = MakeExternalIdentifier("Oak.Core.String", "String")
-	OakCoreListList     = MakeExternalIdentifier("Oak.Core.List", "List")
-	Number              = MakeExternalIdentifier("", ast.Identifier(ConstraintNumber))
-	OakCoreBasicsBool   = MakeExternalIdentifier(OakCoreBasicsName, "Bool")
+	OakCoreCharChar     = MakeFullIdentifier("Oak.Core.Char", "Char")
+	OakCoreBasicsInt    = MakeFullIdentifier("Oak.Core.Math", "Int")
+	OakCoreBasicsFloat  = MakeFullIdentifier("Oak.Core.Math", "Float")
+	OakCoreBasicsUnit   = MakeFullIdentifier(OakCoreBasicsName, "Unit")
+	OakCoreStringString = MakeFullIdentifier("Oak.Core.String", "String")
+	OakCoreListList     = MakeFullIdentifier("Oak.Core.List", "List")
+	Number              = MakeFullIdentifier("", ast.Identifier(ConstraintNumber))
+	OakCoreBasicsBool   = MakeFullIdentifier(OakCoreBasicsName, "Bool")
 )
 
-func MakeExternalIdentifier(moduleName ast.QualifiedIdentifier, name ast.Identifier) ast.ExternalIdentifier {
-	return ast.ExternalIdentifier(fmt.Sprintf("%s.%s", moduleName, name))
+func MakeFullIdentifier(moduleName ast.QualifiedIdentifier, name ast.Identifier) ast.FullIdentifier {
+	return ast.FullIdentifier(fmt.Sprintf("%s.%s", moduleName, name))
 }
 
-func MakeDataOptionIdentifier(dataName ast.ExternalIdentifier, optionName ast.Identifier) ast.DataOptionIdentifier {
+func MakeDataOptionIdentifier(dataName ast.FullIdentifier, optionName ast.Identifier) ast.DataOptionIdentifier {
 	return ast.DataOptionIdentifier(fmt.Sprintf("%s#%s", dataName, optionName))
 }

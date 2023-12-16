@@ -491,7 +491,7 @@ func annotateExpression(
 			o = &typed.Constructor{
 				Location:   e.Location,
 				Type:       annotateType("", typeParams, nil, e.Location, false, placeholderMap{}),
-				DataName:   common.MakeExternalIdentifier(e.ModuleName, e.DataName),
+				DataName:   common.MakeFullIdentifier(e.ModuleName, e.DataName),
 				OptionName: e.OptionName,
 				DataType:   t.(*typed.TData),
 				Args:       common.Map(annotate, e.Args),
@@ -598,7 +598,7 @@ func newAnnotatedType(loc ast.Location, constraint common.Constraint) typed.Type
 	}
 }
 
-type placeholderMap map[ast.ExternalIdentifier]typed.Type
+type placeholderMap map[ast.FullIdentifier]typed.Type
 
 func annotateType(
 	name ast.Identifier, typeParams typeParamsMap, t normalized.Type, location ast.Location, typeMapSource bool,
@@ -655,7 +655,7 @@ func annotateType(
 		case *normalized.TUnit:
 			{
 				e := t.(*normalized.TUnit)
-				r = &typed.TExternal{Location: e.Location, Name: common.OakCoreBasicsUnit}
+				r = &typed.TNative{Location: e.Location, Name: common.OakCoreBasicsUnit}
 				break
 			}
 		case *normalized.TData:
@@ -678,10 +678,10 @@ func annotateType(
 				r = d
 				break
 			}
-		case *normalized.TExternal:
+		case *normalized.TNative:
 			{
-				e := t.(*normalized.TExternal)
-				r = &typed.TExternal{
+				e := t.(*normalized.TNative)
+				r = &typed.TNative{
 					Location: e.Location,
 					Name:     e.Name,
 					Args:     common.Map(annotate(e.Location), e.Args),
@@ -801,7 +801,7 @@ func equatizePattern(eqs []equation, pattern typed.Pattern, stack []*typed.Defin
 				equation{
 					loc:  loc,
 					left: e.Tail.GetType(),
-					right: &typed.TExternal{
+					right: &typed.TNative{
 						Location: e.Location,
 						Name:     common.OakCoreListList,
 						Args:     []typed.Type{e.Head.GetType()},
@@ -873,7 +873,7 @@ func equatizePattern(eqs []equation, pattern typed.Pattern, stack []*typed.Defin
 			eqs = append(eqs, equation{
 				loc:  loc,
 				left: e.Type,
-				right: &typed.TExternal{
+				right: &typed.TNative{
 					Location: e.Location,
 					Name:     common.OakCoreListList,
 					Args:     []typed.Type{itemType},
@@ -1031,7 +1031,7 @@ func equatizeExpression(
 			eqs = append(eqs, equation{
 				loc:  loc,
 				left: e.Type,
-				right: &typed.TExternal{
+				right: &typed.TNative{
 					Location: e.Location,
 					Name:     common.OakCoreListList,
 					Args:     []typed.Type{listItemType},
@@ -1245,15 +1245,15 @@ func equatizeExpression(
 func getConstType(cv ast.ConstValue, location ast.Location) typed.Type {
 	switch cv.(type) {
 	case ast.CChar:
-		return &typed.TExternal{Location: location, Name: common.OakCoreCharChar}
+		return &typed.TNative{Location: location, Name: common.OakCoreCharChar}
 	case ast.CInt:
 		return newAnnotatedType(location, common.ConstraintNumber)
 	case ast.CFloat:
-		return &typed.TExternal{Location: location, Name: common.OakCoreBasicsFloat}
+		return &typed.TNative{Location: location, Name: common.OakCoreBasicsFloat}
 	case ast.CString:
-		return &typed.TExternal{Location: location, Name: common.OakCoreStringString}
+		return &typed.TNative{Location: location, Name: common.OakCoreStringString}
 	case ast.CUnit:
-		return &typed.TExternal{Location: location, Name: common.OakCoreBasicsUnit}
+		return &typed.TNative{Location: location, Name: common.OakCoreBasicsUnit}
 	}
 	panic(common.SystemError{Message: "invalid case"})
 }
@@ -1309,7 +1309,7 @@ func balanceFn(f *typed.TFunc, sz int) *typed.TFunc {
 	}
 }
 
-func typesEqual(x typed.Type, y typed.Type, req map[ast.ExternalIdentifier]struct{}) bool {
+func typesEqual(x typed.Type, y typed.Type, req map[ast.FullIdentifier]struct{}) bool {
 	switch x.(type) {
 	case *typed.TData:
 		tx, okx := x.(*typed.TData)
@@ -1323,7 +1323,7 @@ func typesEqual(x typed.Type, y typed.Type, req map[ast.ExternalIdentifier]struc
 					return true
 				}
 			}
-			req = map[ast.ExternalIdentifier]struct{}{}
+			req = map[ast.FullIdentifier]struct{}{}
 			req[tx.Name] = struct{}{}
 			if len(tx.Args) != len(ty.Args) {
 				return false
@@ -1336,9 +1336,9 @@ func typesEqual(x typed.Type, y typed.Type, req map[ast.ExternalIdentifier]struc
 			return true
 		}
 		break
-	case *typed.TExternal:
-		tx, okx := x.(*typed.TExternal)
-		ty, oky := y.(*typed.TExternal)
+	case *typed.TNative:
+		tx, okx := x.(*typed.TNative)
+		ty, oky := y.(*typed.TNative)
 		if okx && oky {
 			if tx.Name != ty.Name {
 				return false
@@ -1482,10 +1482,10 @@ func unify(x typed.Type, y typed.Type, loc []ast.Location, subst map[uint64]type
 			}
 			break
 		}
-	case *typed.TExternal:
+	case *typed.TNative:
 		{
-			if ey, ok := y.(*typed.TExternal); ok {
-				ex := x.(*typed.TExternal)
+			if ey, ok := y.(*typed.TNative); ok {
+				ex := x.(*typed.TNative)
 				if ex.Name == ey.Name {
 					if len(ex.Args) == len(ey.Args) {
 						for i, p := range ex.Args {
@@ -1564,9 +1564,9 @@ func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc []ast.Location, subst m
 	}
 	if v.Constraint == common.ConstraintNumber {
 		switch typ.(type) {
-		case *typed.TExternal:
+		case *typed.TNative:
 			{
-				e := typ.(*typed.TExternal)
+				e := typ.(*typed.TNative)
 				if e.Name != common.OakCoreBasicsInt && e.Name != common.OakCoreBasicsFloat {
 					return common.Error{
 						Extra:   append(loc, v.Location, typ.GetLocation()),
@@ -1626,9 +1626,9 @@ func OccursCheck(v *typed.TUnbound, typ typed.Type, subst map[uint64]typed.Type)
 			}
 			break
 		}
-	case *typed.TExternal:
+	case *typed.TNative:
 		{
-			e := typ.(*typed.TExternal)
+			e := typ.(*typed.TNative)
 			for _, a := range e.Args {
 				if OccursCheck(v, a, subst) {
 					return true
@@ -1704,10 +1704,10 @@ func applyType(t typed.Type, subst map[uint64]typed.Type) typed.Type {
 			}
 			break
 		}
-	case *typed.TExternal:
+	case *typed.TNative:
 		{
-			e := t.(*typed.TExternal)
-			t = &typed.TExternal{
+			e := t.(*typed.TNative)
+			t = &typed.TNative{
 				Location: e.Location,
 				Name:     e.Name,
 				Args:     common.Map(apply, e.Args),

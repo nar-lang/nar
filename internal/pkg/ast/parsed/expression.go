@@ -243,7 +243,7 @@ func (e InfixVar) GetLocation() ast.Location {
 
 type NativeCall struct {
 	Location ast.Location
-	Name     ast.ExternalIdentifier
+	Name     ast.FullIdentifier
 	Args     []Expression
 }
 

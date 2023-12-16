@@ -31,13 +31,13 @@ func Compose(
 	}
 
 	for _, def := range m.Definitions {
-		extId := common.MakeExternalIdentifier(m.Name, def.Name)
+		extId := common.MakeFullIdentifier(m.Name, def.Name)
 		binary.FuncsMap[extId] = bytecode.Pointer(len(binary.Funcs))
 		binary.Funcs = append(binary.Funcs, bytecode.Func{})
 	}
 
 	for _, def := range m.Definitions {
-		pathId := common.MakeExternalIdentifier(m.Name, def.Name)
+		pathId := common.MakeFullIdentifier(m.Name, def.Name)
 
 		ptr := binary.FuncsMap[pathId]
 		if binary.Funcs[ptr].Ops == nil {
@@ -49,7 +49,7 @@ func Compose(
 	}
 }
 
-func composeDefinition(def *typed.Definition, pathId ast.ExternalIdentifier, binary *bytecode.Binary) bytecode.Func {
+func composeDefinition(def *typed.Definition, pathId ast.FullIdentifier, binary *bytecode.Binary) bytecode.Func {
 	var ops []bytecode.Op
 	var locations []ast.Location
 
@@ -101,7 +101,7 @@ func composeExpression(
 			e := expr.(*typed.Const)
 			v := e.Value
 			if iv, ok := v.(ast.CInt); ok {
-				if ex, ok := e.Type.(*typed.TExternal); ok && ex.Name == common.OakCoreBasicsFloat {
+				if ex, ok := e.Type.(*typed.TNative); ok && ex.Name == common.OakCoreBasicsFloat {
 					v = ast.CFloat{Value: float64(iv.Value)}
 				}
 			}
@@ -117,7 +117,7 @@ func composeExpression(
 	case *typed.Global:
 		{
 			e := expr.(*typed.Global)
-			id := common.MakeExternalIdentifier(e.ModuleName, e.DefinitionName)
+			id := common.MakeFullIdentifier(e.ModuleName, e.DefinitionName)
 			funcIndex, ok := binary.FuncsMap[id]
 			if !ok {
 				panic(common.SystemError{Message: fmt.Sprintf("global definition `%v` not found", id)})
@@ -168,8 +168,9 @@ func composeExpression(
 			for _, arg := range e.Args {
 				ops, locations = composeExpression(arg, ops, locations, binary)
 			}
-			ops, locations = loadConstValue(ast.CString{Value: string(e.OptionName)}, bytecode.StackKindObject, e.Location,
-				ops, locations, binary)
+			ops, locations = loadConstValue(
+				ast.CString{Value: string(common.MakeDataOptionIdentifier(e.DataName, e.OptionName))},
+				bytecode.StackKindObject, e.Location, ops, locations, binary)
 			ops, locations = makeObject(bytecode.ObjectKindData, len(e.Args), e.Location, ops, locations)
 			break
 		}
@@ -187,7 +188,7 @@ func composeExpression(
 	case *typed.UpdateGlobal:
 		{
 			e := expr.(*typed.UpdateGlobal)
-			id := common.MakeExternalIdentifier(e.ModuleName, e.DefinitionName)
+			id := common.MakeFullIdentifier(e.ModuleName, e.DefinitionName)
 			ops, locations = loadGlobal(binary.FuncsMap[id], e.Location, ops, locations)
 
 			for _, f := range e.Fields {
@@ -284,8 +285,10 @@ func composePattern(
 			for _, p := range e.Args {
 				ops, locations = composePattern(p, ops, locations, binary)
 			}
-			ops, locations = makePattern(bytecode.PatternKindDataOption,
-				string(e.DataName), len(e.Args), e.Location, ops, locations, binary)
+			ops, locations = makePattern(
+				bytecode.PatternKindDataOption,
+				string(common.MakeDataOptionIdentifier(e.DataName, e.OptionName)),
+				len(e.Args), e.Location, ops, locations, binary)
 			break
 		}
 	case *typed.PList:

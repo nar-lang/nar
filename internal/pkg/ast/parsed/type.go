@@ -52,20 +52,20 @@ type DataOption struct {
 
 type TData struct {
 	ast.Location
-	Name    ast.ExternalIdentifier
+	Name    ast.FullIdentifier
 	Args    []Type
 	Options []DataOption
 }
 
 func (TData) _type() {}
 
-type TExternal struct {
+type TNative struct {
 	ast.Location
-	Name ast.ExternalIdentifier
+	Name ast.FullIdentifier
 	Args []Type
 }
 
-func (TExternal) _type() {}
+func (TNative) _type() {}
 
 type TTypeParameter struct {
 	ast.Location

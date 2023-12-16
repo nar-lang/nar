@@ -6,7 +6,7 @@ type QualifiedIdentifier string
 
 type InfixIdentifier string
 
-type ExternalIdentifier string
+type FullIdentifier string
 
 type DataOptionIdentifier string
 

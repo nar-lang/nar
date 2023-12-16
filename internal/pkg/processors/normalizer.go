@@ -14,7 +14,7 @@ import (
 var lastDefinitionId = uint64(0)
 var lastLambdaId = uint64(0)
 
-type namedTypeMap map[ast.ExternalIdentifier]*normalized.TPlaceholder
+type namedTypeMap map[ast.FullIdentifier]*normalized.TPlaceholder
 
 func Normalize(
 	moduleName ast.QualifiedIdentifier,
@@ -473,7 +473,7 @@ func flattenDataTypes(m *parsed.Module) {
 		}, it.Params)
 		dataType := parsed.TData{
 			Location: it.Location,
-			Name:     common.MakeExternalIdentifier(m.Name, it.Name),
+			Name:     common.MakeFullIdentifier(m.Name, it.Name),
 			Args:     typeArgs,
 			Options: common.Map(func(x parsed.DataTypeOption) parsed.DataOption {
 				return parsed.DataOption{
@@ -1295,10 +1295,10 @@ func normalizeType(
 				}, e.Options),
 			}
 		}
-	case parsed.TExternal:
+	case parsed.TNative:
 		{
-			e := t.(parsed.TExternal)
-			return &normalized.TExternal{
+			e := t.(parsed.TNative)
+			return &normalized.TNative{
 				Location: e.Location,
 				Name:     e.Name,
 				Args:     common.Map(normalize, e.Args),
@@ -1372,15 +1372,15 @@ func findParsedType(
 	module *parsed.Module,
 	name ast.QualifiedIdentifier,
 	args []parsed.Type,
-) (parsed.Type, *parsed.Module, ast.ExternalIdentifier) {
+) (parsed.Type, *parsed.Module, ast.FullIdentifier) {
 	var aliasNameEq = func(x parsed.Alias) bool {
 		return ast.QualifiedIdentifier(x.Name) == name
 	}
 
 	if alias, ok := common.Find(aliasNameEq, module.Aliases); ok {
-		id := common.MakeExternalIdentifier(module.Name, alias.Name)
+		id := common.MakeFullIdentifier(module.Name, alias.Name)
 		if alias.Type == nil {
-			return parsed.TExternal{
+			return parsed.TNative{
 				Location: alias.Location,
 				Name:     id,
 				Args:     args,
@@ -1447,9 +1447,9 @@ func applyTypeArgs(t parsed.Type, params map[ast.Identifier]parsed.Type) parsed.
 			e.Args = common.Map(doMap, e.Args)
 			return e
 		}
-	case parsed.TExternal:
+	case parsed.TNative:
 		{
-			e := t.(parsed.TExternal)
+			e := t.(parsed.TNative)
 			e.Args = common.Map(doMap, e.Args)
 			return e
 		}

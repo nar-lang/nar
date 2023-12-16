@@ -22,7 +22,7 @@ const (
 	KwType     = "type"
 	KwDef      = "def"
 	KwHidden   = "hidden"
-	KwExtern   = "extern"
+	KwNative   = "native"
 	KwLeft     = "left"
 	KwRight    = "right"
 	KwNon      = "non"
@@ -1362,7 +1362,7 @@ func parseAlias(src *Source) *parsed.Alias {
 
 	cursor := src.cursor
 	hidden := readExact(src, KwHidden)
-	extern_ := readExact(src, KwExtern)
+	native := readExact(src, KwNative)
 	var type_ parsed.Type
 	name := readIdentifier(src, false)
 
@@ -1371,7 +1371,7 @@ func parseAlias(src *Source) *parsed.Alias {
 	}
 	typeParams := parseTypeParamNames(src)
 
-	if !extern_ {
+	if !native {
 		if !readExact(src, SeqEqual) {
 			setErrorSource(*src, "expected `=` here")
 		}
@@ -1431,7 +1431,7 @@ func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Defin
 		return nil
 	}
 	hidden := readExact(src, KwHidden)
-	extern := readExact(src, KwExtern)
+	native := readExact(src, KwNative)
 	name := readIdentifier(src, false)
 	var type_ parsed.Type
 	var expr parsed.Expression
@@ -1449,10 +1449,10 @@ func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Defin
 				setErrorSource(*src, "expected definedReturn here")
 			}
 		}
-		if extern {
+		if native {
 			expr = parsed.NativeCall{
 				Location: loc(src, typeCursor),
-				Name:     common.MakeExternalIdentifier(modName, ast.Identifier(*name)),
+				Name:     common.MakeFullIdentifier(modName, ast.Identifier(*name)),
 			}
 		} else {
 			if !readExact(src, SeqEqual) {
@@ -1464,10 +1464,10 @@ func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Defin
 			}
 		}
 	} else {
-		if extern {
+		if native {
 			expr = parsed.NativeCall{
 				Location: loc(src, typeCursor),
-				Name:     common.MakeExternalIdentifier(modName, ast.Identifier(*name)),
+				Name:     common.MakeFullIdentifier(modName, ast.Identifier(*name)),
 				Args: common.Map(func(x parsed.Pattern) parsed.Expression {
 					return parsed.Var{
 						Location: x.GetLocation(),

@@ -70,19 +70,19 @@ func (t *TTuple) String() string {
 	return fmt.Sprintf("( %v )", common.Join(t.Items, ", "))
 }
 
-type TExternal struct {
+type TNative struct {
 	ast.Location
-	Name ast.ExternalIdentifier
+	Name ast.FullIdentifier
 	Args []Type
 }
 
-func (*TExternal) _type() {}
+func (*TNative) _type() {}
 
-func (t *TExternal) GetLocation() ast.Location {
+func (t *TNative) GetLocation() ast.Location {
 	return t.Location
 }
 
-func (t *TExternal) String() string {
+func (t *TNative) String() string {
 	tp := common.Join(t.Args, ", ")
 	if tp != "" {
 		tp = "[" + tp + "]"
@@ -101,7 +101,7 @@ func (d DataOption) String() string {
 
 type TData struct {
 	ast.Location
-	Name    ast.ExternalIdentifier
+	Name    ast.FullIdentifier
 	Options []DataOption
 	Args    []Type
 }

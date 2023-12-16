@@ -422,7 +422,7 @@ func simplifyPattern(pattern typed.Pattern) Pattern {
 		return PatternConstructor{
 			Union: &typed.TData{
 				Location: e.Location,
-				Name:     ast.ExternalIdentifier(fmt.Sprintf("!!%d", len(e.Items))),
+				Name:     ast.FullIdentifier(fmt.Sprintf("!!%d", len(e.Items))),
 				Options: []typed.DataOption{
 					{
 						Name: "Only",
@@ -470,7 +470,7 @@ func simplifyPattern(pattern typed.Pattern) Pattern {
 				Name:     "!!list",
 				Options: []typed.DataOption{
 					{Name: "Nil"},
-					{Name: "Cons", Values: []typed.Type{a, &typed.TExternal{
+					{Name: "Cons", Values: []typed.Type{a, &typed.TNative{
 						Location: e.Location,
 						Name:     common.OakCoreListList,
 						Args:     []typed.Type{a},
@@ -492,7 +492,7 @@ func simplifyPattern(pattern typed.Pattern) Pattern {
 				Name:     "!!list",
 				Options: []typed.DataOption{
 					{Name: "Nil"},
-					{Name: "Cons", Values: []typed.Type{a, &typed.TExternal{
+					{Name: "Cons", Values: []typed.Type{a, &typed.TNative{
 						Location: e.Location,
 						Name:     common.OakCoreListList,
 						Args:     []typed.Type{a},
