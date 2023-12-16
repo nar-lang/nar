@@ -9,7 +9,6 @@
 * [x] Check type constraints (`number`)
 * [x] Check if all cases are exhaustive
 * [x] Check if function parameters are exhaustive (for data types)
-* [ ] `export` definition keyword and tree shaking
 
 ## Compiler v0.2
 * [ ] Support of \uNNNN string characters
@@ -20,6 +19,7 @@
   * [ ] Do not require exposing import with name of the package, e.g. `import Oak.Core.String`~~`exposing (String)`~~`
   * [ ] Non-ambiguous identifiers can omit imports, e.g. `List.map`
   * [ ] Make prelude with default imports
+* [ ] "tree shaking" to strip unused code
   
 ## Libraries
 * [x] Oak.Core library + tests
