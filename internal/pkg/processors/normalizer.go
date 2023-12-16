@@ -14,6 +14,8 @@ import (
 var lastDefinitionId = uint64(0)
 var lastLambdaId = uint64(0)
 
+type namedTypeMap map[ast.ExternalIdentifier]*normalized.TPlaceholder
+
 func Normalize(
 	moduleName ast.QualifiedIdentifier,
 	modules map[ast.QualifiedIdentifier]*parsed.Module,
@@ -469,38 +471,37 @@ func flattenDataTypes(m *parsed.Module) {
 				Name:     x,
 			}
 		}, it.Params)
+		dataType := parsed.TData{
+			Location: it.Location,
+			Name:     common.MakeExternalIdentifier(m.Name, it.Name),
+			Args:     typeArgs,
+			Options: common.Map(func(x parsed.DataTypeOption) parsed.DataOption {
+				return parsed.DataOption{
+					Name:   x.Name,
+					Hidden: x.Hidden,
+					Values: x.Values,
+				}
+			}, it.Options),
+		}
 		m.Aliases = append(m.Aliases, parsed.Alias{
 			Location: it.Location,
 			Name:     it.Name,
 			Params:   it.Params,
-			Type: parsed.TData{
-				Location: it.Location,
-				Name:     common.MakeExternalIdentifier(m.Name, it.Name),
-				Args:     typeArgs,
-				Options: common.Map(func(x parsed.DataTypeOption) parsed.TDataOption {
-					return parsed.TDataOption{
-						Name:   x.Name,
-						Hidden: x.Hidden,
-					}
-				}, it.Options),
-			},
+			Type:     dataType,
 		})
 		for _, option := range it.Options {
-			var type_ parsed.Type = parsed.TExternal{
-				Location: it.Location,
-				Name:     common.MakeExternalIdentifier(m.Name, it.Name),
-				Args:     typeArgs,
-			}
-			if len(option.Params) > 0 {
+			var type_ parsed.Type = dataType
+			if len(option.Values) > 0 {
 				type_ = parsed.TFunc{
 					Location: it.Location,
-					Params:   option.Params,
+					Params:   option.Values,
 					Return:   type_,
 				}
 			}
 			var body parsed.Expression = parsed.Constructor{
 				Location:   option.Location,
-				DataName:   common.MakeExternalIdentifier(m.Name, it.Name),
+				ModuleName: m.Name,
+				DataName:   it.Name,
 				OptionName: option.Name,
 				Args: common.Map(
 					func(i int) parsed.Expression {
@@ -509,7 +510,7 @@ func flattenDataTypes(m *parsed.Module) {
 							Name:     ast.QualifiedIdentifier(fmt.Sprintf("p%d", i)),
 						}
 					},
-					common.Range(0, len(option.Params)),
+					common.Range(0, len(option.Values)),
 				),
 			}
 
@@ -517,7 +518,7 @@ func flattenDataTypes(m *parsed.Module) {
 				func(i int) parsed.Pattern {
 					return parsed.PNamed{Location: option.Location, Name: ast.Identifier(fmt.Sprintf("p%d", i))}
 				},
-				common.Range(0, len(option.Params)),
+				common.Range(0, len(option.Values)),
 			)
 
 			m.Definitions = append(m.Definitions, parsed.Definition{
@@ -601,7 +602,7 @@ func normalizeDefinition(
 	}, def.Params)
 	locals := maps.Clone(params)
 	o.Expression = normalizeExpression(locals, modules, module, def.Expression)
-	o.Type = normalizeType(modules, module, def.Type)
+	o.Type = normalizeType(modules, module, nil, def.Type, nil)
 	return o, params
 }
 
@@ -619,7 +620,7 @@ func normalizePattern(
 			locals[e.Alias] = struct{}{}
 			return normalized.PAlias{
 				Location: e.Location,
-				Type:     normalizeType(modules, module, e.Type),
+				Type:     normalizeType(modules, module, nil, e.Type, nil),
 				Alias:    e.Alias,
 				Nested:   normalize(e.Nested),
 			}
@@ -629,7 +630,7 @@ func normalizePattern(
 			e := pattern.(parsed.PAny)
 			return normalized.PAny{
 				Location: e.Location,
-				Type:     normalizeType(modules, module, e.Type),
+				Type:     normalizeType(modules, module, nil, e.Type, nil),
 			}
 		}
 	case parsed.PCons:
@@ -637,7 +638,7 @@ func normalizePattern(
 			e := pattern.(parsed.PCons)
 			return normalized.PCons{
 				Location: e.Location,
-				Type:     normalizeType(modules, module, e.Type),
+				Type:     normalizeType(modules, module, nil, e.Type, nil),
 				Head:     normalize(e.Head),
 				Tail:     normalize(e.Tail),
 			}
@@ -647,7 +648,7 @@ func normalizePattern(
 			e := pattern.(parsed.PConst)
 			return normalized.PConst{
 				Location: e.Location,
-				Type:     normalizeType(modules, module, e.Type),
+				Type:     normalizeType(modules, module, nil, e.Type, nil),
 				Value:    e.Value,
 			}
 		}
@@ -660,7 +661,7 @@ func normalizePattern(
 			}
 			return normalized.PDataOption{
 				Location:       e.Location,
-				Type:           normalizeType(modules, module, e.Type),
+				Type:           normalizeType(modules, module, nil, e.Type, nil),
 				ModuleName:     mod.Name,
 				DefinitionName: def.Name,
 				Values:         common.Map(normalize, e.Values),
@@ -671,7 +672,7 @@ func normalizePattern(
 			e := pattern.(parsed.PList)
 			return normalized.PList{
 				Location: e.Location,
-				Type:     normalizeType(modules, module, e.Type),
+				Type:     normalizeType(modules, module, nil, e.Type, nil),
 				Items:    common.Map(normalize, e.Items),
 			}
 		}
@@ -681,7 +682,7 @@ func normalizePattern(
 			locals[e.Name] = struct{}{}
 			return normalized.PNamed{
 				Location: e.Location,
-				Type:     normalizeType(modules, module, e.Type),
+				Type:     normalizeType(modules, module, nil, e.Type, nil),
 				Name:     e.Name,
 			}
 		}
@@ -690,7 +691,7 @@ func normalizePattern(
 			e := pattern.(parsed.PRecord)
 			return normalized.PRecord{
 				Location: e.Location,
-				Type:     normalizeType(modules, module, e.Type),
+				Type:     normalizeType(modules, module, nil, e.Type, nil),
 				Fields: common.Map(func(x parsed.PRecordField) normalized.PRecordField {
 					return normalized.PRecordField{Location: x.Location, Name: x.Name}
 				}, e.Fields),
@@ -701,7 +702,7 @@ func normalizePattern(
 			e := pattern.(parsed.PTuple)
 			return normalized.PTuple{
 				Location: e.Location,
-				Type:     normalizeType(modules, module, e.Type),
+				Type:     normalizeType(modules, module, nil, e.Type, nil),
 				Items:    common.Map(normalize, e.Items),
 			}
 		}
@@ -749,6 +750,7 @@ func normalizeExpression(
 			e := expr.(parsed.Constructor)
 			return normalized.Constructor{
 				Location:   e.Location,
+				ModuleName: e.ModuleName,
 				DataName:   e.DataName,
 				OptionName: e.OptionName,
 				Args:       common.Map(normalize, e.Args),
@@ -757,6 +759,14 @@ func normalizeExpression(
 	case parsed.If:
 		{
 			e := expr.(parsed.If)
+			boolType := &normalized.TData{
+				Location: e.Location,
+				Name:     common.OakCoreBasicsBool,
+				Options: []normalized.DataOption{
+					{Name: common.OakCoreBasicsTrueName},
+					{Name: common.OakCoreBasicsFalseName},
+				},
+			}
 			return normalized.Select{
 				Location:  e.Location,
 				Condition: normalize(e.Condition),
@@ -764,11 +774,8 @@ func normalizeExpression(
 					{
 						Location: e.Positive.GetLocation(),
 						Pattern: normalized.PDataOption{
-							Location: e.Positive.GetLocation(),
-							Type: normalized.TExternal{
-								Location: e.Positive.GetLocation(),
-								Name:     common.OakCoreBasicsBool,
-							},
+							Location:       e.Positive.GetLocation(),
+							Type:           boolType,
 							ModuleName:     common.OakCoreBasicsName,
 							DefinitionName: common.OakCoreBasicsTrueName,
 						},
@@ -777,11 +784,8 @@ func normalizeExpression(
 					{
 						Location: e.Negative.GetLocation(),
 						Pattern: normalized.PDataOption{
-							Location: e.Negative.GetLocation(),
-							Type: normalized.TExternal{
-								Location: e.Negative.GetLocation(),
-								Name:     common.OakCoreBasicsBool,
-							},
+							Location:       e.Negative.GetLocation(),
+							Type:           boolType,
 							ModuleName:     common.OakCoreBasicsName,
 							DefinitionName: common.OakCoreBasicsFalseName,
 						},
@@ -812,7 +816,7 @@ func normalizeExpression(
 				Params: common.Map(func(x parsed.Pattern) normalized.Pattern {
 					return normalizePattern(innerLocals, modules, module, x)
 				}, e.Params),
-				FnType: normalizeType(modules, module, e.FnType),
+				FnType: normalizeType(modules, module, nil, e.FnType, nil),
 				Body:   normalizeExpression(innerLocals, modules, module, e.Body),
 				Nested: normalizeExpression(innerLocals, modules, module, e.Nested),
 			}
@@ -1213,23 +1217,24 @@ func extractUsedLocalsSet(
 }
 
 func normalizeType(
-	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module, t parsed.Type,
+	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module, typeModule *parsed.Module, t parsed.Type,
+	namedTypes namedTypeMap,
 ) normalized.Type {
 	if t == nil {
 		return nil
 	}
 	normalize := func(x parsed.Type) normalized.Type {
-		return normalizeType(modules, module, x)
+		return normalizeType(modules, module, typeModule, x, namedTypes)
 	}
 	switch t.(type) {
 	case parsed.TFunc:
 		{
 			e := t.(parsed.TFunc)
-			return normalized.TFunc{
+			return normalized.Type(&normalized.TFunc{
 				Location: e.Location,
 				Params:   common.Map(normalize, e.Params),
 				Return:   normalize(e.Return),
-			}
+			})
 		}
 	case parsed.TRecord:
 		{
@@ -1238,7 +1243,7 @@ func normalizeType(
 			for n, v := range e.Fields {
 				fields[n] = normalize(v)
 			}
-			return normalized.TRecord{
+			return &normalized.TRecord{
 				Location: e.Location,
 				Fields:   fields,
 			}
@@ -1246,7 +1251,7 @@ func normalizeType(
 	case parsed.TTuple:
 		{
 			e := t.(parsed.TTuple)
-			return normalized.TTuple{
+			return &normalized.TTuple{
 				Location: e.Location,
 				Items:    common.Map(normalize, e.Items),
 			}
@@ -1254,23 +1259,46 @@ func normalizeType(
 	case parsed.TUnit:
 		{
 			e := t.(parsed.TUnit)
-			return normalized.TUnit{
+			return &normalized.TUnit{
 				Location: e.Location,
 			}
 		}
 	case parsed.TData:
 		{
 			e := t.(parsed.TData)
-			return normalized.TData{
+			if namedTypes == nil {
+				namedTypes = namedTypeMap{}
+			}
+			if placeholder, cached := namedTypes[e.Name]; cached {
+				return placeholder
+			}
+			namedTypes[e.Name] = &normalized.TPlaceholder{
+				Name: e.Name,
+			}
+
+			return &normalized.TData{
 				Location: e.Location,
 				Name:     e.Name,
 				Args:     common.Map(normalize, e.Args),
+				Options: common.Map(func(x parsed.DataOption) normalized.DataOption {
+					return normalized.DataOption{
+						Name:   x.Name,
+						Hidden: x.Hidden,
+						Values: common.Map(func(x parsed.Type) normalized.Type {
+							if typeModule != nil {
+								return normalizeType(modules, typeModule, nil, x, namedTypes)
+							} else {
+								return normalizeType(modules, module, nil, x, namedTypes)
+							}
+						}, x.Values),
+					}
+				}, e.Options),
 			}
 		}
 	case parsed.TExternal:
 		{
 			e := t.(parsed.TExternal)
-			return normalized.TExternal{
+			return &normalized.TExternal{
 				Location: e.Location,
 				Name:     e.Name,
 				Args:     common.Map(normalize, e.Args),
@@ -1279,7 +1307,7 @@ func normalizeType(
 	case parsed.TTypeParameter:
 		{
 			e := t.(parsed.TTypeParameter)
-			return normalized.TTypeParameter{
+			return &normalized.TTypeParameter{
 				Location: e.Location,
 				Name:     e.Name,
 			}
@@ -1287,11 +1315,14 @@ func normalizeType(
 	case parsed.TNamed:
 		{
 			e := t.(parsed.TNamed)
-			x, ok := findParsedType(modules, module, e.Name, e.Args)
-			if !ok {
+			x, m, id := findParsedType(modules, module, e.Name, e.Args)
+			if id == "" && typeModule != nil {
+				x, m, id = findParsedType(modules, typeModule, e.Name, e.Args)
+			}
+			if id == "" {
 				panic(common.Error{Location: e.Location, Message: fmt.Sprintf("type `%s` not found", e.Name)})
 			}
-			return normalizeType(modules, module, x)
+			return normalizeType(modules, module, m, x, namedTypes)
 		}
 	}
 	panic(common.SystemError{Message: "impossible case"})
@@ -1341,27 +1372,28 @@ func findParsedType(
 	module *parsed.Module,
 	name ast.QualifiedIdentifier,
 	args []parsed.Type,
-) (parsed.Type, bool) {
+) (parsed.Type, *parsed.Module, ast.ExternalIdentifier) {
 	var aliasNameEq = func(x parsed.Alias) bool {
 		return ast.QualifiedIdentifier(x.Name) == name
 	}
 
 	if alias, ok := common.Find(aliasNameEq, module.Aliases); ok {
+		id := common.MakeExternalIdentifier(module.Name, alias.Name)
 		if alias.Type == nil {
 			return parsed.TExternal{
 				Location: alias.Location,
-				Name:     common.MakeExternalIdentifier(module.Name, alias.Name),
+				Name:     id,
 				Args:     args,
-			}, true
+			}, module, id
 		}
 		if len(alias.Params) != len(args) {
-			return nil, false
+			return nil, nil, ""
 		}
 		typeMap := map[ast.Identifier]parsed.Type{}
 		for i, x := range alias.Params {
 			typeMap[x] = args[i]
 		}
-		return applyTypeArgs(alias.Type, typeMap), true
+		return applyTypeArgs(alias.Type, typeMap), module, id
 	}
 
 	ids := strings.Split(string(name), ".")
@@ -1373,7 +1405,7 @@ func findParsedType(
 		}
 	}
 
-	return nil, false
+	return nil, nil, ""
 }
 
 func applyTypeArgs(t parsed.Type, params map[ast.Identifier]parsed.Type) parsed.Type {

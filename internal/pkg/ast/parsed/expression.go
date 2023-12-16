@@ -218,7 +218,8 @@ func (e Var) GetLocation() ast.Location {
 
 type Constructor struct {
 	ast.Location
-	DataName   ast.ExternalIdentifier
+	ModuleName ast.QualifiedIdentifier
+	DataName   ast.Identifier
 	OptionName ast.Identifier
 	Args       []Expression
 }

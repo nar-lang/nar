@@ -51,7 +51,7 @@ type DataTypeOption struct {
 	Location ast.Location
 	Hidden   bool
 	Name     ast.Identifier
-	Params   []Type
+	Values   []Type
 }
 
 type DataType struct {

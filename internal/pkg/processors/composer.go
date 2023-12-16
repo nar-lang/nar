@@ -285,7 +285,7 @@ func composePattern(
 				ops, locations = composePattern(p, ops, locations, binary)
 			}
 			ops, locations = makePattern(bytecode.PatternKindDataOption,
-				string(e.Name), len(e.Args), e.Location, ops, locations, binary)
+				string(e.DataName), len(e.Args), e.Location, ops, locations, binary)
 			break
 		}
 	case *typed.PList:

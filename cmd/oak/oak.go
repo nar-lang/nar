@@ -26,7 +26,7 @@ func main() {
 	outStream := os.Stdout
 
 	linker := oakc.GetLinker(*link)
-	err, loadedPackages := oakc.Compile(
+	loadedPackages, err := oakc.Compile(
 		flag.Args(), linker.GetOutFileLocation(*out),
 		!*release, *upgrade, *cacheDir, outStream)
 	if err != nil {

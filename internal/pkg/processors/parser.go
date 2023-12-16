@@ -1232,7 +1232,7 @@ func parseDataOption(src *Source) parsed.DataTypeOption {
 	return parsed.DataTypeOption{
 		Location: loc(src, cursor),
 		Name:     ast.Identifier(*name),
-		Params:   types,
+		Values:   types,
 		Hidden:   hidden,
 	}
 }

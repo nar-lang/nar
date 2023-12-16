@@ -119,7 +119,8 @@ func (Lambda) _expression() {}
 
 type Constructor struct {
 	ast.Location
-	DataName   ast.ExternalIdentifier
+	ModuleName ast.QualifiedIdentifier
+	DataName   ast.Identifier
 	OptionName ast.Identifier
 	Args       []Expression
 }

@@ -95,7 +95,8 @@ func (p *PConst) GetType() Type {
 type PDataOption struct {
 	ast.Location
 	Type
-	Name       ast.DataOptionIdentifier
+	DataName   ast.ExternalIdentifier
+	OptionName ast.Identifier
 	Definition *Definition
 	Args       []Pattern
 }
@@ -103,7 +104,7 @@ type PDataOption struct {
 func (*PDataOption) _pattern() {}
 
 func (p *PDataOption) String() string {
-	return fmt.Sprintf("PDataOption(%s,%v){%s}", p.Name, p.Args, p.Type)
+	return fmt.Sprintf("PDataOption(%s,%v){%s}", p.DataName, p.Args, p.Type)
 }
 
 func (p *PDataOption) GetLocation() ast.Location {

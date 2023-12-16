@@ -15,9 +15,8 @@ import (
 	"slices"
 )
 
-func Compile(
-	moduleUrls []string, outPath string, debug bool, upgrade bool, cachePath string, log io.Writer,
-) (err error, packages []ast.LoadedPackage) {
+func Compile(moduleUrls []string, outPath string, debug bool, upgrade bool, cachePath string, log io.Writer) (packages []ast.LoadedPackage, err error) {
+	//TODO: move everything to canonical error handling without panics
 	defer func() {
 		x := recover()
 		if x != nil {
@@ -68,6 +67,10 @@ func Compile(
 		m := parsedModules[name]
 		processors.Normalize(m.Name, parsedModules, normalizedModules)
 		processors.Solve(m.Name, normalizedModules, typedModules)
+		err := processors.CheckPatterns(typedModules)
+		if err != nil {
+			return nil, err
+		}
 		processors.Compose(m.Name, typedModules, debug, &bin)
 	}
 
@@ -85,5 +88,5 @@ func Compile(
 	bin.Build(file, debug)
 
 	_, _ = fmt.Fprintf(log, "compiled successfully\n")
-	return nil, loadedPackages
+	return loadedPackages, nil
 }

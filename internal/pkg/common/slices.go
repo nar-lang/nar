@@ -21,6 +21,41 @@ func Map[I, O any](p func(I) O, xs []I) []O {
 	return result
 }
 
+func MapIf[I, O any](p func(I) (O, bool), xs []I) []O {
+	result := make([]O, 0, len(xs))
+	for _, x := range xs {
+		if r, ok := p(x); ok {
+			result = append(result, r)
+		}
+	}
+	return result
+}
+
+func ConcatMap[I, O any](p func(I) []O, xs []I) []O {
+	result := make([]O, 0, len(xs))
+	for _, x := range xs {
+		result = append(result, p(x)...)
+	}
+	return result
+}
+
+func Repeat[T any](x T, n int) []T {
+	result := make([]T, n)
+	for i := range result {
+		result[i] = x
+	}
+	return result
+}
+
+func Any[T any](p func(T) bool, xs []T) bool {
+	for _, x := range xs {
+		if p(x) {
+			return true
+		}
+	}
+	return false
+}
+
 func Find[T any](p func(T) bool, xs []T) (T, bool) {
 	for _, x := range xs {
 		if p(x) {

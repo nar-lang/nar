@@ -155,7 +155,7 @@ func annotateDefinition(
 	}, def.Params)
 
 	if def.Type != nil {
-		o.DefinedType = annotateType("", localTypeParams, def.Type, def.Location, true)
+		o.DefinedType = annotateType("", localTypeParams, def.Type, def.Location, true, placeholderMap{})
 	}
 
 	for _, std := range stack {
@@ -165,7 +165,8 @@ func annotateDefinition(
 	}
 
 	stack = append(stack, o)
-	o.Expression = annotateExpression(localSymbols, localTypeParams, modules, typedModules, moduleName, def.Expression, stack)
+	o.Expression = annotateExpression(
+		localSymbols, localTypeParams, modules, typedModules, moduleName, def.Expression, stack)
 	stack = stack[:len(stack)-1]
 	return o
 }
@@ -192,7 +193,7 @@ func annotatePattern(symbols symbolsMap,
 			e := pattern.(normalized.PAlias)
 			p = &typed.PAlias{
 				Location: e.Location,
-				Type:     annotateType("", typeParams, e.Type, e.Location, typeMapSource),
+				Type:     annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{}),
 				Alias:    e.Alias,
 				Nested:   annotate(e.Nested),
 			}
@@ -204,7 +205,7 @@ func annotatePattern(symbols symbolsMap,
 			e := pattern.(normalized.PAny)
 			p = &typed.PAny{
 				Location: e.Location,
-				Type:     annotateType("", typeParams, e.Type, e.Location, typeMapSource),
+				Type:     annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{}),
 			}
 			break
 		}
@@ -213,7 +214,7 @@ func annotatePattern(symbols symbolsMap,
 			e := pattern.(normalized.PCons)
 			p = &typed.PCons{
 				Location: e.Location,
-				Type:     annotateType("", typeParams, e.Type, e.Location, typeMapSource),
+				Type:     annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{}),
 				Head:     annotate(e.Head),
 				Tail:     annotate(e.Tail),
 			}
@@ -224,7 +225,7 @@ func annotatePattern(symbols symbolsMap,
 			e := pattern.(normalized.PConst)
 			p = &typed.PConst{
 				Location: e.Location,
-				Type:     annotateType("", typeParams, e.Type, e.Location, typeMapSource),
+				Type:     annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{}),
 				Value:    e.Value,
 			}
 			break
@@ -238,8 +239,9 @@ func annotatePattern(symbols symbolsMap,
 			} else {
 				p = &typed.PDataOption{
 					Location:   e.Location,
-					Type:       annotateType("", typeParams, nil, e.Location, typeMapSource),
-					Name:       ctor.OptionName,
+					Type:       annotateType("", typeParams, nil, e.Location, typeMapSource, placeholderMap{}),
+					DataName:   ctor.DataName,
+					OptionName: ctor.OptionName,
 					Args:       common.Map(annotate, e.Values),
 					Definition: def,
 				}
@@ -251,7 +253,7 @@ func annotatePattern(symbols symbolsMap,
 			e := pattern.(normalized.PList)
 			p = &typed.PList{
 				Location: e.Location,
-				Type:     annotateType("", typeParams, e.Type, e.Location, typeMapSource),
+				Type:     annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{}),
 				Items:    common.Map(annotate, e.Items),
 			}
 			break
@@ -261,7 +263,7 @@ func annotatePattern(symbols symbolsMap,
 			e := pattern.(normalized.PNamed)
 			p = &typed.PNamed{
 				Location: e.Location,
-				Type:     annotateType("", typeParams, nil, e.Location, typeMapSource),
+				Type:     annotateType("", typeParams, nil, e.Location, typeMapSource, placeholderMap{}),
 				Name:     e.Name,
 			}
 			symbols[e.Name] = p.GetType()
@@ -272,12 +274,12 @@ func annotatePattern(symbols symbolsMap,
 			e := pattern.(normalized.PRecord)
 			p = &typed.PRecord{
 				Location: e.Location,
-				Type:     annotateType("", typeParams, e.Type, e.Location, typeMapSource),
+				Type:     annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{}),
 				Fields: common.Map(func(f normalized.PRecordField) typed.PRecordField {
 					return typed.PRecordField{
 						Location: f.Location,
 						Name:     f.Name,
-						Type:     annotateType("", typeParams, nil, e.Location, typeMapSource),
+						Type:     annotateType("", typeParams, nil, e.Location, typeMapSource, placeholderMap{}),
 					}
 				}, e.Fields),
 			}
@@ -288,7 +290,7 @@ func annotatePattern(symbols symbolsMap,
 			e := pattern.(normalized.PTuple)
 			p = &typed.PTuple{
 				Location: e.Location,
-				Type:     annotateType("", typeParams, e.Type, e.Location, typeMapSource),
+				Type:     annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{}),
 				Items:    common.Map(annotate, e.Items),
 			}
 			break
@@ -327,7 +329,7 @@ func annotateExpression(
 			e := expr.(normalized.Access)
 			o = &typed.Access{
 				Location:  e.Location,
-				Type:      annotateType("", typeParams, nil, e.Location, false),
+				Type:      annotateType("", typeParams, nil, e.Location, false, placeholderMap{}),
 				Record:    annotate(e.Record),
 				FieldName: e.FieldName,
 			}
@@ -338,7 +340,7 @@ func annotateExpression(
 			e := expr.(normalized.Apply)
 			o = &typed.Apply{
 				Location: e.Location,
-				Type:     annotateType("", typeParams, nil, e.Location, false),
+				Type:     annotateType("", typeParams, nil, e.Location, false, placeholderMap{}),
 				Func:     annotate(e.Func),
 				Args:     common.Map(annotate, e.Args),
 			}
@@ -349,7 +351,7 @@ func annotateExpression(
 			e := expr.(normalized.Const)
 			o = &typed.Const{
 				Location: e.Location,
-				Type:     annotateType("", typeParams, nil, e.Location, false),
+				Type:     annotateType("", typeParams, nil, e.Location, false, placeholderMap{}),
 				Value:    e.Value,
 			}
 			break
@@ -363,7 +365,7 @@ func annotateExpression(
 
 			o = &typed.Let{
 				Location: e.Location,
-				Type:     annotateType("", localTypeParams, nil, e.Location, true),
+				Type:     annotateType("", localTypeParams, nil, e.Location, true, placeholderMap{}),
 				Pattern:  annotatePattern(localSymbols, localTypeParams, modules, typedModules, moduleName, e.Pattern, true, stack),
 				Value:    annotateExpression(localSymbols, localTypeParams, modules, typedModules, moduleName, e.Value, stack),
 				Body:     annotateExpression(localSymbols, localTypeParams, modules, typedModules, moduleName, e.Nested, stack),
@@ -375,7 +377,7 @@ func annotateExpression(
 			e := expr.(normalized.List)
 			o = &typed.List{
 				Location: e.Location,
-				Type:     annotateType("", typeParams, nil, e.Location, false),
+				Type:     annotateType("", typeParams, nil, e.Location, false, placeholderMap{}),
 				Items:    common.Map(annotate, e.Items),
 			}
 			break
@@ -385,11 +387,11 @@ func annotateExpression(
 			e := expr.(normalized.Record)
 			o = &typed.Record{
 				Location: e.Location,
-				Type:     annotateType("", typeParams, nil, e.Location, false),
+				Type:     annotateType("", typeParams, nil, e.Location, false, placeholderMap{}),
 				Fields: common.Map(func(f normalized.RecordField) typed.RecordField {
 					return typed.RecordField{
 						Location: e.Location,
-						Type:     annotateType("", typeParams, nil, f.Location, false),
+						Type:     annotateType("", typeParams, nil, f.Location, false, placeholderMap{}),
 						Name:     f.Name,
 						Value:    annotate(f.Value),
 					}
@@ -402,7 +404,7 @@ func annotateExpression(
 			e := expr.(normalized.Select)
 			o = &typed.Select{
 				Location:  e.Location,
-				Type:      annotateType("", typeParams, nil, e.Location, false),
+				Type:      annotateType("", typeParams, nil, e.Location, false, placeholderMap{}),
 				Condition: annotate(e.Condition),
 				Cases: common.Map(func(c normalized.SelectCase) typed.SelectCase {
 					localSymbols := maps.Clone(symbols)
@@ -413,7 +415,7 @@ func annotateExpression(
 							localSymbols, localTypeParams, modules, typedModules, moduleName, c.Pattern, false, stack),
 						Expression: annotateExpression(
 							localSymbols, localTypeParams, modules, typedModules, moduleName, c.Expression, stack),
-						Type: annotateType("", localTypeParams, nil, c.Location, false),
+						Type: annotateType("", localTypeParams, nil, c.Location, false, placeholderMap{}),
 					}
 				}, e.Cases),
 			}
@@ -424,7 +426,7 @@ func annotateExpression(
 			e := expr.(normalized.Tuple)
 			o = &typed.Tuple{
 				Location: e.Location,
-				Type:     annotateType("", typeParams, nil, e.Location, false),
+				Type:     annotateType("", typeParams, nil, e.Location, false, placeholderMap{}),
 				Items:    common.Map(annotate, e.Items),
 			}
 			break
@@ -440,7 +442,7 @@ func annotateExpression(
 					Fields: common.Map(func(f normalized.RecordField) typed.RecordField {
 						return typed.RecordField{
 							Location: e.Location,
-							Type:     annotateType("", typeParams, nil, f.Location, false),
+							Type:     annotateType("", typeParams, nil, f.Location, false, placeholderMap{}),
 							Name:     f.Name,
 							Value:    annotate(f.Value),
 						}
@@ -469,7 +471,7 @@ func annotateExpression(
 				Fields: common.Map(func(f normalized.RecordField) typed.RecordField {
 					return typed.RecordField{
 						Location: e.Location,
-						Type:     annotateType("", typeParams, nil, f.Location, false),
+						Type:     annotateType("", typeParams, nil, f.Location, false, placeholderMap{}),
 						Name:     f.Name,
 						Value:    annotate(f.Value),
 					}
@@ -480,11 +482,18 @@ func annotateExpression(
 	case normalized.Constructor:
 		{
 			e := expr.(normalized.Constructor)
+			def := getAnnotatedGlobal(e.ModuleName, e.OptionName, modules, typedModules, stack, e.Location)
+			t := def.DefinedType
+			if len(def.Params) > 0 {
+				t = t.(*typed.TFunc).Return
+			}
+
 			o = &typed.Constructor{
 				Location:   e.Location,
-				Type:       annotateType("", typeParams, nil, e.Location, false),
-				DataName:   e.DataName,
-				OptionName: common.MakeDataOptionIdentifier(e.DataName, e.OptionName),
+				Type:       annotateType("", typeParams, nil, e.Location, false, placeholderMap{}),
+				DataName:   common.MakeExternalIdentifier(e.ModuleName, e.DataName),
+				OptionName: e.OptionName,
+				DataType:   t.(*typed.TData),
 				Args:       common.Map(annotate, e.Args),
 			}
 			break
@@ -494,7 +503,7 @@ func annotateExpression(
 			e := expr.(normalized.NativeCall)
 			o = &typed.NativeCall{
 				Location: e.Location,
-				Type:     annotateType("", typeParams, nil, e.Location, false),
+				Type:     annotateType("", typeParams, nil, e.Location, false, placeholderMap{}),
 				Name:     e.Name,
 				Args:     common.Map(annotate, e.Args),
 			}
@@ -523,7 +532,7 @@ func annotateExpression(
 
 			dt := def.GetType()
 			if dt == nil {
-				dt = annotateType("", typeParams, nil, e.Location, false)
+				dt = annotateType("", typeParams, nil, e.Location, false, placeholderMap{})
 			}
 			o = &typed.Global{
 				Location:       e.Location,
@@ -589,12 +598,15 @@ func newAnnotatedType(loc ast.Location, constraint common.Constraint) typed.Type
 	}
 }
 
+type placeholderMap map[ast.ExternalIdentifier]typed.Type
+
 func annotateType(
 	name ast.Identifier, typeParams typeParamsMap, t normalized.Type, location ast.Location, typeMapSource bool,
+	placeholders placeholderMap,
 ) typed.Type {
 	annotate := func(l ast.Location) func(x normalized.Type) typed.Type {
 		return func(x normalized.Type) typed.Type {
-			return annotateType("", typeParams, x, location, typeMapSource)
+			return annotateType("", typeParams, x, location, typeMapSource, placeholders)
 		}
 	}
 
@@ -608,22 +620,22 @@ func annotateType(
 
 	} else {
 		switch t.(type) {
-		case normalized.TFunc:
+		case *normalized.TFunc:
 			{
-				e := t.(normalized.TFunc)
+				e := t.(*normalized.TFunc)
 				r = &typed.TFunc{
 					Location: e.Location,
 					Params:   common.Map(annotate(e.Location), e.Params),
-					Return:   annotateType("", typeParams, e.Return, e.Location, typeMapSource),
+					Return:   annotateType("", typeParams, e.Return, e.Location, typeMapSource, placeholders),
 				}
 				break
 			}
-		case normalized.TRecord:
+		case *normalized.TRecord:
 			{
-				e := t.(normalized.TRecord)
+				e := t.(*normalized.TRecord)
 				fields := map[ast.Identifier]typed.Type{}
 				for n, v := range e.Fields {
-					fields[n] = annotateType("", typeParams, v, e.Location, typeMapSource)
+					fields[n] = annotateType("", typeParams, v, e.Location, typeMapSource, placeholders)
 				}
 				r = &typed.TRecord{
 					Location: e.Location,
@@ -631,24 +643,44 @@ func annotateType(
 				}
 				break
 			}
-		case normalized.TTuple:
+		case *normalized.TTuple:
 			{
-				e := t.(normalized.TTuple)
+				e := t.(*normalized.TTuple)
 				r = &typed.TTuple{
 					Location: e.Location,
 					Items:    common.Map(annotate(e.Location), e.Items),
 				}
 				break
 			}
-		case normalized.TUnit:
+		case *normalized.TUnit:
 			{
-				e := t.(normalized.TUnit)
+				e := t.(*normalized.TUnit)
 				r = &typed.TExternal{Location: e.Location, Name: common.OakCoreBasicsUnit}
 				break
 			}
-		case normalized.TData:
+		case *normalized.TData:
 			{
-				e := t.(normalized.TData)
+				e := t.(*normalized.TData)
+				d := &typed.TData{
+					Location: e.Location,
+					Name:     e.Name,
+				}
+				placeholders[d.Name] = d
+				d.Args = common.Map(annotate(e.Location), e.Args)
+				d.Options = common.Map(
+					func(x normalized.DataOption) typed.DataOption {
+						return typed.DataOption{
+							Name:   common.MakeDataOptionIdentifier(e.Name, x.Name),
+							Values: common.Map(annotate(e.Location), x.Values),
+						}
+					},
+					e.Options)
+				r = d
+				break
+			}
+		case *normalized.TExternal:
+			{
+				e := t.(*normalized.TExternal)
 				r = &typed.TExternal{
 					Location: e.Location,
 					Name:     e.Name,
@@ -656,25 +688,15 @@ func annotateType(
 				}
 				break
 			}
-		case normalized.TExternal:
+		case *normalized.TTypeParameter:
 			{
-				e := t.(normalized.TExternal)
-				r = &typed.TExternal{
-					Location: e.Location,
-					Name:     e.Name,
-					Args:     common.Map(annotate(e.Location), e.Args),
-				}
-				break
-			}
-		case normalized.TTypeParameter:
-			{
-				e := t.(normalized.TTypeParameter)
+				e := t.(*normalized.TTypeParameter)
 
 				if id, ok := typeParams[e.Name]; ok {
 					r = id
 				} else {
 					if typeMapSource {
-						r = annotateType(e.Name, typeParams, nil, e.Location, true)
+						r = annotateType(e.Name, typeParams, nil, e.Location, true, placeholders)
 						annotations = append(annotations, struct {
 							fmt.Stringer
 							typed.Type
@@ -687,6 +709,16 @@ func annotateType(
 					}
 				}
 				break
+			}
+		case *normalized.TPlaceholder:
+			{
+				e := t.(*normalized.TPlaceholder)
+				if p, ok := placeholders[e.Name]; ok {
+					r = p
+				} else {
+
+					placeholders[e.Name] = r
+				}
 			}
 		default:
 			panic(common.SystemError{Message: "invalid case"})
@@ -836,7 +868,7 @@ func equatizePattern(eqs []equation, pattern typed.Pattern, stack []*typed.Defin
 				}
 			}
 			if itemType == nil {
-				itemType = annotateType("", nil, nil, e.Location, false)
+				itemType = annotateType("", nil, nil, e.Location, false, placeholderMap{})
 			}
 			eqs = append(eqs, equation{
 				loc:  loc,
@@ -994,7 +1026,7 @@ func equatizeExpression(
 			}
 
 			if listItemType == nil {
-				listItemType = annotateType("", nil, nil, e.Location, false)
+				listItemType = annotateType("", nil, nil, e.Location, false, placeholderMap{})
 			}
 			eqs = append(eqs, equation{
 				loc:  loc,
@@ -1158,9 +1190,11 @@ func equatizeExpression(
 			eqs = append(eqs, equation{
 				loc:  loc,
 				left: e.Type,
-				right: &typed.TExternal{
+				right: &typed.TData{
 					Location: e.Location,
 					Name:     e.DataName,
+					Options:  e.DataType.Options,
+					Args:     e.DataType.Args,
 				},
 				expr: e,
 			})
@@ -1275,8 +1309,110 @@ func balanceFn(f *typed.TFunc, sz int) *typed.TFunc {
 	}
 }
 
+func typesEqual(x typed.Type, y typed.Type, req map[ast.ExternalIdentifier]struct{}) bool {
+	switch x.(type) {
+	case *typed.TData:
+		tx, okx := x.(*typed.TData)
+		ty, oky := y.(*typed.TData)
+		if okx && oky {
+			if tx.Name != ty.Name {
+				return false
+			}
+			if req != nil {
+				if _, ok := req[tx.Name]; ok {
+					return true
+				}
+			}
+			req = map[ast.ExternalIdentifier]struct{}{}
+			req[tx.Name] = struct{}{}
+			if len(tx.Args) != len(ty.Args) {
+				return false
+			}
+			for i, a := range tx.Args {
+				if !typesEqual(a, ty.Args[i], req) {
+					return false
+				}
+			}
+			return true
+		}
+		break
+	case *typed.TExternal:
+		tx, okx := x.(*typed.TExternal)
+		ty, oky := y.(*typed.TExternal)
+		if okx && oky {
+			if tx.Name != ty.Name {
+				return false
+			}
+			if len(tx.Args) != len(ty.Args) {
+				return false
+			}
+			for i, a := range tx.Args {
+				if !typesEqual(a, ty.Args[i], req) {
+					return false
+				}
+			}
+			return true
+		}
+		break
+	case *typed.TFunc:
+		tx, okx := x.(*typed.TFunc)
+		ty, oky := y.(*typed.TFunc)
+		if okx && oky {
+			if len(tx.Params) != len(ty.Params) {
+				return false
+			}
+			for i, p := range tx.Params {
+				if !typesEqual(p, ty.Params[i], req) {
+					return false
+				}
+			}
+			return typesEqual(tx.Return, ty.Return, req)
+		}
+		break
+	case *typed.TRecord:
+		tx, okx := x.(*typed.TRecord)
+		ty, oky := y.(*typed.TRecord)
+		if okx && oky {
+			if len(tx.Fields) != len(ty.Fields) {
+				return false
+			}
+			for n, fx := range tx.Fields {
+				if fy, ok := ty.Fields[n]; !ok {
+					return false
+				} else if !typesEqual(fx, fy, req) {
+					return false
+				}
+			}
+			return true
+		}
+		break
+	case *typed.TTuple:
+		tx, okx := x.(*typed.TTuple)
+		ty, oky := y.(*typed.TTuple)
+		if okx && oky {
+			if len(tx.Items) != len(ty.Items) {
+				return false
+			}
+			for i, p := range tx.Items {
+				if !typesEqual(p, ty.Items[i], req) {
+					return false
+				}
+			}
+			return true
+		}
+		break
+	case *typed.TUnbound:
+		tx, okx := x.(*typed.TUnbound)
+		ty, oky := y.(*typed.TUnbound)
+		if okx && oky {
+			return tx.Index == ty.Index && tx.Constraint == ty.Constraint
+		}
+	}
+	return false
+}
+
 func unify(x typed.Type, y typed.Type, loc []ast.Location, subst map[uint64]typed.Type) error {
-	if x.EqualsTo(y) {
+	if typesEqual(x, y, nil) {
 		return nil
 	}
 
@@ -1374,6 +1510,33 @@ func unify(x typed.Type, y typed.Type, loc []ast.Location, subst map[uint64]type
 			}
 			break
 		}
+	case *typed.TData:
+		{
+			if ey, ok := y.(*typed.TData); ok {
+				ex := x.(*typed.TData)
+				if ex.Name == ey.Name {
+					if len(ex.Args) == len(ey.Args) {
+						for i, p := range ex.Args {
+							err := unify(p, ey.Args[i], append(loc, p.GetLocation(), ey.Args[i].GetLocation()), subst)
+							if err != nil {
+								return err
+							}
+						}
+					}
+					return nil
+				} else if ex.Name == common.Number {
+					if ey.Name == common.OakCoreBasicsInt || ey.Name == common.OakCoreBasicsFloat {
+						ex.Name = ey.Name
+						return nil
+					}
+				} else if ey.Name == common.Number {
+					if ex.Name == common.OakCoreBasicsInt || ex.Name == common.OakCoreBasicsFloat {
+						ey.Name = ex.Name
+						return nil
+					}
+				}
+			}
+		}
 	default:
 		panic(common.SystemError{Message: "invalid case"})
 	}
@@ -1426,7 +1589,7 @@ func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc []ast.Location, subst m
 }
 
 func OccursCheck(v *typed.TUnbound, typ typed.Type, subst map[uint64]typed.Type) bool {
-	if v.EqualsTo(typ) {
+	if typesEqual(v, typ, nil) {
 		return true
 	}
 	switch typ.(type) {
@@ -1472,6 +1635,15 @@ func OccursCheck(v *typed.TUnbound, typ typed.Type, subst map[uint64]typed.Type)
 				}
 			}
 			break
+		}
+	case *typed.TData:
+		{
+			e := typ.(*typed.TData)
+			for _, a := range e.Args {
+				if OccursCheck(v, a, subst) {
+					return true
+				}
+			}
 		}
 	case *typed.TUnbound:
 		{
@@ -1542,6 +1714,16 @@ func applyType(t typed.Type, subst map[uint64]typed.Type) typed.Type {
 			}
 			break
 		}
+	case *typed.TData:
+		{
+			e := t.(*typed.TData)
+			t = &typed.TData{
+				Location: e.Location,
+				Name:     e.Name,
+				Args:     common.Map(apply, e.Args),
+				Options:  e.Options,
+			}
+		}
 	case *typed.TUnbound:
 		{
 			e := t.(*typed.TUnbound)
@@ -1608,7 +1790,8 @@ func applyPattern(pattern typed.Pattern, subst map[uint64]typed.Type) typed.Patt
 			pattern = &typed.PDataOption{
 				Location:   e.Location,
 				Type:       applyType(e.Type, subst),
-				Name:       e.Name,
+				DataName:   e.DataName,
+				OptionName: e.OptionName,
 				Definition: e.Definition,
 				Args:       common.Map(apply, e.Args),
 			}

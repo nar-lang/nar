@@ -247,7 +247,8 @@ type Constructor struct {
 	ast.Location
 	Type
 	DataName   ast.ExternalIdentifier
-	OptionName ast.DataOptionIdentifier
+	OptionName ast.Identifier
+	DataType   *TData
 	Args       []Expression
 }
 

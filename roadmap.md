@@ -7,18 +7,20 @@
 * [x] Bytecode compiler
 * [x] Packages system
 * [x] Check type constraints (`number`)
-* [ ] Check if all cases are exhaustive
-* [ ] Check if function parameters are exhaustive (for data types)
+* [x] Check if all cases are exhaustive
+* [x] Check if function parameters are exhaustive (for data types)
 * [ ] `export` definition keyword and tree shaking
+
+## Compiler v0.2
+* [ ] Support of \uNNNN string characters
 * [ ] Nested record fields access
 * [ ] Prefix operators (like infix ones, neg is ugly)
-* [ ] Support of \uNNNN string characters
 * [ ] Imports improvements
   * [ ] Do not require import if fully qualified name is used
   * [ ] Do not require exposing import with name of the package, e.g. `import Oak.Core.String`~~`exposing (String)`~~`
   * [ ] Non-ambiguous identifiers can omit imports, e.g. `List.map`
   * [ ] Make prelude with default imports
-
+  
 ## Libraries
 * [x] Oak.Core library + tests
 * [ ] Oak.Program library
