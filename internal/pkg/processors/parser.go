@@ -1469,9 +1469,16 @@ func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Defin
 				Location: loc(src, typeCursor),
 				Name:     common.MakeFullIdentifier(modName, ast.Identifier(*name)),
 				Args: common.Map(func(x parsed.Pattern) parsed.Expression {
-					return parsed.Var{
-						Location: x.GetLocation(),
-						Name:     ast.QualifiedIdentifier(x.(parsed.PNamed).Name),
+					if named, ok := x.(parsed.PNamed); ok {
+						return parsed.Var{
+							Location: x.GetLocation(),
+							Name:     ast.QualifiedIdentifier(named.Name),
+						}
+					} else {
+						panic(common.Error{
+							Location: x.GetLocation(),
+							Message:  "native function should start with lowercase letter and cannot be a pattern match",
+						})
 					}
 				}, params),
 			}
