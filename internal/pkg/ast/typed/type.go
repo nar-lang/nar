@@ -96,7 +96,9 @@ type DataOption struct {
 }
 
 func (d DataOption) String() string {
-	return fmt.Sprintf("%s(%v)", d.Name, common.Join(d.Values, ", "))
+	return fmt.Sprintf("%s(%v)", d.Name, len(d.Values))
+	//TODO: it fails to handle recursive types
+	//return fmt.Sprintf("%s(%v)", d.Name, common.Join(d.Values, ", "))
 }
 
 type TData struct {
