@@ -29,7 +29,7 @@ infix_char ::= "!" | "#" | "$" | "%" | "&" | "*" | "+" | "-" | "/" |
 
 definitions ::= definition [definitions]
 
-definition ::= "def" ["hidden"] ["extern"] identifier { const_definition | func_definition }
+definition ::= "def" ["hidden"] ["native"] identifier { const_definition | func_definition }
 
 const_definition ::= [type_annotation] "=" expr
 
