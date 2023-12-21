@@ -1558,7 +1558,7 @@ func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc []ast.Location, subst m
 		if OccursCheck(v, typ, subst) {
 			return common.Error{
 				Extra:   append(loc, v.Location, typ.GetLocation()),
-				Message: fmt.Sprintf("ambigous type: %v vs %v", applyType(v, subst), applyType(typ, subst)),
+				Message: fmt.Sprintf("ambiguous type: %v vs %v", applyType(v, subst), applyType(typ, subst)),
 			}
 		}
 	}

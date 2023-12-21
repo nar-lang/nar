@@ -8,6 +8,10 @@ type InfixIdentifier string
 
 type FullIdentifier string
 
+func (f FullIdentifier) String() string {
+	return string(f)
+}
+
 type DataOptionIdentifier string
 
 type Location struct {
