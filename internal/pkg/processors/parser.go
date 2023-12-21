@@ -1522,7 +1522,8 @@ func parseModule(src *Source) *parsed.Module {
 		setErrorSource(*src, "expected module name here")
 	}
 	m := parsed.Module{
-		Name: *name,
+		Name:     *name,
+		Location: loc(src, 0),
 	}
 
 	for {

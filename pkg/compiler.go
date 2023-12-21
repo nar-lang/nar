@@ -46,8 +46,21 @@ func Compile(moduleUrls []string, outPath string, debug bool, upgrade bool, cach
 
 	for i := len(loadedPackages) - 1; i >= 0; i-- {
 		pkg := loadedPackages[i]
+		referencedPackages := map[string]struct{}{}
+		referencedPackages[pkg.Package.Name] = struct{}{}
+		for _, dep := range pkg.Package.Dependencies {
+			for _, p := range loadedPackages {
+				if p.Url == dep {
+					referencedPackages[p.Package.Name] = struct{}{}
+					break
+				}
+			}
+		}
+
 		for _, modulePath := range pkg.Sources {
 			parsedModule := processors.Parse(modulePath)
+			parsedModule.PackageName = pkg.Package.Name
+			parsedModule.ReferencedPackages = referencedPackages
 			if existedModule, ok := parsedModules[parsedModule.Name]; ok {
 				panic(common.SystemError{
 					Message: fmt.Sprintf("module name collision: `%s`", existedModule.Name),
@@ -62,6 +75,11 @@ func Compile(moduleUrls []string, outPath string, debug bool, upgrade bool, cach
 		names = append(names, name)
 	}
 	slices.Sort(names)
+
+	for _, name := range names {
+		m := parsedModules[name]
+		processors.PreNormalize(m.Name, parsedModules)
+	}
 
 	for _, name := range names {
 		m := parsedModules[name]

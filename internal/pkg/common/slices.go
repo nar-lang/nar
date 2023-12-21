@@ -70,3 +70,11 @@ func Find[T any](p func(T) bool, xs []T) (T, bool) {
 func Join[T fmt.Stringer](xs []T, sep string) string {
 	return strings.Join(Map(func(x T) string { return x.String() }, xs), sep)
 }
+
+func Keys[K comparable, V any](m map[K]V) []K {
+	result := make([]K, 0, len(m))
+	for k := range m {
+		result = append(result, k)
+	}
+	return result
+}

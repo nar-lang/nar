@@ -64,9 +64,13 @@ type DataType struct {
 
 type Module struct {
 	Name        ast.QualifiedIdentifier
+	Location    ast.Location
 	Imports     []Import
 	Aliases     []Alias
 	InfixFns    []Infix
 	Definitions []Definition
 	DataTypes   []DataType
+
+	PackageName        string
+	ReferencedPackages map[string]struct{}
 }

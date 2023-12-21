@@ -26,8 +26,8 @@ func Compose(
 	binary.CompiledPaths = append(binary.CompiledPaths, moduleName)
 
 	m := modules[moduleName]
-	for _, depPath := range m.Dependencies {
-		Compose(depPath, modules, debug, binary)
+	for depModule := range m.Dependencies {
+		Compose(depModule, modules, debug, binary)
 	}
 
 	for _, def := range m.Definitions {

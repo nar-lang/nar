@@ -17,6 +17,20 @@ var lastLambdaId = uint64(0)
 
 type namedTypeMap map[ast.FullIdentifier]*normalized.TPlaceholder
 
+func PreNormalize(
+	moduleName ast.QualifiedIdentifier,
+	modules map[ast.QualifiedIdentifier]*parsed.Module,
+) bool {
+	m, ok := modules[moduleName]
+	if !ok {
+		return false
+	}
+
+	flattenDataTypes(m)
+	unwrapImports(m, modules)
+	return true
+}
+
 func Normalize(
 	moduleName ast.QualifiedIdentifier,
 	modules map[ast.QualifiedIdentifier]*parsed.Module,
@@ -31,33 +45,27 @@ func Normalize(
 		return false
 	}
 
-	for _, imp := range m.Imports {
-		if !Normalize(imp.ModuleIdentifier, modules, normalizedModules) {
-			panic(common.Error{Location: imp.Location, Message: fmt.Sprintf("module `%s` not found", imp.ModuleIdentifier)})
-		}
-	}
-
-	flattenDataTypes(m)
-	unwrapImports(m, modules)
-	modules[moduleName] = m
-
 	o := &normalized.Module{
-		Name: m.Name,
+		Name:         m.Name,
+		Dependencies: map[ast.QualifiedIdentifier][]ast.Identifier{},
 	}
 
 	lastLambdaId = 0
 
 	for _, def := range m.Definitions {
-		nDef, params := normalizeDefinition(modules, m, def)
+		nDef, params := normalizeDefinition(modules, m, def, o)
 		nDef.Expression = flattenLambdas(nDef.Name, nDef.Expression, o, params)
 		o.Definitions = append(o.Definitions, &nDef)
 	}
 
-	for _, imp := range m.Imports {
-		o.Dependencies = append(o.Dependencies, imp.ModuleIdentifier)
+	normalizedModules[m.Name] = o
+
+	for modName := range o.Dependencies {
+		if !Normalize(modName, modules, normalizedModules) {
+			panic(common.Error{Location: m.Location, Message: fmt.Sprintf("module `%s` not found", modName)})
+		}
 	}
 
-	normalizedModules[m.Name] = o
 	return true
 }
 
@@ -589,6 +597,7 @@ func unwrapImports(module *parsed.Module, modules map[ast.QualifiedIdentifier]*p
 
 func normalizeDefinition(
 	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module, def parsed.Definition,
+	normalizedModule *normalized.Module,
 ) (normalized.Definition, map[ast.Identifier]struct{}) {
 	lastDefinitionId++
 	o := normalized.Definition{
@@ -599,10 +608,10 @@ func normalizeDefinition(
 	}
 	params := map[ast.Identifier]struct{}{}
 	o.Params = common.Map(func(x parsed.Pattern) normalized.Pattern {
-		return normalizePattern(params, modules, module, x)
+		return normalizePattern(params, modules, module, x, normalizedModule)
 	}, def.Params)
 	locals := maps.Clone(params)
-	o.Expression = normalizeExpression(locals, modules, module, def.Expression)
+	o.Expression = normalizeExpression(locals, modules, module, def.Expression, normalizedModule)
 	o.Type = normalizeType(modules, module, nil, def.Type, nil)
 	return o, params
 }
@@ -611,8 +620,11 @@ func normalizePattern(
 	locals map[ast.Identifier]struct{},
 	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module,
 	pattern parsed.Pattern,
+	normalizedModule *normalized.Module,
 ) normalized.Pattern {
-	normalize := func(p parsed.Pattern) normalized.Pattern { return normalizePattern(locals, modules, module, p) }
+	normalize := func(p parsed.Pattern) normalized.Pattern {
+		return normalizePattern(locals, modules, module, p, normalizedModule)
+	}
 
 	switch pattern.(type) {
 	case parsed.PAlias:
@@ -656,7 +668,7 @@ func normalizePattern(
 	case parsed.PDataOption:
 		{
 			e := pattern.(parsed.PDataOption)
-			def, mod, ids := findParsedDefinition(modules, module, e.Name)
+			def, mod, ids := findParsedDefinition(modules, module, e.Name, normalizedModule)
 			if len(ids) == 0 {
 				panic(common.Error{Location: e.Location, Message: "data constructor not found"})
 			} else if len(ids) > 1 {
@@ -720,11 +732,13 @@ func normalizePattern(
 
 func normalizeExpression(
 	locals map[ast.Identifier]struct{},
-	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module,
+	modules map[ast.QualifiedIdentifier]*parsed.Module,
+	module *parsed.Module,
 	expr parsed.Expression,
+	normalizedModule *normalized.Module,
 ) normalized.Expression {
 	normalize := func(e parsed.Expression) normalized.Expression {
-		return normalizeExpression(locals, modules, module, e)
+		return normalizeExpression(locals, modules, module, e, normalizedModule)
 	}
 	ambiguousInfix := func(ids []ast.FullIdentifier, name ast.InfixIdentifier, loc ast.Location) error {
 		if len(ids) == 0 {
@@ -839,9 +853,9 @@ func normalizeExpression(
 			innerLocals := maps.Clone(locals)
 			return normalized.LetMatch{
 				Location: e.Location,
-				Pattern:  normalizePattern(innerLocals, modules, module, e.Pattern),
-				Value:    normalizeExpression(innerLocals, modules, module, e.Value),
-				Nested:   normalizeExpression(innerLocals, modules, module, e.Nested),
+				Pattern:  normalizePattern(innerLocals, modules, module, e.Pattern, normalizedModule),
+				Value:    normalizeExpression(innerLocals, modules, module, e.Value, normalizedModule),
+				Nested:   normalizeExpression(innerLocals, modules, module, e.Nested, normalizedModule),
 			}
 		}
 	case parsed.LetDef:
@@ -853,11 +867,11 @@ func normalizeExpression(
 				Location: e.Location,
 				Name:     e.Name,
 				Params: common.Map(func(x parsed.Pattern) normalized.Pattern {
-					return normalizePattern(innerLocals, modules, module, x)
+					return normalizePattern(innerLocals, modules, module, x, normalizedModule)
 				}, e.Params),
 				FnType: normalizeType(modules, module, nil, e.FnType, nil),
-				Body:   normalizeExpression(innerLocals, modules, module, e.Body),
-				Nested: normalizeExpression(innerLocals, modules, module, e.Nested),
+				Body:   normalizeExpression(innerLocals, modules, module, e.Body, normalizedModule),
+				Nested: normalizeExpression(innerLocals, modules, module, e.Nested, normalizedModule),
 			}
 		}
 	case parsed.List:
@@ -901,8 +915,8 @@ func normalizeExpression(
 					innerLocals := maps.Clone(locals)
 					return normalized.SelectCase{
 						Location:   e.Location,
-						Pattern:    normalizePattern(innerLocals, modules, module, i.Pattern),
-						Expression: normalizeExpression(innerLocals, modules, module, i.Expression),
+						Pattern:    normalizePattern(innerLocals, modules, module, i.Pattern, normalizedModule),
+						Expression: normalizeExpression(innerLocals, modules, module, i.Expression, normalizedModule),
 					}
 				}, e.Cases),
 			}
@@ -918,7 +932,7 @@ func normalizeExpression(
 	case parsed.Update:
 		{
 			e := expr.(parsed.Update)
-			d, m, ids := findParsedDefinition(modules, module, e.RecordName)
+			d, m, ids := findParsedDefinition(modules, module, e.RecordName, normalizedModule)
 			if len(ids) == 1 {
 				return normalized.UpdateGlobal{
 					Location:       e.Location,
@@ -954,7 +968,7 @@ func normalizeExpression(
 			return normalized.Lambda{
 				Location: e.Location,
 				Params: common.Map(func(x parsed.Pattern) normalized.Pattern {
-					return normalizePattern(locals, modules, module, x)
+					return normalizePattern(locals, modules, module, x, normalizedModule)
 				}, e.Params),
 				Body: normalize(e.Body),
 			}
@@ -1068,7 +1082,7 @@ func normalizeExpression(
 				}
 			}
 
-			d, m, ids := findParsedDefinition(modules, module, e.Name)
+			d, m, ids := findParsedDefinition(modules, module, e.Name, normalizedModule)
 			if len(ids) == 1 {
 				return normalized.Global{
 					Location:       e.Location,
@@ -1092,7 +1106,7 @@ func normalizeExpression(
 						FieldName: ast.Identifier(parts[i]),
 					}
 				}
-				return normalizeExpression(locals, modules, module, varAccess)
+				return normalizeExpression(locals, modules, module, varAccess, normalizedModule)
 			}
 
 			panic(common.Error{Location: e.Location, Message: fmt.Sprintf("identifier `%s` not found", e.Name)})
@@ -1102,7 +1116,7 @@ func normalizeExpression(
 			e := expr.(parsed.InfixVar)
 			if i, m, ids := findParsedInfixFn(modules, module, e.Infix); len(ids) != 1 {
 				panic(ambiguousInfix(ids, e.Infix, e.Location))
-			} else if d, _, ids := findParsedDefinition(nil, m, ast.QualifiedIdentifier(i.Alias)); len(ids) != 1 {
+			} else if d, _, ids := findParsedDefinition(nil, m, ast.QualifiedIdentifier(i.Alias), normalizedModule); len(ids) != 1 {
 				panic(ambiguousDefinition(ids, ast.QualifiedIdentifier(i.Alias), e.Location))
 			} else {
 				return normalized.Global{
@@ -1376,6 +1390,20 @@ func normalizeType(
 }
 
 func findParsedDefinition(
+	modules map[ast.QualifiedIdentifier]*parsed.Module,
+	module *parsed.Module,
+	name ast.QualifiedIdentifier,
+	normalizedModule *normalized.Module,
+) (parsed.Definition, *parsed.Module, []ast.FullIdentifier) {
+	d, m, id := findParsedDefinitionImpl(modules, module, name)
+	if len(id) == 1 {
+		normalizedModule.Dependencies[m.Name] =
+			append(normalizedModule.Dependencies[m.Name], d.Name)
+	}
+	return d, m, id
+}
+
+func findParsedDefinitionImpl(
 	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module, name ast.QualifiedIdentifier,
 ) (parsed.Definition, *parsed.Module, []ast.FullIdentifier) {
 	var defNameEq = func(x parsed.Definition) bool {
@@ -1398,7 +1426,7 @@ func findParsedDefinition(
 	if modules != nil {
 		for _, imp := range module.Imports {
 			if slices.Contains(imp.Exposing, string(name)) {
-				return findParsedDefinition(nil, modules[imp.ModuleIdentifier], defName)
+				return findParsedDefinitionImpl(nil, modules[imp.ModuleIdentifier], defName)
 			}
 		}
 
@@ -1409,17 +1437,21 @@ func findParsedDefinition(
 		//3. search in all modules by qualified name
 		if modName != "" {
 			if submodule, ok := modules[ast.QualifiedIdentifier(modName)]; ok {
-				return findParsedDefinition(nil, submodule, defName)
+				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
+					return findParsedDefinitionImpl(nil, submodule, defName)
+				}
 			}
 
 			//4. search in all modules by short name
 			modName = "." + modName
 			for modId, submodule := range modules {
-				if strings.HasSuffix(string(modId), modName) {
-					if d, m, i := findParsedDefinition(nil, submodule, defName); len(i) != 0 {
-						rDef = d
-						rModule = m
-						rIdent = append(rIdent, i...)
+				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
+					if strings.HasSuffix(string(modId), modName) {
+						if d, m, i := findParsedDefinitionImpl(nil, submodule, defName); len(i) != 0 {
+							rDef = d
+							rModule = m
+							rIdent = append(rIdent, i...)
+						}
 					}
 				}
 			}
@@ -1432,11 +1464,13 @@ func findParsedDefinition(
 		if unicode.IsUpper([]rune(defName)[0]) {
 			modDotName := string("." + defName)
 			for modId, submodule := range modules {
-				if strings.HasSuffix(string(modId), modDotName) || modId == defName {
-					if d, m, i := findParsedDefinition(nil, submodule, defName); len(i) != 0 {
-						rDef = d
-						rModule = m
-						rIdent = append(rIdent, i...)
+				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
+					if strings.HasSuffix(string(modId), modDotName) || modId == defName {
+						if d, m, i := findParsedDefinitionImpl(nil, submodule, defName); len(i) != 0 {
+							rDef = d
+							rModule = m
+							rIdent = append(rIdent, i...)
+						}
 					}
 				}
 			}
@@ -1448,10 +1482,12 @@ func findParsedDefinition(
 		if modName == "" {
 			//6. search all modules
 			for _, submodule := range modules {
-				if d, m, i := findParsedDefinition(nil, submodule, defName); len(i) != 0 {
-					rDef = d
-					rModule = m
-					rIdent = append(rIdent, i...)
+				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
+					if d, m, i := findParsedDefinitionImpl(nil, submodule, defName); len(i) != 0 {
+						rDef = d
+						rModule = m
+						rIdent = append(rIdent, i...)
+					}
 				}
 			}
 			if len(rIdent) != 0 {
@@ -1484,10 +1520,12 @@ func findParsedInfixFn(modules map[ast.QualifiedIdentifier]*parsed.Module, modul
 		var rModule *parsed.Module
 		var rIdent []ast.FullIdentifier
 		for _, submodule := range modules {
-			if foundInfix, foundModule, foundId := findParsedInfixFn(nil, submodule, name); foundId != nil {
-				rInfix = foundInfix
-				rModule = foundModule
-				rIdent = append(rIdent, foundId...)
+			if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
+				if foundInfix, foundModule, foundId := findParsedInfixFn(nil, submodule, name); foundId != nil {
+					rInfix = foundInfix
+					rModule = foundModule
+					rIdent = append(rIdent, foundId...)
+				}
 			}
 		}
 		return rInfix, rModule, rIdent
@@ -1534,6 +1572,10 @@ func findParsedType(
 
 	//2. search in imported modules
 	if modules != nil {
+		var rType parsed.Type
+		var rModule *parsed.Module
+		var rIdent []ast.FullIdentifier
+
 		for _, imp := range module.Imports {
 			if slices.Contains(imp.Exposing, string(name)) {
 				return findParsedType(nil, modules[imp.ModuleIdentifier], typeName, args)
@@ -1543,15 +1585,26 @@ func findParsedType(
 		//3. search in all modules by qualified name
 		if modName != "" {
 			if submodule, ok := modules[ast.QualifiedIdentifier(modName)]; ok {
-				return findParsedType(nil, submodule, typeName, args)
+				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
+					return findParsedType(nil, submodule, typeName, args)
+				}
 			}
 
 			//4. search in all modules by short name
 			modName = "." + modName
 			for modId, submodule := range modules {
-				if strings.HasSuffix(string(modId), modName) {
-					return findParsedType(nil, submodule, typeName, args)
+				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
+					if strings.HasSuffix(string(modId), modName) {
+						if foundType, foundModule, foundId := findParsedType(nil, submodule, typeName, args); foundId != nil {
+							rType = foundType
+							rModule = foundModule
+							rIdent = append(rIdent, foundId...)
+						}
+					}
 				}
+			}
+			if len(rIdent) != 0 {
+				return rType, rModule, rIdent
 			}
 		}
 
@@ -1559,25 +1612,35 @@ func findParsedType(
 		if unicode.IsUpper([]rune(typeName)[0]) {
 			modDotName := string("." + typeName)
 			for modId, submodule := range modules {
-				if strings.HasSuffix(string(modId), modDotName) || modId == typeName {
-					return findParsedType(nil, submodule, typeName, args)
+				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
+					if strings.HasSuffix(string(modId), modDotName) || modId == typeName {
+						if foundType, foundModule, foundId := findParsedType(nil, submodule, typeName, args); foundId != nil {
+							rType = foundType
+							rModule = foundModule
+							rIdent = append(rIdent, foundId...)
+						}
+					}
 				}
+			}
+			if len(rIdent) != 0 {
+				return rType, rModule, rIdent
 			}
 		}
 
 		if modName == "" {
 			//6. search all modules
-			var rType parsed.Type
-			var rModule *parsed.Module
-			var rIdent []ast.FullIdentifier
 			for _, submodule := range modules {
-				if foundType, foundModule, foundId := findParsedType(nil, submodule, typeName, args); foundId != nil {
-					rType = foundType
-					rModule = foundModule
-					rIdent = append(rIdent, foundId...)
+				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
+					if foundType, foundModule, foundId := findParsedType(nil, submodule, typeName, args); foundId != nil {
+						rType = foundType
+						rModule = foundModule
+						rIdent = append(rIdent, foundId...)
+					}
 				}
 			}
-			return rType, rModule, rIdent
+			if len(rIdent) != 0 {
+				return rType, rModule, rIdent
+			}
 		}
 	}
 

@@ -16,6 +16,6 @@ type Definition struct {
 
 type Module struct {
 	Name         ast.QualifiedIdentifier
-	Dependencies []ast.QualifiedIdentifier
+	Dependencies map[ast.QualifiedIdentifier][]ast.Identifier
 	Definitions  []*Definition
 }

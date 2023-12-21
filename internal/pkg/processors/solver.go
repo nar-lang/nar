@@ -54,8 +54,11 @@ func Solve(
 	}
 
 	m := modules[moduleName]
-	for _, dep := range m.Dependencies {
-		Solve(dep, modules, typedModules)
+
+	for dep := range m.Dependencies {
+		if dep != moduleName {
+			Solve(dep, modules, typedModules)
+		}
 	}
 
 	o := typed.Module{
