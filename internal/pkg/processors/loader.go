@@ -68,13 +68,13 @@ func loadPackage(
 }
 
 func loadPackageWithPath(
-	url string, absPath string, cacheDir string, log io.Writer, upgrade bool, loadedPackage []ast.LoadedPackage,
+	url string, absPath string, cacheDir string, log io.Writer, upgrade bool, loadedPackages []ast.LoadedPackage,
 ) ([]ast.LoadedPackage, bool) {
 	packageFilePath := filepath.Join(absPath, "oak.json")
 	fileData, err := os.ReadFile(packageFilePath)
 
 	if errors.Is(err, os.ErrNotExist) {
-		return loadedPackage, false
+		return loadedPackages, false
 	}
 
 	if err != nil {
@@ -91,7 +91,7 @@ func loadPackageWithPath(
 		})
 	}
 
-	for i, loaded := range loadedPackage {
+	for i, loaded := range loadedPackages {
 		if loaded.Package.Name == pkg.Name {
 			if loaded.Package.Version != pkg.Version {
 				if loaded.Package.Version > pkg.Version {
@@ -100,10 +100,12 @@ func loadPackageWithPath(
 						pkg.Name, pkg.Version, pkg.Version)
 				}
 			}
-			loadedPackage = append(loadedPackage[:i], loadedPackage[i+1:]...)
+
+			loadedPackages = append(loadedPackages[:i], loadedPackages[i+1:]...)
 			if loaded.Package.Version >= pkg.Version { //move loaded to the end
-				loadedPackage = append(loadedPackage, loaded)
-				return loadedPackage, true
+				loaded.Urls[url] = struct{}{}
+				loadedPackages = append(loadedPackages, loaded)
+				return loadedPackages, true
 			}
 			if loaded.Package.Version < pkg.Version { //remove package with lower version
 				break
@@ -120,13 +122,14 @@ func loadPackageWithPath(
 
 	slices.Sort(src)
 
-	loadedPackage = append(loadedPackage, ast.LoadedPackage{Url: url, Dir: absPath, Package: pkg, Sources: src})
+	loadedPackages = append(loadedPackages,
+		ast.LoadedPackage{Urls: map[string]struct{}{url: {}}, Dir: absPath, Package: pkg, Sources: src})
 
 	for _, depUrl := range pkg.Dependencies {
-		loadedPackage = loadPackage(depUrl, cacheDir, absPath, log, upgrade, loadedPackage)
+		loadedPackages = loadPackage(depUrl, cacheDir, absPath, log, upgrade, loadedPackages)
 	}
 
-	return loadedPackage, true
+	return loadedPackages, true
 }
 
 func readDir(path, ext string, files []string) ([]string, error) {

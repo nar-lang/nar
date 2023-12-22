@@ -50,7 +50,7 @@ func Compile(moduleUrls []string, outPath string, debug bool, upgrade bool, cach
 		referencedPackages[pkg.Package.Name] = struct{}{}
 		for _, dep := range pkg.Package.Dependencies {
 			for _, p := range loadedPackages {
-				if p.Url == dep {
+				if _, ok := p.Urls[dep]; ok {
 					referencedPackages[p.Package.Name] = struct{}{}
 					break
 				}

@@ -9,7 +9,7 @@ type Package struct {
 }
 
 type LoadedPackage struct {
-	Url     string
+	Urls    map[string]struct{}
 	Dir     string
 	Package Package
 	Sources []string
