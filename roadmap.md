@@ -21,8 +21,8 @@
   
 ## Libraries
 * [x] Oak.Core library + tests
-* [ ] Oak.Program library
-* [ ] Oak.Time
+* [x] Oak.Program library
+* [x] Oak.Time
 * [ ] Oak.Random
 * [ ] Oak.Tests library
   * [x] Simple tests
