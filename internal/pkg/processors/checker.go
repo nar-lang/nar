@@ -227,7 +227,7 @@ func isUseful(matrix [][]Pattern, vector []Pattern) bool {
 func specializeRowByCtor(ctor typed.DataOption) func(row []Pattern) ([]Pattern, bool) {
 	return func(row []Pattern) ([]Pattern, bool) {
 		if len(row) == 0 {
-			panic(common.SystemError{Message: "Compiler error! Empty matrices should not get specialized."})
+			panic(common.SystemError{Message: "CompilerTests error! Empty matrices should not get specialized."})
 		} else {
 			switch row[0].(type) {
 			case PatternConstructor:
@@ -240,7 +240,7 @@ func specializeRowByCtor(ctor typed.DataOption) func(row []Pattern) ([]Pattern, 
 			case PatternAnything:
 				return append(common.Repeat(Pattern(PatternAnything{}), len(ctor.Values)), row[1:]...), true
 			case PatternLiteral:
-				panic(common.SystemError{Message: "Compiler bug! After type checking, constructors and literals" +
+				panic(common.SystemError{Message: "CompilerTests bug! After type checking, constructors and literals" +
 					" should never align in pattern match exhaustiveness checks."})
 			}
 			panic(common.SystemError{Message: "invalid case"})
@@ -267,11 +267,11 @@ func specializeRowByAnything(row []Pattern) ([]Pattern, bool) {
 func specializeRowByLiteral(literal PatternLiteral) func(row []Pattern) ([]Pattern, bool) {
 	return func(row []Pattern) ([]Pattern, bool) {
 		if len(row) == 0 {
-			panic(common.SystemError{Message: "Compiler error! Empty matrices should not get specialized."})
+			panic(common.SystemError{Message: "CompilerTests error! Empty matrices should not get specialized."})
 		} else {
 			switch row[0].(type) {
 			case PatternConstructor:
-				panic(common.SystemError{Message: "Compiler bug! After type checking, constructors and literals" +
+				panic(common.SystemError{Message: "CompilerTests bug! After type checking, constructors and literals" +
 					" should never align in pattern match exhaustiveness checks."})
 			case PatternAnything:
 				return row[1:], true
@@ -445,7 +445,7 @@ func simplifyPattern(pattern typed.Pattern) Pattern {
 				Args:  common.Map(simplifyPattern, e.Args),
 			}
 		} else {
-			panic(common.SystemError{Message: "Compiler bug! Data option pattern should have a data type."})
+			panic(common.SystemError{Message: "CompilerTests bug! Data option pattern should have a data type."})
 		}
 	case *typed.PList:
 		e := pattern.(*typed.PList)
@@ -557,5 +557,5 @@ func (c PatternConstructor) Option() typed.DataOption {
 			return o
 		}
 	}
-	panic(common.SystemError{Message: "Compiler bug! Option not found."})
+	panic(common.SystemError{Message: "CompilerTests bug! Option not found."})
 }

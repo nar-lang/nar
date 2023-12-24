@@ -31,7 +31,8 @@ func (t *TFunc) String() string {
 
 type TRecord struct {
 	ast.Location
-	Fields map[ast.Identifier]Type
+	Fields            map[ast.Identifier]Type
+	MayHaveMoreFields bool
 }
 
 func (*TRecord) _type() {}

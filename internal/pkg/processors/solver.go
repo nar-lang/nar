@@ -904,8 +904,9 @@ func equatizePattern(eqs []equation, pattern typed.Pattern, stack []*typed.Defin
 				loc:  loc,
 				left: e.Type,
 				right: &typed.TRecord{
-					Location: e.Location,
-					Fields:   fields,
+					Location:          e.Location,
+					Fields:            fields,
+					MayHaveMoreFields: true,
 				},
 				pattern: pattern,
 			})
@@ -951,8 +952,8 @@ func equatizeExpression(
 			fields[e.FieldName] = e.Type
 			eqs = append(eqs, equation{
 				loc:   loc,
-				left:  e.Record.GetType(),
-				right: &typed.TRecord{Location: e.Location, Fields: fields},
+				left:  &typed.TRecord{Location: e.Location, Fields: fields, MayHaveMoreFields: true},
+				right: e.Record.GetType(),
 				expr:  expr,
 			})
 			eqs = equatizeExpression(eqs, e.Record, localDefs, stack, loc)
@@ -1451,14 +1452,16 @@ func unify(x typed.Type, y typed.Type, loc []ast.Location, subst map[uint64]type
 		{
 			if ey, ok := y.(*typed.TRecord); ok {
 				ex := x.(*typed.TRecord)
-				for ny, fy := range ey.Fields {
-					for nx, fx := range ex.Fields {
-						if ny == nx {
-							err := unify(fy, fx, append(loc, fy.GetLocation(), fx.GetLocation()), subst)
-							if err != nil {
-								return err
-							}
-							break
+				for nx, fx := range ex.Fields {
+					if fy, hasField := ey.Fields[nx]; !hasField && !ey.MayHaveMoreFields {
+						return common.Error{
+							Extra:   append(loc, x.GetLocation(), y.GetLocation()),
+							Message: fmt.Sprintf("record missing field `%s`", nx),
+						}
+					} else if hasField {
+						err := unify(fy, fx, append(loc, fy.GetLocation(), fx.GetLocation()), subst)
+						if err != nil {
+							return err
 						}
 					}
 				}

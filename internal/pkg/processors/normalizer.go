@@ -1109,7 +1109,7 @@ func normalizeExpression(
 				return normalizeExpression(locals, modules, module, varAccess, normalizedModule)
 			}
 
-			panic(common.Error{Location: e.Location, Message: fmt.Sprintf("identifier `%s` not found", e.Name)})
+			panic(common.Error{Location: e.Location, Message: "identifier not found"})
 		}
 	case parsed.InfixVar:
 		{
