@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"flag"
-	"log"
+	"fmt"
+	"oak-compiler/internal/pkg/common"
 	oakc "oak-compiler/pkg"
 	"os"
 	"os/exec"
@@ -21,37 +23,57 @@ func main() {
 	pack := flag.String("pack", "", "command to pack resulted executable.\n"+
 		"  examples\n"+"  js: `webpack-cli --entry build/index.source.js -o ./build`")
 	noClean := flag.Bool("no-clean", false, "don't clean up intermediate artifacts after packing")
+	lsp := flag.String("lsp", "", "start language server with given transport (stdio/tcp)")
+	lspPort := flag.Int("lsp-port", 0, "port for tcp transport")
 	flag.Parse()
 
-	outStream := os.Stdout
+	log := &common.LogWriter{}
 
-	linker := oakc.GetLinker(*link)
-	loadedPackages, err := oakc.Compile(
-		flag.Args(), linker.GetOutFileLocation(*out),
-		!*release, *upgrade, *cacheDir, outStream)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	err = linker.Link(loadedPackages[0].Package.Main, loadedPackages, *out, !*release, *upgrade, *cacheDir, outStream)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	if *pack != "" {
-		args := splitArgs(*pack)
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Stdout = outStream
-		cmd.Stderr = outStream
-		err := cmd.Run()
+	if *lsp != "" {
+		err := oakc.LanguageServer(*lsp, *lspPort, *cacheDir)
 		if err != nil {
-			log.Fatal(err)
+			log.Err(err)
+		}
+		return
+	}
+
+	if len(flag.Args()) == 0 {
+		log.Err(common.NewSystemError(fmt.Errorf("no input packages, run compiler as `oak <path-to-package>`")))
+	} else {
+
+		linker := oakc.GetLinker(*link)
+
+		loadedPackages, entry := oakc.Compile(
+			flag.Args(), linker.GetOutFileLocation(*out),
+			!*release, *upgrade, *cacheDir, log)
+		if !log.HasErrors() {
+			if len(log.Errors()) == 0 {
+				err := linker.Link(entry, loadedPackages, *out, !*release, *upgrade, *cacheDir, log)
+				if err != nil {
+					log.Err(err)
+				} else {
+					if *pack != "" {
+						w := bytes.NewBufferString("")
+						args := splitArgs(*pack)
+						cmd := exec.Command(args[0], args[1:]...)
+						cmd.Stdout = w
+						cmd.Stderr = w
+						err := cmd.Run()
+						log.Trace(w.String())
+						if err != nil {
+							log.Err(err)
+						}
+					}
+					if !*noClean {
+						linker.Cleanup()
+					}
+				}
+			}
 		}
 	}
-	if !*noClean {
-		linker.Cleanup()
-	}
+	log.Flush(os.Stdout)
 }
 
-// splitArgs splits string to words but keeps quoted strings as one word
 func splitArgs(s string) []string {
 	var args []string
 	var inQuotes bool

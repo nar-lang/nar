@@ -1,11 +1,10 @@
 package processors
 
 import (
+	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/go-git/go-git/v5"
-	"io"
 	"oak-compiler/internal/pkg/ast"
 	"oak-compiler/internal/pkg/common"
 	"os"
@@ -14,122 +13,149 @@ import (
 	"strings"
 )
 
-func LoadPackage(url, cacheDir string, log io.Writer, upgrade bool, loadedPackages []ast.LoadedPackage) []ast.LoadedPackage {
-	absBaseDir, err := filepath.Abs(".")
-	if err != nil {
-		panic(common.SystemError{Message: err.Error()})
+type Progress func(value float32, message string)
+
+func LoadPackage(
+	url, cacheDir string, baseDir string, progress Progress, upgrade bool,
+	loadedPackages map[ast.PackageIdentifier]*ast.LoadedPackage,
+) (*ast.LoadedPackage, error) {
+	if baseDir != "" {
+		var err error
+		baseDir, err = filepath.Abs(baseDir)
+		if err != nil {
+			return nil, common.NewSystemError(err)
+		}
 	}
-	return loadPackage(url, cacheDir, absBaseDir, log, upgrade, loadedPackages)
+	return loadPackage(url, cacheDir, baseDir, progress, upgrade, loadedPackages)
 }
 
 func loadPackage(
-	url string, cacheDir string, baseDir string, log io.Writer, upgrade bool, loadedPackages []ast.LoadedPackage,
-) []ast.LoadedPackage {
-	absPath := filepath.Clean(filepath.Join(baseDir, url))
-	loadedPackages, loaded := loadPackageWithPath(url, absPath, cacheDir, log, upgrade, loadedPackages)
+	url string, cacheDir string, baseDir string, progress Progress, upgrade bool,
+	loadedPackages map[ast.PackageIdentifier]*ast.LoadedPackage,
+) (*ast.LoadedPackage, error) {
+	absPath := filepath.Clean(url)
+	if baseDir != "" {
+		absPath = filepath.Clean(filepath.Join(baseDir, url))
+	}
+	loaded, err := loadPackageWithPath(url, absPath, cacheDir, progress, upgrade, loadedPackages)
+	if err != nil {
+		return nil, err
+	}
 
 	absPath = filepath.Clean(filepath.Join(cacheDir, url))
-	if !loaded {
-		loadedPackages, loaded = loadPackageWithPath(url, absPath, cacheDir, log, upgrade, loadedPackages)
+	if loaded == nil {
+		loaded, err = loadPackageWithPath(url, absPath, cacheDir, progress, upgrade, loadedPackages)
+		if err != nil {
+			return nil, err
+		}
 	}
-	if !loaded {
-		_, _ = fmt.Fprintf(log, "cloning package `%s`\n", url)
+	if loaded == nil {
+		progress(0, fmt.Sprintf("downloading package `%s`", url))
+		w := bytes.NewBufferString("")
 		_, err := git.PlainClone(absPath, false, &git.CloneOptions{
 			URL:      fmt.Sprintf("https://%s", url),
-			Progress: log,
+			Progress: w,
 		})
 		if err != nil {
-			panic(common.SystemError{Message: err.Error()})
+			return nil, common.NewSystemError(fmt.Errorf("%s\n%w", w.String(), err))
+		} else {
+			progress(1, fmt.Sprintf("%s\npackage `%s` downloaded", url, w.String()))
 		}
-		loadedPackages, loaded = loadPackageWithPath(url, absPath, cacheDir, log, upgrade, loadedPackages)
+		loaded, err = loadPackageWithPath(url, absPath, cacheDir, progress, upgrade, loadedPackages)
+		if err != nil {
+			return nil, err
+		}
 	} else if upgrade {
 		r, err := git.PlainOpen(absPath)
 		if err == nil {
-			_, _ = fmt.Fprintf(log, "upgrading package... `%s` ", url)
-			w, err := r.Worktree()
+			worktree, err := r.Worktree()
 			if err != nil {
-				_, _ = fmt.Fprintf(log, "%s\n", err.Error())
+				return nil, common.NewSystemError(fmt.Errorf("failed to update package `%s`\n%w", url, err))
 			} else {
-				err = w.Pull(&git.PullOptions{
-					Progress: log,
+				w := bytes.NewBufferString("")
+				err = worktree.Pull(&git.PullOptions{
+					Progress: w,
 				})
 				if err != nil {
-					_, _ = fmt.Fprintf(log, "%s\n", err.Error())
+					return nil, common.NewSystemError(
+						fmt.Errorf("failed to update package `%s`\n%w\n%s", url, err, w.String()))
 				} else {
-					_, _ = fmt.Fprintf(log, "ok\n")
+					progress(1, fmt.Sprintf("%s\npackage `%s` updated", url, w.String()))
 				}
 			}
 		}
 	}
-	if !loaded {
-		panic(common.SystemError{Message: "cannot load package `%s`: oak.json file is not found it its root directory"})
-	}
-	return loadedPackages
+	return loaded, nil
 }
 
 func loadPackageWithPath(
-	url string, absPath string, cacheDir string, log io.Writer, upgrade bool, loadedPackages []ast.LoadedPackage,
-) ([]ast.LoadedPackage, bool) {
+	url string, absPath string, cacheDir string, progress Progress, upgrade bool,
+	loadedPackages map[ast.PackageIdentifier]*ast.LoadedPackage,
+) (*ast.LoadedPackage, error) {
 	packageFilePath := filepath.Join(absPath, "oak.json")
 	fileData, err := os.ReadFile(packageFilePath)
+	var loaded *ast.LoadedPackage
 
-	if errors.Is(err, os.ErrNotExist) {
-		return loadedPackages, false
+	if os.IsNotExist(err) {
+		return nil, nil
 	}
 
 	if err != nil {
-		panic(common.SystemError{
-			Message: fmt.Sprintf("failed to read package `%s` descriptor: %s", url, err.Error()),
-		})
+		return nil, common.NewSystemError(fmt.Errorf("failed to read package `%s` descriptor: %w", url, err))
 	}
 
 	var pkg ast.Package
 	err = json.Unmarshal(fileData, &pkg)
 	if err != nil {
-		panic(common.SystemError{
-			Message: fmt.Sprintf("failed to parse package `%s` descriptor file: %s", url, err.Error()),
-		})
+		return nil, common.NewSystemError(
+			fmt.Errorf("failed to parse package `%s` descriptor file: %w", url, err))
 	}
 
-	for i, loaded := range loadedPackages {
-		if loaded.Package.Name == pkg.Name {
-			if loaded.Package.Version != pkg.Version {
-				if loaded.Package.Version > pkg.Version {
-					_, _ = fmt.Fprintf(log,
-						"package `%s` version collision %s vs %s, using higher version",
-						pkg.Name, pkg.Version, pkg.Version)
-				}
-			}
+	insert := false
+	var ok bool
+	if loaded, ok = loadedPackages[pkg.Name]; ok {
+		if pkg.Version < loaded.Package.Version {
+			progress(0.5, fmt.Sprintf(
+				"package `%s` version collision %s vs %s, using higher version",
+				pkg.Name, pkg.Version, pkg.Version))
+		} else if loaded.Package.Version > pkg.Version {
+			progress(0.5, fmt.Sprintf(
+				"package `%s` version collision %s vs %s, using higher version",
+				pkg.Name, pkg.Version, pkg.Version))
+			insert = true
+		} else if loaded.Package.Version == pkg.Version {
+			loaded.Urls[url] = struct{}{}
+		}
+	} else {
+		insert = true
+	}
 
-			loadedPackages = append(loadedPackages[:i], loadedPackages[i+1:]...)
-			if loaded.Package.Version >= pkg.Version { //move loaded to the end
-				loaded.Urls[url] = struct{}{}
-				loadedPackages = append(loadedPackages, loaded)
-				return loadedPackages, true
-			}
-			if loaded.Package.Version < pkg.Version { //remove package with lower version
-				break
+	if insert {
+		src, err := readDir(filepath.Join(absPath, "src"), ".oak", nil)
+		if err != nil {
+			return nil, common.NewSystemError(fmt.Errorf(
+				"failed to read package `%s` sources: %w", url, err))
+		}
+
+		slices.Sort(src)
+		loaded = &ast.LoadedPackage{
+			Urls:    map[string]struct{}{url: {}},
+			Dir:     absPath,
+			Package: pkg,
+			Sources: src,
+		}
+
+		loadedPackages[pkg.Name] = loaded
+
+		for _, depUrl := range pkg.Dependencies {
+			_, err = loadPackage(depUrl, cacheDir, absPath, progress, upgrade, loadedPackages)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
 
-	src, err := readDir(filepath.Join(absPath, "src"), ".oak", nil)
-	if err != nil {
-		panic(common.SystemError{
-			Message: fmt.Sprintf("failed to read package `%s` sources: %s", url, err.Error()),
-		})
-	}
-
-	slices.Sort(src)
-
-	loadedPackages = append(loadedPackages,
-		ast.LoadedPackage{Urls: map[string]struct{}{url: {}}, Dir: absPath, Package: pkg, Sources: src})
-
-	for _, depUrl := range pkg.Dependencies {
-		loadedPackages = loadPackage(depUrl, cacheDir, absPath, log, upgrade, loadedPackages)
-	}
-
-	return loadedPackages, true
+	return loaded, nil
 }
 
 func readDir(path, ext string, files []string) ([]string, error) {

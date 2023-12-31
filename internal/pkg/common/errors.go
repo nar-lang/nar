@@ -3,6 +3,7 @@ package common
 import (
 	"fmt"
 	"oak-compiler/internal/pkg/ast"
+	"runtime"
 	"slices"
 	"strings"
 )
@@ -31,7 +32,7 @@ func (e Error) Error() string {
 
 	for _, extra := range uniqueExtra {
 		line, col := extra.GetLineAndColumn()
-		sb.WriteString(fmt.Sprintf("  -> %s:%d:%d\n", extra.FilePath, line, col))
+		sb.WriteString(fmt.Sprintf("  ->%s:%d:%d\n", extra.FilePath, line, col))
 	}
 
 	if e.Location.FilePath == "" {
@@ -40,10 +41,29 @@ func (e Error) Error() string {
 	return sb.String()
 }
 
-type SystemError struct {
-	Message string
+func NewSystemError(err error) error {
+	return systemError{inner: err}
 }
 
-func (e SystemError) Error() string {
-	return e.Message
+type systemError struct {
+	inner error
+}
+
+func (e systemError) Error() string {
+	return fmt.Sprintf("system error: %v", e.inner)
+}
+
+func NewCompilerError(message string) error {
+	_, file, line, _ := runtime.Caller(1)
+	return compilerError{message: message, file: file, line: line}
+}
+
+type compilerError struct {
+	message string
+	file    string
+	line    int
+}
+
+func (e compilerError) Error() string {
+	return fmt.Sprintf("%s at %s:%d", e.message, e.file, e.line)
 }

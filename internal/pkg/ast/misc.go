@@ -6,6 +6,8 @@ type Identifier string
 
 type QualifiedIdentifier string
 
+type PackageIdentifier string
+
 type InfixIdentifier string
 
 type FullIdentifier string

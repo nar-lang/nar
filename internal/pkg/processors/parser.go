@@ -12,6 +12,22 @@ import (
 	"unicode"
 )
 
+func ParseWithContent(filePath string, fileContent string) (*parsed.Module, error) {
+	src := &source{
+		filePath: filePath,
+		text:     []rune(fileContent),
+	}
+	return parseModule(src)
+}
+
+func Parse(filePath string) (*parsed.Module, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, common.NewSystemError(fmt.Errorf("failed to read module `%s`: %w", filePath, err))
+	}
+	return ParseWithContent(filePath, string(data))
+}
+
 const (
 	KwModule   = "module"
 	KwImport   = "import"
@@ -68,28 +84,29 @@ const (
 // - bool parse(..., *out) parses something, can set error (returns false in that case) if failed in a middle of parsing,
 //      in other case returns true. sets `out` to NULL if nothing read. eats all trailing whitespace and comments.
 
-type Source struct {
+type source struct {
 	filePath string
 	cursor   uint32
 	text     []rune
+	log      *common.LogWriter
 }
 
-func loc(src *Source, cursor uint32) ast.Location {
+func loc(src *source, cursor uint32) ast.Location {
 	return ast.Location{FilePath: src.filePath, FileContent: src.text, Position: cursor}
 }
 
-func setErrorSource(src Source, msg string) {
-	panic(common.Error{
+func newError(src source, msg string) error {
+	return common.Error{
 		Location: ast.Location{
 			FilePath:    src.filePath,
 			FileContent: src.text,
 			Position:    src.cursor,
 		},
 		Message: msg,
-	})
+	}
 }
 
-func isOk(src *Source) bool {
+func isOk(src *source) bool {
 	return src.cursor < uint32(len(src.text))
 }
 
@@ -123,7 +140,7 @@ func isInfixChar(c rune) bool {
 	return false
 }
 
-func readSequence(src *Source, value string) *string {
+func readSequence(src *source, value string) *string {
 	start := src.cursor
 	for _, c := range []rune(value) {
 		if !isOk(src) || src.text[src.cursor] != c {
@@ -135,20 +152,19 @@ func readSequence(src *Source, value string) *string {
 	return &value
 }
 
-func skipWhiteSpace(src *Source) {
+func skipWhiteSpace(src *source) {
 	for isOk(src) && unicode.IsSpace(src.text[src.cursor]) {
 		src.cursor++
 	}
 }
 
-func skipComment(src *Source) {
+func skipComment(src *source) {
 	if !isOk(src) {
 		return
 	}
 
 	skipWhiteSpace(src)
 	if nil != readSequence(src, SeqComment) {
-
 		for isOk(src) && SmbNewLine != src.text[src.cursor] {
 			src.cursor++
 		}
@@ -177,7 +193,7 @@ func skipComment(src *Source) {
 	skipComment(src)
 }
 
-func readIdentifier(src *Source, qualified bool) *ast.QualifiedIdentifier {
+func readIdentifier(src *source, qualified bool) *ast.QualifiedIdentifier {
 	start := src.cursor
 	first := true
 	for isOk(src) && isIdentChar(src.text[src.cursor], &first, qualified) {
@@ -195,9 +211,9 @@ func readIdentifier(src *Source, qualified bool) *ast.QualifiedIdentifier {
 	return nil
 }
 
-func parseInt(src *Source) *int64 {
+func parseInt(src *source) (*int64, error) {
 	if !isOk(src) {
-		return nil
+		return nil, nil
 	}
 
 	pos := src.cursor
@@ -206,33 +222,33 @@ func parseInt(src *Source) *int64 {
 
 	if strValue == "" {
 		src.cursor = pos
-		return nil
+		return nil, nil
 	}
 
 	value, err := strconv.ParseInt(strValue, base, 64)
 	if err != nil {
-		setErrorSource(*src, "failed to parse integer: "+err.Error())
+		return nil, newError(*src, "failed to parse integer: "+err.Error())
 	}
 
 	skipComment(src)
-	return &value
+	return &value, nil
 }
 
-func parseFloat(src *Source) *float64 {
+func parseFloat(src *source) (*float64, error) {
 	if !isOk(src) {
-		return nil
+		return nil, nil
 	}
 	pos := src.cursor
 
 	first, _ := readIntegerPart(src, false)
 	if first == "" {
-		return nil
+		return nil, nil
 	}
 
 	if readSequence(src, ".") != nil {
 		second, base := readIntegerPart(src, false)
 		if base == 0 {
-			return nil
+			return nil, nil
 		}
 		first += "." + second
 	}
@@ -245,22 +261,22 @@ func parseFloat(src *Source) *float64 {
 		}
 		second, base := readIntegerPart(src, false)
 		if base == 0 {
-			return nil
+			return nil, nil
 		}
 		first += "e" + sign + second
 	}
 
 	if isOk(src) && (unicode.IsLetter(src.text[src.cursor]) || unicode.IsNumber(src.text[src.cursor])) {
 		src.cursor = pos
-		return nil
+		return nil, nil
 	}
 	skipComment(src)
 
 	value, err := strconv.ParseFloat(first, 64)
 	if err != nil {
-		setErrorSource(*src, "failed to parse float: "+err.Error())
+		return nil, newError(*src, "failed to parse float: "+err.Error())
 	}
-	return &value
+	return &value, nil
 }
 
 var kNumBin = []rune{'0', '1'}
@@ -270,7 +286,7 @@ var kNumHex = []rune{
 	'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
 	'a', 'b', 'c', 'd', 'e', 'f', 'A', 'B', 'C', 'D', 'E', 'F'}
 
-func readIntegerPart(src *Source, allowBases bool) (string, int) {
+func readIntegerPart(src *source, allowBases bool) (string, int) {
 	if !isOk(src) {
 		return "", 0
 	}
@@ -324,7 +340,7 @@ func readIntegerPart(src *Source, allowBases bool) (string, int) {
 	return string(value), base
 }
 
-func readExact(src *Source, value string) bool {
+func readExact(src *source, value string) bool {
 	if nil != readSequence(src, value) {
 		skipComment(src)
 		return true
@@ -332,36 +348,36 @@ func readExact(src *Source, value string) bool {
 	return false
 }
 
-func parseChar(src *Source) *rune {
+func parseChar(src *source) (*rune, error) {
 	if !isOk(src) {
-		return nil
+		return nil, nil
 	}
 
 	if SmbQuoteChar != src.text[src.cursor] {
-		return nil
+		return nil, nil
 	}
 	src.cursor++
 	if !isOk(src) {
-		setErrorSource(*src, "character is not closed before end of file")
+		return nil, newError(*src, "character is not closed before end of file")
 	}
 
 	src.cursor++
 
 	if !isOk(src) || SmbQuoteChar != src.text[src.cursor] {
-		setErrorSource(*src, "expected "+string(SmbQuoteChar)+"here")
+		return nil, newError(*src, "expected "+string(SmbQuoteChar)+"here")
 	}
 	src.cursor++
 
 	if src.text[src.cursor-2] == SmbEscape {
 		if !isOk(src) || SmbQuoteChar != src.text[src.cursor] {
-			setErrorSource(*src, "expected "+string(SmbQuoteChar)+"here")
+			return nil, newError(*src, "expected "+string(SmbQuoteChar)+"here")
 		}
 		src.cursor++
 	}
 
 	r := src.text[src.cursor-2]
 	skipComment(src)
-	return &r
+	return &r, nil
 }
 
 var controlCharsReplacer = strings.NewReplacer(
@@ -376,22 +392,22 @@ var controlCharsReplacer = strings.NewReplacer(
 	"\\\"", "\"",
 )
 
-func parseString(src *Source) *string {
+func parseString(src *source) (*string, error) {
 	if !isOk(src) {
-		return nil
+		return nil, nil
 	}
 
 	start := src.cursor
 
 	if SmbQuoteString != src.text[src.cursor] {
-		return nil
+		return nil, nil
 	}
 
 	src.cursor++
 	skipNextQuote := false
 	for {
 		if !isOk(src) {
-			setErrorSource(*src, "string is not closed before the end of file")
+			return nil, newError(*src, "string is not closed before the end of file")
 		}
 		if SmbQuoteString == src.text[src.cursor] && !skipNextQuote {
 			break
@@ -403,57 +419,71 @@ func parseString(src *Source) *string {
 	str := string(src.text[start+1 : src.cursor-1])
 	skipComment(src)
 	str = controlCharsReplacer.Replace(str)
-	return &str
+	return &str, nil
 }
 
-func parseNumber(src *Source) (iValue *int64, fValue *float64) {
+func parseNumber(src *source) (iValue *int64, fValue *float64, err error) {
 	pos := src.cursor
-	fv := parseFloat(src)
+	fv, err := parseFloat(src)
+	if err != nil {
+		return nil, nil, err
+	}
 	fvPos := src.cursor
 
 	src.cursor = pos
-	iv := parseInt(src)
+	iv, err := parseInt(src)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	if fv == nil {
-		return iv, nil
+		return iv, nil, nil
 	}
 	if iv == nil {
 		src.cursor = fvPos
-		return nil, fv
+		return nil, fv, nil
 	}
 
 	if src.cursor != fvPos {
 		src.cursor = fvPos
-		return nil, fv
+		return nil, fv, nil
 	}
 
-	return iv, nil
+	return iv, nil, nil
 }
 
-func parseConst(src *Source) ast.ConstValue {
-	r := parseChar(src)
+func parseConst(src *source) (ast.ConstValue, error) {
+	r, err := parseChar(src)
+	if err != nil {
+		return nil, err
+	}
 	if nil != r {
-		return ast.CChar{Value: *r}
+		return ast.CChar{Value: *r}, nil
 	}
 
-	s := parseString(src)
+	s, err := parseString(src)
+	if err != nil {
+		return nil, err
+	}
 	if nil != s {
-		return ast.CString{Value: *s}
+		return ast.CString{Value: *s}, nil
 	}
 
-	i, f := parseNumber(src)
-
+	i, f, err := parseNumber(src)
+	if err != nil {
+		return nil, err
+	}
 	if f != nil {
-		return ast.CFloat{Value: *f}
+		return ast.CFloat{Value: *f}, nil
 	}
 	if i != nil {
-		return ast.CInt{Value: *i}
+		return ast.CInt{Value: *i}, nil
 	}
 
-	return nil
+	return nil, nil
 }
 
-func parseInfixIdentifier(src *Source, withParenthesis bool) *ast.InfixIdentifier {
+func parseInfixIdentifier(src *source, withParenthesis bool) *ast.InfixIdentifier {
 	if !isOk(src) {
 		return nil
 	}
@@ -491,18 +521,18 @@ func parseInfixIdentifier(src *Source, withParenthesis bool) *ast.InfixIdentifie
 	return &result
 }
 
-func parseTypeParamNames(src *Source) []ast.Identifier {
+func parseTypeParamNames(src *source) ([]ast.Identifier, error) {
 	if !readExact(src, SeqBracketsOpen) {
-		return nil
+		return nil, nil
 	}
 
 	var result []ast.Identifier
 	for {
 		name := readIdentifier(src, false)
 		if nil == name {
-			setErrorSource(*src, "expected variable type name here")
+			return nil, newError(*src, "expected variable type name here")
 		} else if !unicode.IsLower([]rune(*name)[0]) {
-			setErrorSource(*src, "type parameter name should start with lowercase letter")
+			return nil, newError(*src, "type parameter name should start with lowercase letter")
 		} else {
 			result = append(result, ast.Identifier(*name))
 		}
@@ -513,28 +543,31 @@ func parseTypeParamNames(src *Source) []ast.Identifier {
 		if readExact(src, SeqBracketsClose) {
 			break
 		}
-		setErrorSource(*src, "expected `,` or `]` here")
+		return nil, newError(*src, "expected `,` or `]` here")
 	}
 
-	return result
+	return result, nil
 }
 
-func parseType(src *Source) parsed.Type {
+func parseType(src *source) (parsed.Type, error) {
 	cursor := src.cursor
 
 	//signature/tuple/unit
 	if readExact(src, SeqParenthesisOpen) {
 		if readExact(src, SeqParenthesisClose) {
-			return parsed.TUnit{Location: loc(src, cursor)}
+			return parsed.TUnit{Location: loc(src, cursor)}, nil
 		}
 
 		var items []parsed.Type
 
 		for {
 
-			type_ := parseType(src)
+			type_, err := parseType(src)
+			if err != nil {
+				return nil, err
+			}
 			if nil == type_ {
-				setErrorSource(*src, "expected type here")
+				return nil, newError(*src, "expected type here")
 			}
 			items = append(items, type_)
 
@@ -544,20 +577,23 @@ func parseType(src *Source) parsed.Type {
 			if readExact(src, SeqParenthesisClose) {
 				break
 			}
-			setErrorSource(*src, "expected `,` or `)` here")
+			return nil, newError(*src, "expected `,` or `)` here")
 		}
 
 		if readExact(src, SeqColon) {
-			ret := parseType(src)
-			if nil == ret {
-				setErrorSource(*src, "expected return type here")
+			ret, err := parseType(src)
+			if err != nil {
+				return nil, err
 			}
-			return parsed.TFunc{Location: loc(src, cursor), Return: ret, Params: items}
+			if nil == ret {
+				return nil, newError(*src, "expected return type here")
+			}
+			return parsed.TFunc{Location: loc(src, cursor), Return: ret, Params: items}, nil
 		} else {
 			if 1 == len(items) {
-				return items[0]
+				return items[0], nil
 			} else {
-				return parsed.TTuple{Location: loc(src, cursor), Items: items}
+				return parsed.TTuple{Location: loc(src, cursor), Items: items}, nil
 			}
 		}
 	}
@@ -576,18 +612,21 @@ func parseType(src *Source) parsed.Type {
 		for {
 			name := readIdentifier(src, false)
 			if nil == name {
-				setErrorSource(*src, "expected field name here")
+				return nil, newError(*src, "expected field name here")
 			}
 			if !readExact(src, SeqColon) {
-				setErrorSource(*src, "expected `:` here")
+				return nil, newError(*src, "expected `:` here")
 			}
-			type_ := parseType(src)
+			type_, err := parseType(src)
+			if err != nil {
+				return nil, err
+			}
 			if nil == type_ {
-				setErrorSource(*src, "expected field type here")
+				return nil, newError(*src, "expected field type here")
 			}
 
 			if _, ok := fields[ast.Identifier(*name)]; ok {
-				setErrorSource(*src, "field with this name has already declared for the record")
+				return nil, newError(*src, "field with this name has already declared for the record")
 			}
 			fields[ast.Identifier(*name)] = type_
 
@@ -597,22 +636,25 @@ func parseType(src *Source) parsed.Type {
 			if readExact(src, SeqBracesClose) {
 				break
 			}
-			setErrorSource(*src, "expected `,` or `}` here")
+			return nil, newError(*src, "expected `,` or `}` here")
 		}
 
-		return parsed.TRecord{Location: loc(src, cursor), Fields: fields}
+		return parsed.TRecord{Location: loc(src, cursor), Fields: fields}, nil
 	}
 
 	if name := readIdentifier(src, true); nil != name {
 		if unicode.IsLower([]rune(*name)[0]) {
-			return parsed.TTypeParameter{Location: loc(src, cursor), Name: ast.Identifier(*name)}
+			return parsed.TTypeParameter{Location: loc(src, cursor), Name: ast.Identifier(*name)}, nil
 		} else {
 			var typeParams []parsed.Type
 			if readExact(src, SeqBracketsOpen) {
 				for {
-					type_ := parseType(src)
+					type_, err := parseType(src)
+					if err != nil {
+						return nil, err
+					}
 					if nil == type_ {
-						setErrorSource(*src, "expected type parameter here")
+						return nil, newError(*src, "expected type parameter here")
 					}
 					typeParams = append(typeParams, type_)
 
@@ -622,17 +664,17 @@ func parseType(src *Source) parsed.Type {
 					if readExact(src, SeqBracketsClose) {
 						break
 					}
-					setErrorSource(*src, "expected `,` or `]`  here")
+					return nil, newError(*src, "expected `,` or `]`  here")
 				}
 			}
 
-			return parsed.TNamed{Location: loc(src, cursor), Name: *name, Args: typeParams}
+			return parsed.TNamed{Location: loc(src, cursor), Name: *name, Args: typeParams}, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
-func parsePattern(src *Source) parsed.Pattern {
+func parsePattern(src *source) (parsed.Pattern, error) {
 	cursor := src.cursor
 
 	//tuple/unit
@@ -645,9 +687,12 @@ func parsePattern(src *Source) parsed.Pattern {
 		}
 		var items []parsed.Pattern
 		for {
-			item := parsePattern(src)
+			item, err := parsePattern(src)
+			if err != nil {
+				return nil, err
+			}
 			if nil == item {
-				setErrorSource(*src, "expected tuple item pattern here")
+				return nil, newError(*src, "expected tuple item pattern here")
 			}
 			items = append(items, item)
 			if readExact(src, SeqComma) {
@@ -656,7 +701,7 @@ func parsePattern(src *Source) parsed.Pattern {
 			if readExact(src, SeqParenthesisClose) {
 				break
 			}
-			setErrorSource(*src, "expected `,` or `)` here")
+			return nil, newError(*src, "expected `,` or `)` here")
 		}
 		if 1 == len(items) {
 			return finishParsePattern(src, items[0])
@@ -674,7 +719,7 @@ func parsePattern(src *Source) parsed.Pattern {
 			fieldCursor := src.cursor
 			name := readIdentifier(src, false)
 			if nil == name {
-				setErrorSource(*src, "expected record field name here")
+				return nil, newError(*src, "expected record field name here")
 			}
 			fields = append(fields, parsed.PRecordField{
 				Location: loc(src, fieldCursor),
@@ -687,7 +732,7 @@ func parsePattern(src *Source) parsed.Pattern {
 			if readExact(src, SeqBracesClose) {
 				break
 			}
-			setErrorSource(*src, "expected `,` or `}` here")
+			return nil, newError(*src, "expected `,` or `}` here")
 		}
 
 		return finishParsePattern(src, parsed.PRecord{
@@ -704,9 +749,12 @@ func parsePattern(src *Source) parsed.Pattern {
 
 		var items []parsed.Pattern
 		for {
-			p := parsePattern(src)
+			p, err := parsePattern(src)
+			if err != nil {
+				return nil, err
+			}
 			if nil == p {
-				setErrorSource(*src, "expected list item pattern here")
+				return nil, newError(*src, "expected list item pattern here")
 			}
 			items = append(items, p)
 			if readExact(src, SeqComma) {
@@ -715,7 +763,7 @@ func parsePattern(src *Source) parsed.Pattern {
 			if readExact(src, SeqBracketsClose) {
 				break
 			}
-			setErrorSource(*src, "expected `,` or `}` here")
+			return nil, newError(*src, "expected `,` or `}` here")
 		}
 
 		return finishParsePattern(src, parsed.PList{Location: loc(src, cursor), Items: items})
@@ -727,9 +775,12 @@ func parsePattern(src *Source) parsed.Pattern {
 		var items []parsed.Pattern
 		if readExact(src, SeqParenthesisOpen) {
 			for {
-				item := parsePattern(src)
+				item, err := parsePattern(src)
+				if err != nil {
+					return nil, err
+				}
 				if nil == item {
-					setErrorSource(*src, "expected option value pattern here")
+					return nil, newError(*src, "expected option value pattern here")
 				}
 				items = append(items, item)
 				if readExact(src, SeqComma) {
@@ -738,7 +789,7 @@ func parsePattern(src *Source) parsed.Pattern {
 				if readExact(src, SeqParenthesisClose) {
 					break
 				}
-				setErrorSource(*src, "expected `,` or `)` here")
+				return nil, newError(*src, "expected `,` or `)` here")
 			}
 		}
 		return finishParsePattern(src, parsed.PDataOption{Location: loc(src, cursor), Name: *name, Values: items})
@@ -758,21 +809,27 @@ func parsePattern(src *Source) parsed.Pattern {
 		return finishParsePattern(src, parsed.PAny{Location: loc(src, cursor)})
 	}
 
-	const_ := parseConst(src)
+	const_, err := parseConst(src)
+	if err != nil {
+		return nil, err
+	}
 	if nil != const_ {
 		return finishParsePattern(src, parsed.PConst{Location: loc(src, cursor), Value: const_})
 	}
 
-	return nil
+	return nil, nil
 }
 
-func finishParsePattern(src *Source, pattern parsed.Pattern) parsed.Pattern {
+func finishParsePattern(src *source, pattern parsed.Pattern) (parsed.Pattern, error) {
 	cursor := src.cursor
 
 	if readExact(src, SeqColon) {
-		type_ := parseType(src)
+		type_, err := parseType(src)
+		if err != nil {
+			return nil, err
+		}
 		if nil == type_ {
-			setErrorSource(*src, "expected type here")
+			return nil, newError(*src, "expected type here")
 		}
 		return finishParsePattern(src, pattern.WithType(type_))
 	}
@@ -780,36 +837,43 @@ func finishParsePattern(src *Source, pattern parsed.Pattern) parsed.Pattern {
 	if readExact(src, KwAs) {
 		name := readIdentifier(src, false)
 		if nil == name {
-			setErrorSource(*src, "expected pattern alias name here")
+			return nil, newError(*src, "expected pattern alias name here")
 		}
 		return finishParsePattern(src,
 			parsed.PAlias{Location: loc(src, cursor), Alias: ast.Identifier(*name), Nested: pattern})
 	}
 
 	if readExact(src, SeqBar) {
-		tail := parsePattern(src)
+		tail, err := parsePattern(src)
+		if err != nil {
+			return nil, err
+		}
 		if nil == tail {
-			setErrorSource(*src, "expected list tail pattern here")
+			return nil, newError(*src, "expected list tail pattern here")
 		}
 
 		return finishParsePattern(src, parsed.PCons{Location: loc(src, cursor), Head: pattern, Tail: tail})
 	}
 
-	return pattern
+	return pattern, nil
 }
 
-func parseSignature(src *Source) ([]parsed.Pattern, parsed.Type) {
+func parseSignature(src *source) ([]parsed.Pattern, parsed.Type, error) {
 	if !readExact(src, SeqParenthesisOpen) {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	var patterns []parsed.Pattern
 	var ret parsed.Type
+	var err error
 
 	for {
-		pattern := parsePattern(src)
+		pattern, err := parsePattern(src)
+		if err != nil {
+			return nil, nil, err
+		}
 		if nil == pattern {
-			setErrorSource(*src, "expected pattern here")
+			return nil, nil, newError(*src, "expected pattern here")
 		}
 		patterns = append(patterns, pattern)
 
@@ -819,23 +883,29 @@ func parseSignature(src *Source) ([]parsed.Pattern, parsed.Type) {
 		if readExact(src, SeqParenthesisClose) {
 			break
 		}
-		setErrorSource(*src, "expected `,` or `)` here")
+		return nil, nil, newError(*src, "expected `,` or `)` here")
 	}
 	if readExact(src, SeqColon) {
-		ret = parseType(src)
+		ret, err = parseType(src)
+		if err != nil {
+			return nil, nil, err
+		}
 		if nil == ret {
-			setErrorSource(*src, "expected return type here")
+			return nil, nil, newError(*src, "expected return type here")
 		}
 	}
 
-	return patterns, ret
+	return patterns, ret, nil
 }
 
-func parseExpression(src *Source, negate bool) parsed.Expression {
+func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 	cursor := src.cursor
 
 	//const
-	const_ := parseConst(src)
+	const_, err := parseConst(src)
+	if err != nil {
+		return nil, err
+	}
 	if nil != const_ {
 		return finishParseExpression(src, parsed.Const{Location: loc(src, cursor), Value: const_}, negate)
 	}
@@ -845,9 +915,12 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 		var items []parsed.Expression
 		if !readExact(src, SeqBracketsClose) {
 			for {
-				item := parseExpression(src, false)
+				item, err := parseExpression(src, false)
+				if err != nil {
+					return nil, err
+				}
 				if nil == item {
-					setErrorSource(*src, "expected list item expression here")
+					return nil, newError(*src, "expected list item expression here")
 				}
 				items = append(items, item)
 
@@ -857,7 +930,7 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 				if readExact(src, SeqBracketsClose) {
 					break
 				}
-				setErrorSource(*src, "expected `,` or `]` here")
+				return nil, newError(*src, "expected `,` or `]` here")
 			}
 		}
 		return finishParseExpression(src, parsed.List{Location: loc(src, cursor), Items: items}, negate)
@@ -878,18 +951,24 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 	if readExact(src, SeqLambda) {
 		src.cursor = cursor + 1
 
-		patterns, ret := parseSignature(src)
+		patterns, ret, err := parseSignature(src)
+		if err != nil {
+			return nil, err
+		}
 		if nil == patterns {
-			setErrorSource(*src, "expected lambda signature here")
+			return nil, newError(*src, "expected lambda signature here")
 		}
 
 		if !readExact(src, SeqLambdaBind) {
-			setErrorSource(*src, "expected `->` here")
+			return nil, newError(*src, "expected `->` here")
 		}
 
-		body := parseExpression(src, false)
+		body, err := parseExpression(src, false)
+		if err != nil {
+			return nil, err
+		}
 		if nil == body {
-			setErrorSource(*src, "expected lambda expression body here")
+			return nil, newError(*src, "expected lambda expression body here")
 		}
 		return finishParseExpression(src,
 			parsed.Lambda{Location: loc(src, cursor), Params: patterns, Body: body, Return: ret}, negate)
@@ -897,26 +976,30 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 
 	//if
 	if readExact(src, KwIf) {
-		condition := parseExpression(src, false)
+		condition, err := parseExpression(src, false)
+		if err != nil {
+			return nil, err
+		}
 		if nil == condition {
-			setErrorSource(*src, "expected condition expression here")
+			return nil, newError(*src, "expected condition expression here")
 		}
 		if !readExact(src, KwThen) {
-			setErrorSource(*src, "expected `then` here")
+			return nil, newError(*src, "expected `then` here")
 		}
-		positive := parseExpression(src, false)
+		positive, err := parseExpression(src, false)
 		if nil == positive {
-			setErrorSource(*src, "expected positive branch expression here")
+			return nil, newError(*src, "expected positive branch expression here")
 		}
 		if !readExact(src, KwElse) {
-			setErrorSource(*src, "expected `else` here")
+			return nil, newError(*src, "expected `else` here")
 		}
-		negative := parseExpression(src, false)
+		negative, err := parseExpression(src, false)
 		if nil == negative {
-			setErrorSource(*src, "expected negative branch expression here")
+			return nil, newError(*src, "expected negative branch expression here")
 		}
 		return finishParseExpression(src,
-			parsed.If{Location: loc(src, cursor), Condition: condition, Positive: positive, Negative: negative}, negate)
+			parsed.If{Location: loc(src, cursor), Condition: condition, Positive: positive, Negative: negative},
+			negate)
 	}
 
 	//let
@@ -924,18 +1007,25 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 		defCursor := src.cursor
 		name := readIdentifier(src, false)
 		typeCursor := src.cursor
-		params, ret := parseSignature(src)
+		params, ret, err := parseSignature(src)
+		if err != nil {
+			return nil, err
+		}
+
 		var pattern parsed.Pattern
 		var value parsed.Expression
 		var fnType parsed.Type
 		isDef := nil != name && nil != params
 		if isDef {
 			if !readExact(src, SeqEqual) {
-				setErrorSource(*src, "expected `=` here")
+				return nil, newError(*src, "expected `=` here")
 			}
-			value = parseExpression(src, false)
+			value, err = parseExpression(src, false)
+			if err != nil {
+				return nil, err
+			}
 			if nil == value {
-				setErrorSource(*src, "expected function body here")
+				return nil, newError(*src, "expected function body here")
 			}
 			pattern = parsed.PNamed{
 				Location: loc(src, defCursor),
@@ -948,16 +1038,22 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 			}
 		} else {
 			src.cursor = defCursor
-			pattern = parsePattern(src)
+			pattern, err = parsePattern(src)
+			if err != nil {
+				return nil, err
+			}
 			if nil == pattern {
-				setErrorSource(*src, "expected pattern here")
+				return nil, newError(*src, "expected pattern here")
 			}
 			if !readExact(src, SeqEqual) {
-				setErrorSource(*src, "expected `=` here")
+				return nil, newError(*src, "expected `=` here")
 			}
-			value = parseExpression(src, false)
+			value, err = parseExpression(src, false)
+			if err != nil {
+				return nil, err
+			}
 			if nil == value {
-				setErrorSource(*src, "expected expression here")
+				return nil, newError(*src, "expected expression here")
 			}
 		}
 
@@ -965,12 +1061,12 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 		if readExact(src, KwLet) {
 			src.cursor = preLet
 		} else if !readExact(src, KwIn) {
-			setErrorSource(*src, "expected `let` or `in` here")
+			return nil, newError(*src, "expected `let` or `in` here")
 		}
 
-		nested := parseExpression(src, false)
+		nested, err := parseExpression(src, false)
 		if nil == nested {
-			setErrorSource(*src, "expected expression here")
+			return nil, newError(*src, "expected expression here")
 		}
 		if isDef {
 			return finishParseExpression(src, parsed.LetDef{
@@ -993,9 +1089,12 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 
 	//select
 	if readExact(src, KwSelect) {
-		condition := parseExpression(src, false)
+		condition, err := parseExpression(src, false)
+		if err != nil {
+			return nil, err
+		}
 		if nil == condition {
-			setErrorSource(*src, "expected select condition expression here")
+			return nil, newError(*src, "expected select condition expression here")
 		}
 
 		var cases []parsed.SelectCase
@@ -1004,29 +1103,32 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 			caseCursor := src.cursor
 			if !readExact(src, KwCase) {
 				if !readExact(src, KwEnd) {
-					setErrorSource(*src, "expected `case` or `end` here")
+					return nil, newError(*src, "expected `case` or `end` here")
 				}
 				break
 			}
 
-			pattern := parsePattern(src)
+			pattern, err := parsePattern(src)
+			if err != nil {
+				return nil, err
+			}
 			if nil == pattern {
-				setErrorSource(*src, "expected pattern here")
+				return nil, newError(*src, "expected pattern here")
 			}
 
 			if !readExact(src, SeqCaseBind) {
-				setErrorSource(*src, "expected `->` here")
+				return nil, newError(*src, "expected `->` here")
 			}
 
-			expr := parseExpression(src, false)
+			expr, err := parseExpression(src, false)
 			if nil == expr {
-				setErrorSource(*src, "expected case expression here")
+				return nil, newError(*src, "expected case expression here")
 			}
 			cases = append(cases, parsed.SelectCase{Location: loc(src, caseCursor), Pattern: pattern, Expression: expr})
 		}
 
 		if 0 == len(cases) {
-			setErrorSource(*src, "expected case expression here")
+			return nil, newError(*src, "expected case expression here")
 		}
 		return finishParseExpression(src, parsed.Select{Location: loc(src, cursor), Condition: condition, Cases: cases}, negate)
 	}
@@ -1035,7 +1137,7 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 	if readExact(src, SeqDot) {
 		name := readIdentifier(src, false)
 		if nil == name {
-			setErrorSource(*src, "expected accessor name here")
+			return nil, newError(*src, "expected accessor name here")
 		}
 		return finishParseExpression(src, parsed.Accessor{Location: loc(src, cursor), FieldName: ast.Identifier(*name)}, negate)
 	}
@@ -1060,14 +1162,18 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 
 			fieldName := readIdentifier(src, true)
 			if nil == fieldName {
-				setErrorSource(*src, "expected field name here")
+				return nil, newError(*src, "expected field name here")
 			}
 			if !readExact(src, SeqEqual) {
-				setErrorSource(*src, "expected `=` here")
+				return nil, newError(*src, "expected `=` here")
 			}
-			expr := parseExpression(src, false)
+			expr, err := parseExpression(src, false)
+			if err != nil {
+				return nil, err
+			}
+
 			if nil == expr {
-				setErrorSource(*src, "expected record field value expression here")
+				return nil, newError(*src, "expected record field value expression here")
 			}
 			fields = append(fields, parsed.RecordField{
 				Location: loc(src, fieldCursor),
@@ -1081,7 +1187,7 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 			if readExact(src, SeqBracesClose) {
 				break
 			}
-			setErrorSource(*src, "expected `,` or `}` here")
+			return nil, newError(*src, "expected `,` or `}` here")
 		}
 
 		if nil == name {
@@ -1100,9 +1206,12 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 
 		var items []parsed.Expression
 		for {
-			expr := parseExpression(src, false)
+			expr, err := parseExpression(src, false)
+			if err != nil {
+				return nil, err
+			}
 			if nil == expr {
-				setErrorSource(*src, "expected expression here")
+				return nil, newError(*src, "expected expression here")
 			}
 			items = append(items, expr)
 
@@ -1112,7 +1221,7 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 			if readExact(src, SeqParenthesisClose) {
 				break
 			}
-			setErrorSource(*src, "expected `,` or `)` here")
+			return nil, newError(*src, "expected `,` or `)` here")
 		}
 
 		if 1 == len(items) {
@@ -1132,17 +1241,20 @@ func parseExpression(src *Source, negate bool) parsed.Expression {
 		return finishParseExpression(src, parsed.Var{Location: loc(src, cursor), Name: *name}, negate)
 	}
 
-	return nil
+	return nil, nil
 }
 
-func finishParseExpression(src *Source, expr parsed.Expression, negate bool) parsed.Expression {
+func finishParseExpression(src *source, expr parsed.Expression, negate bool) (parsed.Expression, error) {
 	cursor := src.cursor
 
 	infixOp := parseInfixIdentifier(src, false)
 	if nil != infixOp {
-		final := parseExpression(src, false)
+		final, err := parseExpression(src, false)
+		if err != nil {
+			return nil, err
+		}
 		if nil == final {
-			setErrorSource(*src, "expected second operand expression of binary expression here")
+			return nil, newError(*src, "expected second operand expression of binary expression here")
 		}
 
 		if negate {
@@ -1157,15 +1269,18 @@ func finishParseExpression(src *Source, expr parsed.Expression, negate bool) par
 			items = append(items, parsed.BinOpItem{Expression: final})
 		}
 
-		return parsed.BinOp{Location: loc(src, cursor), Items: items}
+		return parsed.BinOp{Location: loc(src, cursor), Items: items}, nil
 	}
 
 	if readExact(src, SeqParenthesisOpen) {
 		var items []parsed.Expression
 		for {
-			item := parseExpression(src, false)
+			item, err := parseExpression(src, false)
+			if err != nil {
+				return nil, err
+			}
 			if nil == item {
-				setErrorSource(*src, "expected function argument expression here")
+				return nil, newError(*src, "expected function argument expression here")
 			}
 			items = append(items, item)
 
@@ -1175,7 +1290,7 @@ func finishParseExpression(src *Source, expr parsed.Expression, negate bool) par
 			if readExact(src, SeqParenthesisClose) {
 				break
 			}
-			setErrorSource(*src, "expected `,` or `)` here")
+			return nil, newError(*src, "expected `,` or `)` here")
 		}
 		return finishParseExpression(src, parsed.Apply{Location: loc(src, cursor), Func: expr, Args: items}, negate)
 	}
@@ -1183,7 +1298,7 @@ func finishParseExpression(src *Source, expr parsed.Expression, negate bool) par
 	if readExact(src, SeqDot) {
 		name := readIdentifier(src, false)
 		if nil == name {
-			setErrorSource(*src, "expected field name here")
+			return nil, newError(*src, "expected field name here")
 		}
 		return finishParseExpression(src, parsed.Access{
 			Location:  loc(src, cursor),
@@ -1194,10 +1309,10 @@ func finishParseExpression(src *Source, expr parsed.Expression, negate bool) par
 	if negate {
 		expr = parsed.Negate{Location: loc(src, cursor), Nested: expr}
 	}
-	return expr
+	return expr, nil
 }
 
-func parseDataOption(src *Source) parsed.DataTypeOption {
+func parseDataOption(src *source) (*parsed.DataTypeOption, error) {
 	cursor := src.cursor
 	hidden := readExact(src, KwHidden)
 	var types []parsed.Type
@@ -1205,7 +1320,7 @@ func parseDataOption(src *Source) parsed.DataTypeOption {
 	name := readIdentifier(src, false)
 
 	if nil == name {
-		setErrorSource(*src, "expected option name here")
+		return nil, newError(*src, "expected option name here")
 	}
 	if readExact(src, SeqParenthesisOpen) {
 		for {
@@ -1214,9 +1329,12 @@ func parseDataOption(src *Source) parsed.DataTypeOption {
 				src.cursor = argCursor
 			}
 
-			type_ := parseType(src)
+			type_, err := parseType(src)
+			if err != nil {
+				return nil, err
+			}
 			if nil == type_ {
-				setErrorSource(*src, "expected option value type here")
+				return nil, newError(*src, "expected option value type here")
 			}
 			types = append(types, type_)
 
@@ -1229,17 +1347,17 @@ func parseDataOption(src *Source) parsed.DataTypeOption {
 		}
 	}
 
-	return parsed.DataTypeOption{
+	return &parsed.DataTypeOption{
 		Location: loc(src, cursor),
 		Name:     ast.Identifier(*name),
 		Values:   types,
 		Hidden:   hidden,
-	}
+	}, nil
 }
 
-func parseImport(src *Source) *parsed.Import {
+func parseImport(src *source) (*parsed.Import, error) {
 	if !readExact(src, KwImport) {
-		return nil
+		return nil, nil
 	}
 
 	cursor := src.cursor
@@ -1249,13 +1367,13 @@ func parseImport(src *Source) *parsed.Import {
 	ident := readIdentifier(src, true)
 
 	if nil == ident {
-		setErrorSource(*src, "expected module path string here")
+		return nil, newError(*src, "expected module path string here")
 	}
 
 	if readExact(src, KwAs) {
 		alias = readIdentifier(src, false)
 		if nil == alias {
-			setErrorSource(*src, "expected alias name here")
+			return nil, newError(*src, "expected alias name here")
 		}
 	}
 
@@ -1263,7 +1381,7 @@ func parseImport(src *Source) *parsed.Import {
 		exposingAll = readExact(src, SeqExposingAll)
 		if !exposingAll {
 			if !readExact(src, SeqParenthesisOpen) {
-				setErrorSource(*src, "expected `(`")
+				return nil, newError(*src, "expected `(`")
 			}
 
 			for {
@@ -1271,7 +1389,7 @@ func parseImport(src *Source) *parsed.Import {
 				if nil == id {
 					inf := parseInfixIdentifier(src, true)
 					if nil == inf {
-						setErrorSource(*src, "expected definition/infix name here")
+						return nil, newError(*src, "expected definition/infix name here")
 					} else {
 						exposing = append(exposing, string(*inf))
 					}
@@ -1286,7 +1404,7 @@ func parseImport(src *Source) *parsed.Import {
 				if readExact(src, SeqParenthesisClose) {
 					break
 				}
-				setErrorSource(*src, "expected `,` or `)`")
+				return nil, newError(*src, "expected `,` or `)`")
 			}
 		}
 	}
@@ -1296,25 +1414,25 @@ func parseImport(src *Source) *parsed.Import {
 		Alias:            (*ast.Identifier)(alias),
 		ExposingAll:      exposingAll,
 		Exposing:         exposing,
-	}
+	}, nil
 }
 
-func parseInfixFn(src *Source) *parsed.Infix {
+func parseInfixFn(src *source) (*parsed.Infix, error) {
 	if !readExact(src, KwInfix) {
-		return nil
+		return nil, nil
 	}
 	cursor := src.cursor
 	hidden := readExact(src, KwHidden)
 
 	name := parseInfixIdentifier(src, true)
 	if nil == name {
-		setErrorSource(*src, "expected infix statement name here")
+		return nil, newError(*src, "expected infix statement name here")
 	}
 	if !readExact(src, SeqColon) {
-		setErrorSource(*src, "expected `:` here")
+		return nil, newError(*src, "expected `:` here")
 	}
 	if !readExact(src, SeqParenthesisOpen) {
-		setErrorSource(*src, "expected `(` here")
+		return nil, newError(*src, "expected `(` here")
 	}
 	var assoc parsed.Associativity
 	if readExact(src, KwLeft) {
@@ -1324,25 +1442,28 @@ func parseInfixFn(src *Source) *parsed.Infix {
 	} else if readExact(src, KwNon) {
 		assoc = parsed.None
 	} else {
-		setErrorSource(*src, "expected `left`, `right` or `non` here")
+		return nil, newError(*src, "expected `left`, `right` or `non` here")
 	}
 
-	precedence := parseInt(src)
+	precedence, err := parseInt(src)
+	if err != nil {
+		return nil, err
+	}
 	if precedence == nil {
-		setErrorSource(*src, "expected precedence (integer number) here")
+		return nil, newError(*src, "expected precedence (integer number) here")
 	}
 
 	if !readExact(src, SeqParenthesisClose) {
-		setErrorSource(*src, "expected `)` here")
+		return nil, newError(*src, "expected `)` here")
 	}
 	if !readExact(src, SeqEqual) {
-		setErrorSource(*src, "expected `=` here")
+		return nil, newError(*src, "expected `=` here")
 	}
 
 	aliasCursor := src.cursor
 	alias := readIdentifier(src, false)
 	if nil == alias {
-		setErrorSource(*src, "expected definition name here")
+		return nil, newError(*src, "expected definition name here")
 	}
 	return &parsed.Infix{
 		Location:      loc(src, cursor),
@@ -1352,12 +1473,12 @@ func parseInfixFn(src *Source) *parsed.Infix {
 		Precedence:    int(*precedence),
 		AliasLocation: loc(src, aliasCursor),
 		Alias:         ast.Identifier(*alias),
-	}
+	}, nil
 }
 
-func parseAlias(src *Source) *parsed.Alias {
+func parseAlias(src *source) (*parsed.Alias, error) {
 	if !readExact(src, KwAlias) {
-		return nil
+		return nil, nil
 	}
 
 	cursor := src.cursor
@@ -1367,17 +1488,23 @@ func parseAlias(src *Source) *parsed.Alias {
 	name := readIdentifier(src, false)
 
 	if nil == name {
-		setErrorSource(*src, "expected alias name here")
+		return nil, newError(*src, "expected alias name here")
 	}
-	typeParams := parseTypeParamNames(src)
+	typeParams, err := parseTypeParamNames(src)
+	if err != nil {
+		return nil, err
+	}
 
 	if !native {
 		if !readExact(src, SeqEqual) {
-			setErrorSource(*src, "expected `=` here")
+			return nil, newError(*src, "expected `=` here")
 		}
-		type_ = parseType(src)
+		type_, err = parseType(src)
+		if err != nil {
+			return nil, err
+		}
 		if nil == type_ {
-			setErrorSource(*src, "expected definedReturn declaration here")
+			return nil, newError(*src, "expected definedReturn declaration here")
 		}
 	}
 
@@ -1387,30 +1514,36 @@ func parseAlias(src *Source) *parsed.Alias {
 		Name:     ast.Identifier(*name),
 		Params:   typeParams,
 		Type:     type_,
-	}
+	}, nil
 }
 
-func parseDataType(src *Source) *parsed.DataType {
+func parseDataType(src *source) (*parsed.DataType, error) {
 	if !readExact(src, KwType) {
-		return nil
+		return nil, nil
 	}
 
 	cursor := src.cursor
 	hidden := readExact(src, KwHidden)
 	name := readIdentifier(src, false)
 	if nil == name {
-		setErrorSource(*src, "expected data name here")
+		return nil, newError(*src, "expected data name here")
 	}
-	typeParams := parseTypeParamNames(src)
+	typeParams, err := parseTypeParamNames(src)
+	if err != nil {
+		return nil, err
+	}
 
 	if !readExact(src, SeqEqual) {
-		setErrorSource(*src, "expected `=` here")
+		return nil, newError(*src, "expected `=` here")
 	}
 
 	var options []parsed.DataTypeOption
 	for {
-		option := parseDataOption(src)
-		options = append(options, option)
+		option, err := parseDataOption(src)
+		if err != nil {
+			return nil, err
+		}
+		options = append(options, *option)
 		if !readExact(src, SeqBar) {
 			break
 		}
@@ -1421,14 +1554,14 @@ func parseDataType(src *Source) *parsed.DataType {
 		Name:     ast.Identifier(*name),
 		Params:   typeParams,
 		Options:  options,
-	}
+	}, nil
 }
 
-func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Definition {
+func parseDefinition(src *source, modName ast.QualifiedIdentifier) (*parsed.Definition, error) {
 	cursor := src.cursor
 
 	if !readExact(src, KwDef) {
-		return nil
+		return nil, nil
 	}
 	hidden := readExact(src, KwHidden)
 	native := readExact(src, KwNative)
@@ -1437,16 +1570,22 @@ func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Defin
 	var expr parsed.Expression
 
 	if nil == name {
-		setErrorSource(*src, "expected data name here")
+		return nil, newError(*src, "expected data name here")
 	}
 
 	typeCursor := src.cursor
-	params, ret := parseSignature(src)
+	params, ret, err := parseSignature(src)
+	if err != nil {
+		return nil, err
+	}
 	if nil == params {
 		if readExact(src, SeqColon) {
-			type_ = parseType(src)
+			type_, err = parseType(src)
+			if err != nil {
+				return nil, err
+			}
 			if nil == type_ {
-				setErrorSource(*src, "expected definedReturn here")
+				return nil, newError(*src, "expected definedReturn here")
 			}
 		}
 		if native {
@@ -1456,39 +1595,45 @@ func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Defin
 			}
 		} else {
 			if !readExact(src, SeqEqual) {
-				setErrorSource(*src, "expected `=` here")
+				return nil, newError(*src, "expected `=` here")
 			}
-			expr = parseExpression(src, false)
+			expr, err = parseExpression(src, false)
+			if err != nil {
+				return nil, err
+			}
 			if nil == expr {
-				setErrorSource(*src, "expected expression here")
+				return nil, newError(*src, "expected expression here")
 			}
 		}
 	} else {
 		if native {
+			var args []parsed.Expression
+			for _, x := range params {
+				if named, ok := x.(parsed.PNamed); ok {
+					args = append(args, parsed.Var{
+						Location: x.GetLocation(),
+						Name:     ast.QualifiedIdentifier(named.Name),
+					})
+				} else {
+					return nil, newError(*src,
+						"native function should start with lowercase letter and cannot be a pattern match")
+				}
+			}
 			expr = parsed.NativeCall{
 				Location: loc(src, typeCursor),
 				Name:     common.MakeFullIdentifier(modName, ast.Identifier(*name)),
-				Args: common.Map(func(x parsed.Pattern) parsed.Expression {
-					if named, ok := x.(parsed.PNamed); ok {
-						return parsed.Var{
-							Location: x.GetLocation(),
-							Name:     ast.QualifiedIdentifier(named.Name),
-						}
-					} else {
-						panic(common.Error{
-							Location: x.GetLocation(),
-							Message:  "native function should start with lowercase letter and cannot be a pattern match",
-						})
-					}
-				}, params),
+				Args:     args,
 			}
 		} else {
 			if !readExact(src, SeqEqual) {
-				setErrorSource(*src, "expected `=` here")
+				return nil, newError(*src, "expected `=` here")
 			}
-			expr = parseExpression(src, false)
+			expr, err = parseExpression(src, false)
+			if err != nil {
+				return nil, err
+			}
 			if nil == expr {
-				setErrorSource(*src, "expected expression here")
+				return nil, newError(*src, "expected expression here")
 			}
 		}
 
@@ -1506,20 +1651,20 @@ func parseDefinition(src *Source, modName ast.QualifiedIdentifier) *parsed.Defin
 		Params:     params,
 		Expression: expr,
 		Type:       type_,
-	}
+	}, nil
 }
 
-func parseModule(src *Source) *parsed.Module {
+func parseModule(src *source) (*parsed.Module, error) {
 	skipComment(src)
 
 	if !readExact(src, KwModule) {
-		return nil
+		return nil, newError(*src, "expected `module` keyword here")
 	}
 
 	name := readIdentifier(src, true)
 
 	if nil == name {
-		setErrorSource(*src, "expected module name here")
+		return nil, newError(*src, "expected module name here")
 	}
 	m := parsed.Module{
 		Name:     *name,
@@ -1527,7 +1672,10 @@ func parseModule(src *Source) *parsed.Module {
 	}
 
 	for {
-		imp := parseImport(src)
+		imp, err := parseImport(src)
+		if err != nil {
+			return nil, err
+		}
 		if imp == nil {
 			break
 		}
@@ -1535,48 +1683,47 @@ func parseModule(src *Source) *parsed.Module {
 	}
 
 	for {
-
-		if alias := parseAlias(src); alias != nil {
+		alias, err := parseAlias(src)
+		if err != nil {
+			return nil, err
+		}
+		if alias != nil {
 			m.Aliases = append(m.Aliases, *alias)
 			continue
 		}
 
-		if infixFn := parseInfixFn(src); infixFn != nil {
+		infixFn, err := parseInfixFn(src)
+		if err != nil {
+			return nil, err
+		}
+		if infixFn != nil {
 			m.InfixFns = append(m.InfixFns, *infixFn)
 			continue
 		}
 
-		if definition := parseDefinition(src, *name); definition != nil {
+		definition, err := parseDefinition(src, *name)
+		if err != nil {
+			return nil, err
+		}
+		if definition != nil {
 			m.Definitions = append(m.Definitions, *definition)
 			continue
 		}
 
-		if dataType := parseDataType(src); dataType != nil {
+		dataType, err := parseDataType(src)
+		if err != nil {
+			return nil, err
+		}
+		if dataType != nil {
 			m.DataTypes = append(m.DataTypes, *dataType)
 			continue
 		}
 
 		if isOk(src) {
-			setErrorSource(*src, "failed to parse statement")
+			return nil, newError(*src, "failed to parse statement")
 		}
 		break
 	}
 
-	return &m
-}
-
-func Parse(filePath string) parsed.Module {
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		panic(common.SystemError{Message: err.Error()})
-	}
-	src := &Source{
-		filePath: filePath,
-		text:     []rune(string(data)),
-	}
-	m := parseModule(src)
-	if m == nil {
-		panic(common.SystemError{Message: fmt.Sprintf("file `%s` does not contain module", filePath)})
-	}
-	return *m
+	return &m, nil
 }

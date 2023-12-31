@@ -2,7 +2,10 @@ module oak-compiler
 
 go 1.21
 
-require github.com/go-git/go-git/v5 v5.10.0
+require (
+	github.com/go-git/go-git/v5 v5.10.0
+	pkg.nimblebun.works/go-lsp v1.1.0
+)
 
 require (
 	dario.cat/mergo v1.0.0 // indirect

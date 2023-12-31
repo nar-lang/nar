@@ -48,11 +48,16 @@ type Func struct {
 	Locations []ast.Location
 }
 
-func (b *Binary) Build(writer io.Writer, debug bool) {
+func (b *Binary) Build(writer io.Writer, debug bool) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = common.NewSystemError(err)
+		}
+	}()
 	order := binary.LittleEndian
 	w := func(v any) {
 		if err := binary.Write(writer, order, v); err != nil {
-			panic(common.SystemError{Message: err.Error()})
+			panic(err)
 		}
 	}
 	ws := func(v string) {
@@ -103,4 +108,5 @@ func (b *Binary) Build(writer io.Writer, debug bool) {
 		ws(string(n))
 		w(uint32(b.Exports[n]))
 	}
+	return nil
 }

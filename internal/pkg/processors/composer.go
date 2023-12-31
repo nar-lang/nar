@@ -9,25 +9,25 @@ import (
 	"slices"
 )
 
-//TODO: OPTIMIZE: swap-pop*N -> swap-pop(N)
-
 func Compose(
 	moduleName ast.QualifiedIdentifier,
 	modules map[ast.QualifiedIdentifier]*typed.Module,
 	debug bool,
 	binary *bytecode.Binary,
-) {
+) error {
 	binary.HashString("")
 
 	if slices.Contains(binary.CompiledPaths, moduleName) {
-		return
+		return nil
 	}
 
 	binary.CompiledPaths = append(binary.CompiledPaths, moduleName)
 
 	m := modules[moduleName]
 	for depModule := range m.Dependencies {
-		Compose(depModule, modules, debug, binary)
+		if err := Compose(depModule, modules, debug, binary); err != nil {
+			return err
+		}
 	}
 
 	for _, def := range m.Definitions {
@@ -41,28 +41,45 @@ func Compose(
 
 		ptr := binary.FuncsMap[pathId]
 		if binary.Funcs[ptr].Ops == nil {
-			binary.Funcs[ptr] = composeDefinition(def, pathId, binary)
+			var err error
+			binary.Funcs[ptr], err = composeDefinition(def, pathId, binary)
+			if err != nil {
+				return err
+			}
 			if !def.Hidden || debug {
 				binary.Exports[pathId] = ptr
 			}
 		}
 	}
+	return nil
 }
 
-func composeDefinition(def *typed.Definition, pathId ast.FullIdentifier, binary *bytecode.Binary) bytecode.Func {
+func composeDefinition(
+	def *typed.Definition, pathId ast.FullIdentifier, binary *bytecode.Binary,
+) (bytecode.Func, error) {
 	var ops []bytecode.Op
 	var locations []ast.Location
+	var err error
 
 	if nc, ok := def.Expression.(*typed.NativeCall); ok && pathId == nc.Name {
-		ops, locations = call(string(nc.Name), len(nc.Args), nc.Location, ops, locations, binary)
+		ops, locations, err = call(string(nc.Name), len(nc.Args), nc.Location, ops, locations, binary)
+		if err != nil {
+			return bytecode.Func{}, err
+		}
 	} else {
 		for i := len(def.Params) - 1; i >= 0; i-- {
 			p := def.Params[i]
-			ops, locations = composePattern(p, ops, locations, binary)
+			ops, locations, err = composePattern(p, ops, locations, binary)
+			if err != nil {
+				return bytecode.Func{}, err
+			}
 			ops, locations = match(0, p.GetLocation(), ops, locations)
 			ops, locations = swapPop(p.GetLocation(), bytecode.SwapPopModePop, ops, locations)
 		}
-		ops, locations = composeExpression(def.Expression, ops, locations, binary)
+		ops, locations, err = composeExpression(def.Expression, ops, locations, binary)
+		if err != nil {
+			return bytecode.Func{}, err
+		}
 	}
 
 	return bytecode.Func{
@@ -70,30 +87,46 @@ func composeDefinition(def *typed.Definition, pathId ast.FullIdentifier, binary 
 		Ops:       ops,
 		FilePath:  def.Location.FilePath,
 		Locations: locations,
-	}
+	}, nil
 }
 
 func composeExpression(
 	expr typed.Expression, ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary,
-) ([]bytecode.Op, []ast.Location) {
+) ([]bytecode.Op, []ast.Location, error) {
+	var err error
 	switch expr.(type) {
 	case *typed.NativeCall:
 		{
 			e := expr.(*typed.NativeCall)
 			for _, arg := range e.Args {
-				ops, locations = composeExpression(arg, ops, locations, binary)
+				ops, locations, err = composeExpression(arg, ops, locations, binary)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
-			ops, locations = call(string(e.Name), len(e.Args), e.Location, ops, locations, binary)
+			ops, locations, err = call(string(e.Name), len(e.Args), e.Location, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			break
 		}
 	case *typed.Apply:
 		{
 			e := expr.(*typed.Apply)
 			for _, arg := range e.Args {
-				ops, locations = composeExpression(arg, ops, locations, binary)
+				ops, locations, err = composeExpression(arg, ops, locations, binary)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
-			ops, locations = composeExpression(e.Func, ops, locations, binary)
-			ops, locations = apply(len(e.Args), e.Location, ops, locations)
+			ops, locations, err = composeExpression(e.Func, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
+			ops, locations, err = apply(len(e.Args), e.Location, ops, locations)
+			if err != nil {
+				return nil, nil, err
+			}
 			break
 		}
 	case *typed.Const:
@@ -101,11 +134,14 @@ func composeExpression(
 			e := expr.(*typed.Const)
 			v := e.Value
 			if iv, ok := v.(ast.CInt); ok {
-				if ex, ok := e.Type.(*typed.TNative); ok && ex.Name == common.OakCoreBasicsFloat {
+				if ex, ok := e.Type.(*typed.TNative); ok && ex.Name == common.OakCoreMathFloat {
 					v = ast.CFloat{Value: float64(iv.Value)}
 				}
 			}
-			ops, locations = loadConstValue(v, bytecode.StackKindObject, e.Location, ops, locations, binary)
+			ops, locations, err = loadConstValue(v, bytecode.StackKindObject, e.Location, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			break
 		}
 	case *typed.Local:
@@ -120,7 +156,7 @@ func composeExpression(
 			id := common.MakeFullIdentifier(e.ModuleName, e.DefinitionName)
 			funcIndex, ok := binary.FuncsMap[id]
 			if !ok {
-				panic(common.SystemError{Message: fmt.Sprintf("global definition `%v` not found", id)})
+				return nil, nil, common.NewCompilerError(fmt.Sprintf("global definition `%v` not found", id))
 			}
 			ops, locations = loadGlobal(funcIndex, e.Location, ops, locations)
 			break
@@ -128,7 +164,10 @@ func composeExpression(
 	case *typed.Access:
 		{
 			e := expr.(*typed.Access)
-			ops, locations = composeExpression(e.Record, ops, locations, binary)
+			ops, locations, err = composeExpression(e.Record, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			ops, locations = access(string(e.FieldName), e.Location, ops, locations, binary)
 			break
 		}
@@ -137,7 +176,10 @@ func composeExpression(
 		{
 			e := expr.(*typed.List)
 			for _, item := range e.Items {
-				ops, locations = composeExpression(item, ops, locations, binary)
+				ops, locations, err = composeExpression(item, ops, locations, binary)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
 			ops, locations = makeObject(bytecode.ObjectKindList, len(e.Items), e.Location, ops, locations)
 			break
@@ -146,7 +188,10 @@ func composeExpression(
 		{
 			e := expr.(*typed.Tuple)
 			for _, item := range e.Items {
-				ops, locations = composeExpression(item, ops, locations, binary)
+				ops, locations, err = composeExpression(item, ops, locations, binary)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
 			ops, locations = makeObject(bytecode.ObjectKindTuple, len(e.Items), e.Location, ops, locations)
 			break
@@ -155,9 +200,16 @@ func composeExpression(
 		{
 			e := expr.(*typed.Record)
 			for _, f := range e.Fields {
-				ops, locations = composeExpression(f.Value, ops, locations, binary)
-				ops, locations = loadConstValue(ast.CString{Value: string(f.Name)}, bytecode.StackKindObject, f.Location,
+				ops, locations, err = composeExpression(f.Value, ops, locations, binary)
+				if err != nil {
+					return nil, nil, err
+				}
+				ops, locations, err = loadConstValue(
+					ast.CString{Value: string(f.Name)}, bytecode.StackKindObject, f.Location,
 					ops, locations, binary)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
 			ops, locations = makeObject(bytecode.ObjectKindRecord, len(e.Fields), e.Location, ops, locations)
 			break
@@ -166,11 +218,17 @@ func composeExpression(
 		{
 			e := expr.(*typed.Constructor)
 			for _, arg := range e.Args {
-				ops, locations = composeExpression(arg, ops, locations, binary)
+				ops, locations, err = composeExpression(arg, ops, locations, binary)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
-			ops, locations = loadConstValue(
+			ops, locations, err = loadConstValue(
 				ast.CString{Value: string(common.MakeDataOptionIdentifier(e.DataName, e.OptionName))},
 				bytecode.StackKindObject, e.Location, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			ops, locations = makeObject(bytecode.ObjectKindData, len(e.Args), e.Location, ops, locations)
 			break
 		}
@@ -180,7 +238,10 @@ func composeExpression(
 			ops, locations = loadLocal(string(e.RecordName), e.Location, ops, locations, binary)
 
 			for _, f := range e.Fields {
-				ops, locations = composeExpression(f.Value, ops, locations, binary)
+				ops, locations, err = composeExpression(f.Value, ops, locations, binary)
+				if err != nil {
+					return nil, nil, err
+				}
 				ops, locations = update(string(f.Name), f.Location, ops, locations, binary)
 			}
 			break
@@ -192,7 +253,10 @@ func composeExpression(
 			ops, locations = loadGlobal(binary.FuncsMap[id], e.Location, ops, locations)
 
 			for _, f := range e.Fields {
-				ops, locations = composeExpression(f.Value, ops, locations, binary)
+				ops, locations, err = composeExpression(f.Value, ops, locations, binary)
+				if err != nil {
+					return nil, nil, err
+				}
 				ops, locations = update(string(f.Name), f.Location, ops, locations, binary)
 			}
 			break
@@ -200,17 +264,29 @@ func composeExpression(
 	case *typed.Let:
 		{
 			e := expr.(*typed.Let)
-			ops, locations = composeExpression(e.Value, ops, locations, binary)
-			ops, locations = composePattern(e.Pattern, ops, locations, binary)
+			ops, locations, err = composeExpression(e.Value, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
+			ops, locations, err = composePattern(e.Pattern, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			ops, locations = match(0, e.Location, ops, locations)
 			ops, locations = swapPop(e.Location, bytecode.SwapPopModePop, ops, locations)
-			ops, locations = composeExpression(e.Body, ops, locations, binary)
+			ops, locations, err = composeExpression(e.Body, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			break
 		}
 	case *typed.Select:
 		{
 			e := expr.(*typed.Select)
-			ops, locations = composeExpression(e.Condition, ops, locations, binary)
+			ops, locations, err = composeExpression(e.Condition, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			var jumpToEndIndices []int
 			var prevMatchOpIndex int
 			for i, cs := range e.Cases {
@@ -220,10 +296,16 @@ func composeExpression(
 					ops[prevMatchOpIndex] = matchOp
 				}
 
-				ops, locations = composePattern(cs.Pattern, ops, locations, binary)
+				ops, locations, err = composePattern(cs.Pattern, ops, locations, binary)
+				if err != nil {
+					return nil, nil, err
+				}
 				prevMatchOpIndex = len(ops)
 				ops, locations = match(0, cs.Location, ops, locations)
-				ops, locations = composeExpression(cs.Expression, ops, locations, binary)
+				ops, locations, err = composeExpression(cs.Expression, ops, locations, binary)
+				if err != nil {
+					return nil, nil, err
+				}
 				jumpToEndIndices = append(jumpToEndIndices, len(ops))
 				ops, locations = jump(0, cs.Location, ops, locations)
 			}
@@ -240,96 +322,151 @@ func composeExpression(
 		}
 	default:
 		{
-			panic(common.SystemError{Message: "invalid case"})
+			return nil, nil, common.NewCompilerError("impossible case")
 		}
 	}
-	return ops, locations
+	return ops, locations, nil
 }
 
 func composePattern(
 	pattern typed.Pattern, ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary,
-) ([]bytecode.Op, []ast.Location) {
+) ([]bytecode.Op, []ast.Location, error) {
+	var err error
 	switch pattern.(type) {
 	case *typed.PAlias:
 		{
 			e := pattern.(*typed.PAlias)
-			ops, locations = composePattern(e.Nested, ops, locations, binary)
-			ops, locations = makePattern(
+			ops, locations, err = composePattern(e.Nested, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
+			ops, locations, err = makePattern(
 				bytecode.PatternKindAlias, string(e.Alias), 0, e.Location, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			break
 		}
 	case *typed.PAny:
 		{
 			e := pattern.(*typed.PAny)
-			ops, locations = makePattern(bytecode.PatternKindAny, "", 0, e.Location, ops, locations, binary)
+			ops, locations, err = makePattern(bytecode.PatternKindAny, "", 0, e.Location, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			break
 		}
 	case *typed.PCons:
 		{
 			e := pattern.(*typed.PCons)
-			ops, locations = composePattern(e.Tail, ops, locations, binary)
-			ops, locations = composePattern(e.Head, ops, locations, binary)
-			ops, locations = makePattern(bytecode.PatternKindCons, "", 0, e.Location, ops, locations, binary)
+			ops, locations, err = composePattern(e.Tail, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
+			ops, locations, err = composePattern(e.Head, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
+			ops, locations, err = makePattern(bytecode.PatternKindCons, "", 0, e.Location, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			break
 		}
 	case *typed.PConst:
 		{
 			e := pattern.(*typed.PConst)
-			ops, locations = loadConstValue(e.Value, bytecode.StackKindPattern, e.Location, ops, locations, binary)
-			ops, locations = makePattern(bytecode.PatternKindConst, "", 0, e.Location, ops, locations, binary)
+			ops, locations, err = loadConstValue(e.Value, bytecode.StackKindPattern, e.Location, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
+			ops, locations, err = makePattern(bytecode.PatternKindConst, "", 0, e.Location, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			break
 		}
 	case *typed.PDataOption:
 		{
 			e := pattern.(*typed.PDataOption)
 			for _, p := range e.Args {
-				ops, locations = composePattern(p, ops, locations, binary)
+				ops, locations, err = composePattern(p, ops, locations, binary)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
-			ops, locations = makePattern(
+			ops, locations, err = makePattern(
 				bytecode.PatternKindDataOption,
 				string(common.MakeDataOptionIdentifier(e.DataName, e.OptionName)),
 				len(e.Args), e.Location, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			break
 		}
 	case *typed.PList:
 		{
 			e := pattern.(*typed.PList)
 			for _, p := range e.Items {
-				ops, locations = composePattern(p, ops, locations, binary)
+				ops, locations, err = composePattern(p, ops, locations, binary)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
-			ops, locations = makePattern(bytecode.PatternKindList, "", len(e.Items), e.Location, ops, locations, binary)
+			ops, locations, err = makePattern(
+				bytecode.PatternKindList, "", len(e.Items), e.Location, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			break
 		}
 	case *typed.PNamed:
 		{
 			e := pattern.(*typed.PNamed)
-			ops, locations = makePattern(
+			ops, locations, err = makePattern(
 				bytecode.PatternKindNamed, string(e.Name), 0, e.Location, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			break
 		}
 	case *typed.PRecord:
 		{
 			e := pattern.(*typed.PRecord)
 			for _, f := range e.Fields {
-				ops, locations = loadConstValue(
+				ops, locations, err = loadConstValue(
 					ast.CString{Value: string(f.Name)}, bytecode.StackKindPattern, f.Location, ops, locations, binary)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
-			ops, locations = makePattern(bytecode.PatternKindRecord, "", len(e.Fields), e.Location, ops, locations, binary)
+			ops, locations, err = makePattern(
+				bytecode.PatternKindRecord, "", len(e.Fields), e.Location, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			break
 		}
 	case *typed.PTuple:
 		{
 			e := pattern.(*typed.PTuple)
 			for _, p := range e.Items {
-				ops, locations = composePattern(p, ops, locations, binary)
+				ops, locations, err = composePattern(p, ops, locations, binary)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
-			ops, locations = makePattern(bytecode.PatternKindTuple, "", len(e.Items), e.Location, ops, locations, binary)
+			ops, locations, err = makePattern(
+				bytecode.PatternKindTuple, "", len(e.Items), e.Location, ops, locations, binary)
+			if err != nil {
+				return nil, nil, err
+			}
 			break
 		}
 	default:
-		panic(common.SystemError{Message: "invalid case"})
+		return nil, nil, common.NewCompilerError("impossible case")
 	}
-	return ops, locations
+	return ops, locations, nil
 }
 
 func match(jumpDelta int, loc ast.Location, ops []bytecode.Op, locations []ast.Location) ([]bytecode.Op, []ast.Location) {
@@ -340,7 +477,7 @@ func match(jumpDelta int, loc ast.Location, ops []bytecode.Op, locations []ast.L
 func loadConstValue(
 	c ast.ConstValue, stack bytecode.StackKind, loc ast.Location,
 	ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary,
-) ([]bytecode.Op, []ast.Location) {
+) ([]bytecode.Op, []ast.Location, error) {
 	switch c.(type) {
 	case ast.CUnit:
 		{
@@ -349,7 +486,8 @@ func loadConstValue(
 					Kind:  bytecode.ConstKindUnit,
 					Value: 0,
 				}),
-				append(locations, loc)
+				append(locations, loc),
+				nil
 		}
 	case ast.CChar:
 		{
@@ -358,7 +496,8 @@ func loadConstValue(
 					Kind:  bytecode.ConstKindChar,
 					Value: bytecode.ConstHash(c.(ast.CChar).Value),
 				}),
-				append(locations, loc)
+				append(locations, loc),
+				nil
 		}
 	case ast.CInt:
 		{
@@ -367,7 +506,8 @@ func loadConstValue(
 					Kind:  bytecode.ConstKindInt,
 					Value: binary.HashConst(bytecode.PackedInt{Value: c.(ast.CInt).Value}),
 				}),
-				append(locations, loc)
+				append(locations, loc),
+				nil
 		}
 	case ast.CFloat:
 		{
@@ -376,7 +516,8 @@ func loadConstValue(
 					Kind:  bytecode.ConstKindFloat,
 					Value: binary.HashConst(bytecode.PackedFloat{Value: c.(ast.CFloat).Value}),
 				}),
-				append(locations, loc)
+				append(locations, loc),
+				nil
 		}
 	case ast.CString:
 		{
@@ -385,10 +526,11 @@ func loadConstValue(
 					Kind:  bytecode.ConstKindString,
 					Value: bytecode.ConstHash(binary.HashString(c.(ast.CString).Value)),
 				}),
-				append(locations, loc)
+				append(locations, loc),
+				nil
 		}
 	default:
-		panic(common.SystemError{Message: "invalid case"})
+		return nil, nil, common.NewCompilerError("impossible case")
 	}
 }
 
@@ -409,30 +551,39 @@ func loadGlobal(
 func makePattern(
 	kind bytecode.PatternKind, name string, numNested int,
 	loc ast.Location, ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary,
-) ([]bytecode.Op, []ast.Location) {
+) ([]bytecode.Op, []ast.Location, error) {
 	if numNested > 255 {
-		panic(common.Error{Location: loc, Message: "pattern cannot contain more than 255 nested patterns"})
+		return nil, nil, common.Error{
+			Location: loc,
+			Message:  "pattern cannot contain more than 255 nested patterns",
+		}
 	}
 	return append(ops, bytecode.MakePattern{Kind: kind, Name: binary.HashString(name), NumNested: uint8(numNested)}),
-		append(locations, loc)
+		append(locations, loc), nil
 }
 
 func call(name string, numArgs int, loc ast.Location, ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary,
-) ([]bytecode.Op, []ast.Location) {
+) ([]bytecode.Op, []ast.Location, error) {
 	if numArgs > 255 {
-		panic(common.Error{Location: loc, Message: "native function cannot be called with more than 255 arguments"})
+		return nil, nil, common.Error{
+			Location: loc,
+			Message:  "function cannot be called with more than 255 arguments",
+		}
 	}
 	return append(ops, bytecode.Call{Name: binary.HashString(name), NumArgs: uint8(numArgs)}),
-		append(locations, loc)
+		append(locations, loc), nil
 }
 
 func apply(numArgs int, loc ast.Location, ops []bytecode.Op, locations []ast.Location,
-) ([]bytecode.Op, []ast.Location) {
+) ([]bytecode.Op, []ast.Location, error) {
 	if numArgs > 255 {
-		panic(common.Error{Location: loc, Message: "function cannot be applied with more than 255 arguments"})
+		return nil, nil, common.Error{
+			Location: loc,
+			Message:  "function cannot be applied with more than 255 arguments",
+		}
 	}
 	return append(ops, bytecode.Apply{NumArgs: uint8(numArgs)}),
-		append(locations, loc)
+		append(locations, loc), nil
 }
 
 func access(filed string, loc ast.Location, ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary,

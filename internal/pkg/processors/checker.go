@@ -143,7 +143,7 @@ func checkExpression(expression typed.Expression) error {
 	case *typed.Global:
 		return nil
 	}
-	panic(common.SystemError{Message: "invalid case"})
+	return common.NewCompilerError("impossible case")
 }
 
 func checkPattern(pattern typed.Pattern) error {
@@ -160,7 +160,11 @@ func checkPatterns(patterns []typed.Pattern) error {
 			Message:  "pattern matching is redundant",
 		}
 	} else {
-		if missingPatterns := isExhaustive(matrix, 1); len(missingPatterns) > 0 {
+		missingPatterns, err := isExhaustive(matrix, 1)
+		if err != nil {
+			return err
+		}
+		if len(missingPatterns) > 0 {
 			return common.Error{
 				Location: patterns[len(patterns)-1].GetLocation(),
 				Message: "pattern matching is not exhaustive, missing patterns: \n\t" +
@@ -177,8 +181,16 @@ func toNonRedundantRows(patterns []typed.Pattern) ([][]Pattern, []typed.Pattern,
 	var matrix [][]Pattern
 	var redundant []typed.Pattern
 	for _, pattern := range patterns {
-		row := []Pattern{simplifyPattern(pattern)}
-		if isUseful(matrix, row) {
+		simplified, err := simplifyPattern(pattern)
+		if err != nil {
+			return nil, nil, err
+		}
+		row := []Pattern{simplified}
+		useful, err := isUseful(matrix, row)
+		if err != nil {
+			return nil, nil, err
+		}
+		if useful {
 			matrix = append(matrix, row)
 		} else {
 			redundant = append(redundant, pattern)
@@ -187,103 +199,116 @@ func toNonRedundantRows(patterns []typed.Pattern) ([][]Pattern, []typed.Pattern,
 	return matrix, redundant, nil
 }
 
-func isUseful(matrix [][]Pattern, vector []Pattern) bool {
+func isUseful(matrix [][]Pattern, vector []Pattern) (bool, error) {
 	if len(matrix) == 0 {
-		return true
+		return true, nil
 	} else {
 		if len(vector) == 0 {
-			return false
+			return false, nil
 		} else {
 			switch vector[0].(type) {
 			case PatternConstructor:
 				e := vector[0].(PatternConstructor)
-				return isUseful(
-					common.MapIf(specializeRowByCtor(e.Option()), matrix),
-					append(e.Args, vector[1:]...))
+				option, err := e.Option()
+				if err != nil {
+					return false, err
+				}
+				patterns, err := common.MapIfError(specializeRowByCtor(option), matrix)
+				if err != nil {
+					return false, err
+				}
+				return isUseful(patterns, append(e.Args, vector[1:]...))
 			case PatternAnything:
 				if alts, ok := isComplete(matrix); ok {
-					isUsefulAlt := func(c typed.DataOption) bool {
-						return isUseful(
-							common.MapIf(specializeRowByCtor(c), matrix),
+					isUsefulAlt := func(c typed.DataOption) (bool, error) {
+						patterns, err := common.MapIfError(specializeRowByCtor(c), matrix)
+						if err != nil {
+							return false, err
+						}
+						return isUseful(patterns,
 							append(common.Repeat(Pattern(PatternAnything{}), len(c.Values)), vector[1:]...))
 					}
-					return common.Any(isUsefulAlt, alts)
+					return common.AnyError(isUsefulAlt, alts)
 				} else {
-					return isUseful(
-						common.MapIf(specializeRowByAnything, matrix),
-						vector[1:])
+					patterns, err := common.MapIfError(specializeRowByAnything, matrix)
+					if err != nil {
+						return false, err
+					}
+					return isUseful(patterns, vector[1:])
 				}
 			case PatternLiteral:
 				e := vector[0].(PatternLiteral)
-				return isUseful(
-					common.MapIf(specializeRowByLiteral(e), matrix),
-					vector[1:])
+				patterns, err := common.MapIfError(specializeRowByLiteral(e), matrix)
+				if err != nil {
+					return false, err
+				}
+				return isUseful(patterns, vector[1:])
 			}
-			panic(common.SystemError{Message: "invalid case"})
+			return false, common.NewCompilerError("impossible case")
 		}
 	}
 }
 
-func specializeRowByCtor(ctor typed.DataOption) func(row []Pattern) ([]Pattern, bool) {
-	return func(row []Pattern) ([]Pattern, bool) {
+func specializeRowByCtor(ctor typed.DataOption) func(row []Pattern) ([]Pattern, bool, error) {
+	return func(row []Pattern) ([]Pattern, bool, error) {
 		if len(row) == 0 {
-			panic(common.SystemError{Message: "CompilerTests error! Empty matrices should not get specialized."})
+			return nil, false, common.NewCompilerError("Empty matrices should not get specialized.")
 		} else {
 			switch row[0].(type) {
 			case PatternConstructor:
 				e := row[0].(PatternConstructor)
 				if e.Name == ctor.Name {
-					return append(e.Args, row[1:]...), true
+					return append(e.Args, row[1:]...), true, nil
 				} else {
-					return nil, false
+					return nil, false, nil
 				}
 			case PatternAnything:
-				return append(common.Repeat(Pattern(PatternAnything{}), len(ctor.Values)), row[1:]...), true
+				return append(common.Repeat(Pattern(PatternAnything{}), len(ctor.Values)), row[1:]...), true, nil
 			case PatternLiteral:
-				panic(common.SystemError{Message: "CompilerTests bug! After type checking, constructors and literals" +
-					" should never align in pattern match exhaustiveness checks."})
+				return nil, false, common.NewCompilerError("After type checking, constructors and literals" +
+					" should never align in pattern match exhaustiveness checks.")
 			}
-			panic(common.SystemError{Message: "invalid case"})
+			return nil, false, common.NewCompilerError("impossible case")
 		}
 	}
 }
 
-func specializeRowByAnything(row []Pattern) ([]Pattern, bool) {
+func specializeRowByAnything(row []Pattern) ([]Pattern, bool, error) {
 	if len(row) == 0 {
-		return nil, false
+		return nil, false, nil
 	} else {
 		switch row[0].(type) {
 		case PatternConstructor:
-			return nil, false
+			return nil, false, nil
 		case PatternAnything:
-			return row[1:], true
+			return row[1:], true, nil
 		case PatternLiteral:
-			return nil, false
+			return nil, false, nil
 		}
-		panic(common.SystemError{Message: "invalid case"})
+		return nil, false, common.NewCompilerError("impossible case")
 	}
 }
 
-func specializeRowByLiteral(literal PatternLiteral) func(row []Pattern) ([]Pattern, bool) {
-	return func(row []Pattern) ([]Pattern, bool) {
+func specializeRowByLiteral(literal PatternLiteral) func(row []Pattern) ([]Pattern, bool, error) {
+	return func(row []Pattern) ([]Pattern, bool, error) {
 		if len(row) == 0 {
-			panic(common.SystemError{Message: "CompilerTests error! Empty matrices should not get specialized."})
+			return nil, false, common.NewCompilerError("Empty matrices should not get specialized.")
 		} else {
 			switch row[0].(type) {
 			case PatternConstructor:
-				panic(common.SystemError{Message: "CompilerTests bug! After type checking, constructors and literals" +
-					" should never align in pattern match exhaustiveness checks."})
+				return nil, false, common.NewCompilerError("After type checking, constructors and literals" +
+					" should never align in pattern match exhaustiveness checks.")
 			case PatternAnything:
-				return row[1:], true
+				return row[1:], true, nil
 			case PatternLiteral:
 				e := row[0].(PatternLiteral)
 				if e.Literal.EqualsTo(literal.Literal) {
-					return row[1:], true
+					return row[1:], true, nil
 				} else {
-					return nil, false
+					return nil, false, nil
 				}
 			}
-			panic(common.SystemError{Message: "invalid case"})
+			return nil, false, common.NewCompilerError("impossible case")
 		}
 	}
 }
@@ -324,27 +349,42 @@ func collectCtors(matrix [][]Pattern) map[ast.DataOptionIdentifier]*typed.TData 
 	return ctors
 }
 
-func isExhaustive(matrix [][]Pattern, n int) [][]Pattern {
+func isExhaustive(matrix [][]Pattern, n int) (missing [][]Pattern, err error) {
 	if len(matrix) == 0 {
-		return [][]Pattern{common.Repeat(Pattern(PatternAnything{}), n)}
+		return [][]Pattern{common.Repeat(Pattern(PatternAnything{}), n)}, nil
 	}
 	if n == 0 {
-		return nil
+		return nil, nil
 	}
 	ctors := collectCtors(matrix)
 	numSeen := len(ctors)
 	if numSeen == 0 {
+		patterns, err := common.MapIfError(specializeRowByAnything, matrix)
+		if err != nil {
+			return nil, err
+		}
+		exhaustive, err := isExhaustive(patterns, n-1)
+		if err != nil {
+			return nil, err
+		}
 		return common.Map(
 			func(row []Pattern) []Pattern {
 				return append([]Pattern{PatternAnything{}}, row...)
 			},
-			isExhaustive(common.MapIf(specializeRowByAnything, matrix), n-1))
+			exhaustive), nil
 	}
 	alts := firstCtor(ctors)
 	altList := alts.Options
 	numAlts := len(altList)
 	if numSeen < numAlts {
-		matrix = isExhaustive(common.MapIf(specializeRowByAnything, matrix), n-1)
+		patterns, err := common.MapIfError(specializeRowByAnything, matrix)
+		if err != nil {
+			return nil, err
+		}
+		matrix, err = isExhaustive(patterns, n-1)
+		if err != nil {
+			return nil, err
+		}
 		rest := common.MapIf(isMissing(alts, ctors), altList)
 		for i, row := range matrix {
 			if i < len(rest) {
@@ -355,18 +395,23 @@ func isExhaustive(matrix [][]Pattern, n int) [][]Pattern {
 		if len(matrix) < n {
 			n = len(matrix)
 		}
-		return matrix[:n]
+		return matrix[:n], nil
 	} else {
-		isAltExhaustive := func(alt typed.DataOption) [][]Pattern {
-			mx := isExhaustive(
-				common.MapIf(specializeRowByCtor(alt), matrix),
-				len(alt.Values)+n-1)
+		isAltExhaustive := func(alt typed.DataOption) ([][]Pattern, error) {
+			patterns, err := common.MapIfError(specializeRowByCtor(alt), matrix)
+			if err != nil {
+				return nil, err
+			}
+			mx, err := isExhaustive(patterns, len(alt.Values)+n-1)
+			if err != nil {
+				return nil, err
+			}
 			for i, row := range mx {
 				mx[i] = append(recoverCtor(alts, alt, row), row...)
 			}
-			return mx
+			return mx, nil
 		}
-		return common.ConcatMap(isAltExhaustive, altList)
+		return common.ConcatMapError(isAltExhaustive, altList)
 	}
 }
 
@@ -396,14 +441,14 @@ func recoverCtor(union *typed.TData, alt typed.DataOption, patterns []Pattern) [
 	}, rest...)
 }
 
-func simplifyPattern(pattern typed.Pattern) Pattern {
+func simplifyPattern(pattern typed.Pattern) (Pattern, error) {
 	switch pattern.(type) {
 	case *typed.PAny:
-		return PatternAnything{}
+		return PatternAnything{}, nil
 	case *typed.PNamed:
-		return PatternAnything{}
+		return PatternAnything{}, nil
 	case *typed.PRecord:
-		return PatternAnything{}
+		return PatternAnything{}, nil
 	case *typed.PConst:
 		e := pattern.(*typed.PConst)
 		if _, ok := e.Value.(ast.CUnit); ok {
@@ -414,11 +459,15 @@ func simplifyPattern(pattern typed.Pattern) Pattern {
 					Options:  []typed.DataOption{{Name: "Only"}},
 				},
 				Name: "Only",
-			}
+			}, nil
 		}
-		return PatternLiteral{e.Value}
+		return PatternLiteral{e.Value}, nil
 	case *typed.PTuple:
 		e := pattern.(*typed.PTuple)
+		args, err := common.MapError(simplifyPattern, e.Items)
+		if err != nil {
+			return nil, err
+		}
 		return PatternConstructor{
 			Union: &typed.TData{
 				Location: e.Location,
@@ -434,30 +483,38 @@ func simplifyPattern(pattern typed.Pattern) Pattern {
 				},
 			},
 			Name: "Only",
-			Args: common.Map(simplifyPattern, e.Items),
-		}
+			Args: args,
+		}, nil
 	case *typed.PDataOption:
 		e := pattern.(*typed.PDataOption)
+		args, err := common.MapError(simplifyPattern, e.Args)
+		if err != nil {
+			return nil, err
+		}
 		if dataType, ok := e.Type.(*typed.TData); ok {
 			return PatternConstructor{
 				Union: dataType,
 				Name:  common.MakeDataOptionIdentifier(e.DataName, e.OptionName),
-				Args:  common.Map(simplifyPattern, e.Args),
-			}
+				Args:  args,
+			}, nil
 		} else {
-			panic(common.SystemError{Message: "CompilerTests bug! Data option pattern should have a data type."})
+			return nil, common.NewCompilerError("Data option pattern should have a data type.")
 		}
 	case *typed.PList:
 		e := pattern.(*typed.PList)
 		var nested []Pattern
 		ctor := "Nil"
 		if len(e.Items) > 0 {
-			ctor = "Cons"
-			nested = []Pattern{simplifyPattern(&typed.PList{
+			item, err := simplifyPattern(&typed.PList{
 				Location: e.Location,
 				Type:     e.Type,
 				Items:    e.Items[1:],
-			})}
+			})
+			if err != nil {
+				return nil, err
+			}
+			ctor = "Cons"
+			nested = []Pattern{item}
 		}
 		unboundIndex++
 		a := typed.Type(&typed.TUnbound{
@@ -479,13 +536,21 @@ func simplifyPattern(pattern typed.Pattern) Pattern {
 			},
 			Name: ast.DataOptionIdentifier(ctor),
 			Args: nested,
-		}
+		}, nil
 	case *typed.PCons:
 		e := pattern.(*typed.PCons)
 		a := typed.Type(&typed.TUnbound{
 			Location: e.Location,
 			Index:    unboundIndex,
 		})
+		head, err := simplifyPattern(e.Head)
+		if err != nil {
+			return nil, err
+		}
+		tail, err := simplifyPattern(e.Tail)
+		if err != nil {
+			return nil, err
+		}
 		return PatternConstructor{
 			Union: &typed.TData{
 				Location: e.Location,
@@ -500,16 +565,13 @@ func simplifyPattern(pattern typed.Pattern) Pattern {
 				},
 			},
 			Name: "Cons",
-			Args: []Pattern{
-				simplifyPattern(e.Head),
-				simplifyPattern(e.Tail),
-			},
-		}
+			Args: []Pattern{head, tail},
+		}, nil
 	case *typed.PAlias:
 		e := pattern.(*typed.PAlias)
 		return simplifyPattern(e.Nested)
 	}
-	panic(common.SystemError{Message: "invalid case"})
+	return nil, common.NewCompilerError("impossible case")
 }
 
 type Pattern interface {
@@ -551,11 +613,11 @@ func (c PatternConstructor) String() string {
 	return fmt.Sprintf("%s%s", c.Name, params)
 }
 
-func (c PatternConstructor) Option() typed.DataOption {
+func (c PatternConstructor) Option() (typed.DataOption, error) {
 	for _, o := range c.Union.Options {
 		if o.Name == c.Name {
-			return o
+			return o, nil
 		}
 	}
-	panic(common.SystemError{Message: "CompilerTests bug! Option not found."})
+	return typed.DataOption{}, common.NewCompilerError("option not found")
 }

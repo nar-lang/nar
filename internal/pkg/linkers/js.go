@@ -1,9 +1,9 @@
 package linkers
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/go-git/go-git/v5"
-	"io"
 	"oak-compiler/internal/pkg/ast"
 	"oak-compiler/internal/pkg/common"
 	"os"
@@ -24,7 +24,9 @@ func (l *JsLinker) GetOutFileLocation(givenLocation string) string {
 }
 
 func (l *JsLinker) Link(
-	main string, packages []ast.LoadedPackage, out string, debug, upgrade bool, cacheDir string, log io.Writer,
+	main ast.FullIdentifier, packages map[ast.PackageIdentifier]*ast.LoadedPackage,
+	out string, debug, upgrade bool, cacheDir string,
+	log *common.LogWriter,
 ) error {
 	runtimePath, err := cacheRuntime(cacheDir, upgrade, log)
 	if err != nil {
@@ -69,16 +71,16 @@ func (l *JsLinker) Link(
 
 	err = os.WriteFile(l.artifactPath, []byte(indexJs.String()), 0640)
 	if err != nil {
-		panic(common.SystemError{Message: err.Error()})
+		return common.NewSystemError(err)
 	}
 
 	htmlPath := filepath.Join(out, "index.html")
 	err = os.WriteFile(htmlPath, indexHtml, 0640)
 	if err != nil {
-		panic(common.SystemError{Message: err.Error()})
+		return common.NewSystemError(err)
 	}
 
-	_, _ = fmt.Fprintf(log, "linked successfully\n")
+	log.Trace("linked successfully")
 	return nil
 }
 
@@ -86,11 +88,11 @@ func (l *JsLinker) Cleanup() {
 	_ = os.Remove(l.artifactPath)
 }
 
-func dotToUnderscore(s string) string {
-	return strings.ReplaceAll(s, ".", "_")
+func dotToUnderscore(s ast.PackageIdentifier) string {
+	return strings.ReplaceAll(string(s), ".", "_")
 }
 
-func cacheRuntime(cacheDir string, upgrade bool, log io.Writer) (string, error) {
+func cacheRuntime(cacheDir string, upgrade bool, log *common.LogWriter) (string, error) {
 	runtimeDir, err := filepath.Abs(filepath.Join(cacheDir, "runtime-js"))
 	if err != nil {
 		return "", err
@@ -103,29 +105,34 @@ func cacheRuntime(cacheDir string, upgrade bool, log io.Writer) (string, error) 
 	loaded := err == nil
 
 	if !loaded {
-		_, _ = fmt.Fprintf(log, "cloning runtime `%s`\n", runtimeRepositoryUrl)
+		log.Trace(fmt.Sprintf("cloning runtime `%s`\n", runtimeRepositoryUrl))
+		w := bytes.NewBufferString("")
 		_, err := git.PlainClone(runtimeDir, false, &git.CloneOptions{
 			URL:      runtimeRepositoryUrl,
-			Progress: log,
+			Progress: w,
 		})
+		log.Trace(w.String())
 		if err != nil {
 			return "", err
 		}
+		log.Trace(fmt.Sprintf("downloaded runtime `%s`\n", runtimeRepositoryUrl))
 	} else if upgrade {
 		r, err := git.PlainOpen(runtimeDir)
 		if err == nil {
-			_, _ = fmt.Fprintf(log, "upgrading runtime `%s` ", runtimeRepositoryUrl)
-			w, err := r.Worktree()
+			log.Trace(fmt.Sprintf("upgrading runtime `%s` ", runtimeRepositoryUrl))
+			worktree, err := r.Worktree()
+			w := bytes.NewBufferString("")
 			if err != nil {
-				_, _ = fmt.Fprintf(log, "%s\n", err.Error())
+				log.Warn(err)
 			} else {
-				err = w.Pull(&git.PullOptions{
-					Progress: log,
+				err = worktree.Pull(&git.PullOptions{
+					Progress: w,
 				})
+				log.Trace(w.String())
 				if err != nil {
-					_, _ = fmt.Fprintf(log, "%s\n", err.Error())
+					log.Warn(err)
 				} else {
-					_, _ = fmt.Fprintf(log, "ok\n")
+					log.Info(fmt.Sprintf("runtime upgraded `%s`", runtimeRepositoryUrl))
 				}
 			}
 		}

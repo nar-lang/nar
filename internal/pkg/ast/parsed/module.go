@@ -71,6 +71,6 @@ type Module struct {
 	Definitions []Definition
 	DataTypes   []DataType
 
-	PackageName        string
-	ReferencedPackages map[string]struct{}
+	PackageName        ast.PackageIdentifier
+	ReferencedPackages map[ast.PackageIdentifier]struct{}
 }

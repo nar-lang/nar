@@ -1,8 +1,6 @@
 package oakc
 
 import (
-	"fmt"
-	"io"
 	"oak-compiler/internal/pkg/ast"
 	"oak-compiler/internal/pkg/ast/bytecode"
 	"oak-compiler/internal/pkg/ast/normalized"
@@ -12,22 +10,13 @@ import (
 	"oak-compiler/internal/pkg/processors"
 	"os"
 	"path/filepath"
-	"slices"
 )
 
-func Compile(moduleUrls []string, outPath string, debug bool, upgrade bool, cachePath string, log io.Writer) (packages []ast.LoadedPackage, err error) {
-	//TODO: move everything to canonical error handling without panics
-	defer func() {
-		x := recover()
-		if x != nil {
-			if e, ok := x.(error); ok {
-				err = e
-			} else {
-				err = fmt.Errorf("%v", x)
-			}
-		}
-	}()
-
+func Compile(
+	moduleUrls []string, outPath string, debug bool, upgrade bool, cachePath string, log *common.LogWriter,
+) (
+	packages map[ast.PackageIdentifier]*ast.LoadedPackage, entry ast.FullIdentifier,
+) {
 	parsedModules := map[ast.QualifiedIdentifier]*parsed.Module{}
 	normalizedModules := map[ast.QualifiedIdentifier]*normalized.Module{}
 	typedModules := map[ast.QualifiedIdentifier]*typed.Module{}
@@ -39,72 +28,60 @@ func Compile(moduleUrls []string, outPath string, debug bool, upgrade bool, cach
 		ConstMap:  map[bytecode.PackedConst]bytecode.ConstHash{},
 	}
 
-	var loadedPackages []ast.LoadedPackage
+	entry = ""
+	loadedPackages := map[ast.PackageIdentifier]*ast.LoadedPackage{}
+	var requiredPackages []ast.PackageIdentifier
+
 	for _, url := range moduleUrls {
-		loadedPackages = processors.LoadPackage(url, cachePath, log, upgrade, loadedPackages)
+		progress := func(value float32, message string) {
+			log.Trace(message)
+		}
+		loaded, err := processors.LoadPackage(url, cachePath, ".", progress, upgrade, loadedPackages)
+		if err != nil {
+			log.Err(err)
+			continue
+		}
+		if entry == "" {
+			entry = loaded.Package.Main
+		}
+		requiredPackages = append(requiredPackages, loaded.Package.Name)
 	}
 
-	for i := len(loadedPackages) - 1; i >= 0; i-- {
-		pkg := loadedPackages[i]
-		referencedPackages := map[string]struct{}{}
-		referencedPackages[pkg.Package.Name] = struct{}{}
-		for _, dep := range pkg.Package.Dependencies {
-			for _, p := range loadedPackages {
-				if _, ok := p.Urls[dep]; ok {
-					referencedPackages[p.Package.Name] = struct{}{}
-					break
+	affectedModuleNames := processors.Compile(
+		requiredPackages,
+		loadedPackages,
+		parsedModules,
+		normalizedModules,
+		typedModules,
+		log,
+		func(modulePath string) string { return "" })
+
+	if !log.HasErrors() {
+		for _, name := range affectedModuleNames {
+			if err := processors.Compose(name, typedModules, debug, &bin); err != nil {
+				log.Err(err)
+			}
+		}
+	}
+
+	if !log.HasErrors() {
+		outDir := filepath.Dir(outPath)
+		err := os.MkdirAll(outDir, os.ModePerm)
+		if err != nil {
+			log.Err(common.NewSystemError(err))
+		} else {
+			file, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY, 0640)
+			if err != nil {
+				log.Err(common.NewSystemError(err))
+			} else {
+				err := bin.Build(file, debug)
+				if err != nil {
+					log.Err(common.NewSystemError(err))
 				}
 			}
 		}
-
-		for _, modulePath := range pkg.Sources {
-			parsedModule := processors.Parse(modulePath)
-			parsedModule.PackageName = pkg.Package.Name
-			parsedModule.ReferencedPackages = referencedPackages
-			if existedModule, ok := parsedModules[parsedModule.Name]; ok {
-				panic(common.SystemError{
-					Message: fmt.Sprintf("module name collision: `%s`", existedModule.Name),
-				})
-			}
-			parsedModules[parsedModule.Name] = &parsedModule
-		}
 	}
 
-	var names []ast.QualifiedIdentifier
-	for name := range parsedModules {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-
-	for _, name := range names {
-		m := parsedModules[name]
-		processors.PreNormalize(m.Name, parsedModules)
-	}
-
-	for _, name := range names {
-		m := parsedModules[name]
-		processors.Normalize(m.Name, parsedModules, normalizedModules)
-		processors.Solve(m.Name, normalizedModules, typedModules)
-		err := processors.CheckPatterns(typedModules)
-		if err != nil {
-			return nil, err
-		}
-		processors.Compose(m.Name, typedModules, debug, &bin)
-	}
-
-	outDir := filepath.Dir(outPath)
-	err = os.MkdirAll(outDir, os.ModePerm)
-	if err != nil {
-		panic(common.SystemError{Message: err.Error()})
-	}
-
-	file, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY, 0640)
-	if err != nil {
-		panic(common.SystemError{Message: err.Error()})
-	}
-
-	bin.Build(file, debug)
-
-	_, _ = fmt.Fprintf(log, "compiled successfully\n")
-	return loadedPackages, nil
+	log.Trace("compiled successfully")
+	return loadedPackages, entry
 }

@@ -1,11 +1,11 @@
 package ast
 
 type Package struct {
-	Name         string   `json:"name"`
-	Version      string   `json:"version"`
-	OakVersion   string   `json:"oak-version"`
-	Dependencies []string `json:"dependencies"`
-	Main         string   `json:"main"`
+	Name         PackageIdentifier `json:"name"`
+	Version      string            `json:"version"`
+	OakVersion   string            `json:"oak-version"`
+	Dependencies []string          `json:"dependencies"`
+	Main         FullIdentifier    `json:"main"`
 }
 
 type LoadedPackage struct {
