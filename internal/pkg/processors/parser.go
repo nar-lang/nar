@@ -1015,7 +1015,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 		var pattern parsed.Pattern
 		var value parsed.Expression
 		var fnType parsed.Type
-		isDef := nil != name && nil != params
+		isDef := nil != name && nil != params && len(*name) > 0 && unicode.IsLower([]rune(*name)[0])
 		if isDef {
 			if !readExact(src, SeqEqual) {
 				return nil, newError(*src, "expected `=` here")
