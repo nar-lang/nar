@@ -2,7 +2,7 @@ package common
 
 import (
 	"fmt"
-	"oak-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast"
 	"runtime"
 	"slices"
 	"strings"

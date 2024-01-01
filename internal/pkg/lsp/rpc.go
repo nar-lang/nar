@@ -17,7 +17,7 @@ func (s *server) Initialize(params *lsp.InitializeParams) (lsp.InitializeResult,
 			},
 		},
 		ServerInfo: lsp.ServerInfo{
-			Name:    "Oak Language Server",
+			Name:    "Nar Language Server",
 			Version: "0.1.0",
 		},
 	}, nil

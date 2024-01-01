@@ -4,15 +4,15 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/go-git/go-git/v5"
-	"oak-compiler/internal/pkg/ast"
-	"oak-compiler/internal/pkg/common"
+	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/common"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 )
 
-const runtimeRepositoryUrl = "https://github.com/oaklang/runtime-js.git"
+const runtimeRepositoryUrl = "https://github.com/narlang/runtime-js.git"
 const nativeIndexPath = "native/js/index.js"
 
 type JsLinker struct {
@@ -35,7 +35,7 @@ func (l *JsLinker) Link(
 
 	indexJs := strings.Builder{}
 	var nativeNames []string
-	indexJs.WriteString(fmt.Sprintf("import OakRuntime from '%s'\n", runtimePath))
+	indexJs.WriteString(fmt.Sprintf("import NarRuntime from '%s'\n", runtimePath))
 
 	for _, pkg := range packages {
 		_, err := os.Stat(path.Join(pkg.Dir, nativeIndexPath))
@@ -55,7 +55,7 @@ func (l *JsLinker) Link(
 	indexJs.WriteString("req.open('GET', 'program.acorn', true);\n")
 	indexJs.WriteString("req.responseType = 'arraybuffer';\n")
 	indexJs.WriteString("req.onload = function(e) {\n")
-	indexJs.WriteString("    const runtime = new OakRuntime(e.target.response);\n")
+	indexJs.WriteString("    const runtime = new NarRuntime(e.target.response);\n")
 
 	for _, name := range nativeNames {
 		indexJs.WriteString(fmt.Sprintf("    %s(runtime);\n", name))
@@ -145,7 +145,7 @@ var indexHtml = []byte(
 		"<html lang=\"en\">\n" +
 		"<head>\n" +
 		"    <meta charset=\"UTF-8\">\n" +
-		"    <title>Oak test</title>\n" +
+		"    <title>Nar test</title>\n" +
 		"    <script src=\"main.js\" type=\"module\"></script>\n" +
 		"</head>\n" +
 		"<body></body>\n" +

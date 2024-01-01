@@ -2,10 +2,10 @@ package processors
 
 import (
 	"fmt"
-	"oak-compiler/internal/pkg/ast"
-	"oak-compiler/internal/pkg/ast/bytecode"
-	"oak-compiler/internal/pkg/ast/typed"
-	"oak-compiler/internal/pkg/common"
+	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast/bytecode"
+	"nar-compiler/internal/pkg/ast/typed"
+	"nar-compiler/internal/pkg/common"
 	"slices"
 )
 
@@ -134,7 +134,7 @@ func composeExpression(
 			e := expr.(*typed.Const)
 			v := e.Value
 			if iv, ok := v.(ast.CInt); ok {
-				if ex, ok := e.Type.(*typed.TNative); ok && ex.Name == common.OakCoreMathFloat {
+				if ex, ok := e.Type.(*typed.TNative); ok && ex.Name == common.NarCoreMathFloat {
 					v = ast.CFloat{Value: float64(iv.Value)}
 				}
 			}

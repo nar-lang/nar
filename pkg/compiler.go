@@ -1,13 +1,13 @@
-package oakc
+package narc
 
 import (
-	"oak-compiler/internal/pkg/ast"
-	"oak-compiler/internal/pkg/ast/bytecode"
-	"oak-compiler/internal/pkg/ast/normalized"
-	"oak-compiler/internal/pkg/ast/parsed"
-	"oak-compiler/internal/pkg/ast/typed"
-	"oak-compiler/internal/pkg/common"
-	"oak-compiler/internal/pkg/processors"
+	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast/bytecode"
+	"nar-compiler/internal/pkg/ast/normalized"
+	"nar-compiler/internal/pkg/ast/parsed"
+	"nar-compiler/internal/pkg/ast/typed"
+	"nar-compiler/internal/pkg/common"
+	"nar-compiler/internal/pkg/processors"
 	"os"
 	"path/filepath"
 )
@@ -82,6 +82,6 @@ func Compile(
 		}
 	}
 
-	log.Trace("compiled successfully")
+	log.Trace("compilation finished")
 	return loadedPackages, entry
 }

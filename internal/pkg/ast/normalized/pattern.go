@@ -1,7 +1,7 @@
 package normalized
 
 import (
-	"oak-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast"
 )
 
 type Pattern interface {

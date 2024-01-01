@@ -3,10 +3,10 @@ package processors
 import (
 	"fmt"
 	"maps"
-	"oak-compiler/internal/pkg/ast"
-	"oak-compiler/internal/pkg/ast/normalized"
-	"oak-compiler/internal/pkg/ast/parsed"
-	"oak-compiler/internal/pkg/common"
+	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast/normalized"
+	"nar-compiler/internal/pkg/ast/parsed"
+	"nar-compiler/internal/pkg/common"
 	"slices"
 	"strings"
 	"unicode"
@@ -1085,10 +1085,10 @@ func normalizeExpression(
 			e := expr.(parsed.If)
 			boolType := &normalized.TData{
 				Location: e.Location,
-				Name:     common.OakCoreBasicsBool,
+				Name:     common.NarCoreBasicsBool,
 				Options: []normalized.DataOption{
-					{Name: common.OakCoreBasicsTrueName},
-					{Name: common.OakCoreBasicsFalseName},
+					{Name: common.NarCoreBasicsTrueName},
+					{Name: common.NarCoreBasicsFalseName},
 				},
 			}
 			condition, err := normalize(e.Condition)
@@ -1112,8 +1112,8 @@ func normalizeExpression(
 						Pattern: normalized.PDataOption{
 							Location:       e.Positive.GetLocation(),
 							Type:           boolType,
-							ModuleName:     common.OakCoreBasicsName,
-							DefinitionName: common.OakCoreBasicsTrueName,
+							ModuleName:     common.NarCoreBasicsName,
+							DefinitionName: common.NarCoreBasicsTrueName,
 						},
 						Expression: positive,
 					},
@@ -1122,8 +1122,8 @@ func normalizeExpression(
 						Pattern: normalized.PDataOption{
 							Location:       e.Negative.GetLocation(),
 							Type:           boolType,
-							ModuleName:     common.OakCoreBasicsName,
-							DefinitionName: common.OakCoreBasicsFalseName,
+							ModuleName:     common.NarCoreBasicsName,
+							DefinitionName: common.NarCoreBasicsFalseName,
 						},
 						Expression: negative,
 					},
@@ -1442,8 +1442,8 @@ func normalizeExpression(
 				Location: e.Location,
 				Func: normalized.Global{
 					Location:       e.Location,
-					ModuleName:     common.OakCoreMath,
-					DefinitionName: common.OakCoreMathNeg,
+					ModuleName:     common.NarCoreMath,
+					DefinitionName: common.NarCoreMathNeg,
 				},
 				Args: []normalized.Expression{nested},
 			}, nil

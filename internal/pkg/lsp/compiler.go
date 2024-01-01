@@ -2,9 +2,9 @@ package lsp
 
 import (
 	"errors"
-	"oak-compiler/internal/pkg/ast"
-	"oak-compiler/internal/pkg/common"
-	"oak-compiler/internal/pkg/processors"
+	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/common"
+	"nar-compiler/internal/pkg/processors"
 	"os"
 	"path/filepath"
 	"pkg.nimblebun.works/go-lsp"
@@ -64,7 +64,7 @@ func (s *server) compiler() {
 func findPackageRoot(path string) string {
 	for path != "." && path != "/" {
 		path = filepath.Dir(path)
-		if _, err := os.Stat(filepath.Join(path, "oak.json")); !os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(path, "nar.json")); !os.IsNotExist(err) {
 			return path
 		}
 	}

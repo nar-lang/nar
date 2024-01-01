@@ -3,10 +3,10 @@ package processors
 import (
 	"fmt"
 	"maps"
-	"oak-compiler/internal/pkg/ast"
-	"oak-compiler/internal/pkg/ast/normalized"
-	"oak-compiler/internal/pkg/ast/typed"
-	"oak-compiler/internal/pkg/common"
+	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast/normalized"
+	"nar-compiler/internal/pkg/ast/typed"
+	"nar-compiler/internal/pkg/common"
 	"os"
 	"path/filepath"
 	"slices"
@@ -76,7 +76,7 @@ func Solve(
 			continue
 		}
 
-		fp := fmt.Sprintf(".oak-bin/%s/%s.md", m.Name, def.Name)
+		fp := fmt.Sprintf(".nar-bin/%s/%s.md", m.Name, def.Name)
 		sb := strings.Builder{}
 
 		unboundIndex = 0
@@ -925,7 +925,7 @@ func annotateType(
 		case *normalized.TUnit:
 			{
 				e := t.(*normalized.TUnit)
-				r = &typed.TNative{Location: e.Location, Name: common.OakCoreBasicsUnit}
+				r = &typed.TNative{Location: e.Location, Name: common.NarCoreBasicsUnit}
 				break
 			}
 		case *normalized.TData:
@@ -1105,7 +1105,7 @@ func equatizePattern(
 					left: e.Tail.GetType(),
 					right: &typed.TNative{
 						Location: e.Location,
-						Name:     common.OakCoreListList,
+						Name:     common.NarCoreListList,
 						Args:     []typed.Type{e.Head.GetType()},
 					},
 					pattern: pattern,
@@ -1196,7 +1196,7 @@ func equatizePattern(
 				left: e.Type,
 				right: &typed.TNative{
 					Location: e.Location,
-					Name:     common.OakCoreListList,
+					Name:     common.NarCoreListList,
 					Args:     []typed.Type{itemType},
 				},
 				pattern: pattern,
@@ -1387,7 +1387,7 @@ func equatizeExpression(
 				left: e.Type,
 				right: &typed.TNative{
 					Location: e.Location,
-					Name:     common.OakCoreListList,
+					Name:     common.NarCoreListList,
 					Args:     []typed.Type{listItemType},
 				},
 				expr: expr,
@@ -1638,15 +1638,15 @@ func equatizeExpression(
 func getConstType(cv ast.ConstValue, location ast.Location) (typed.Type, error) {
 	switch cv.(type) {
 	case ast.CChar:
-		return &typed.TNative{Location: location, Name: common.OakCoreCharChar}, nil
+		return &typed.TNative{Location: location, Name: common.NarCoreCharChar}, nil
 	case ast.CInt:
 		return newAnnotatedType(location, common.ConstraintNumber), nil
 	case ast.CFloat:
-		return &typed.TNative{Location: location, Name: common.OakCoreMathFloat}, nil
+		return &typed.TNative{Location: location, Name: common.NarCoreMathFloat}, nil
 	case ast.CString:
-		return &typed.TNative{Location: location, Name: common.OakCoreStringString}, nil
+		return &typed.TNative{Location: location, Name: common.NarCoreStringString}, nil
 	case ast.CUnit:
-		return &typed.TNative{Location: location, Name: common.OakCoreBasicsUnit}, nil
+		return &typed.TNative{Location: location, Name: common.NarCoreBasicsUnit}, nil
 	}
 	return nil, common.NewCompilerError("impossible case")
 }
@@ -1892,12 +1892,12 @@ func unify(x typed.Type, y typed.Type, loc []ast.Location, subst map[uint64]type
 					}
 					return nil
 				} else if ex.Name == common.Number {
-					if ey.Name == common.OakCoreMathInt || ey.Name == common.OakCoreMathFloat {
+					if ey.Name == common.NarCoreMathInt || ey.Name == common.NarCoreMathFloat {
 						ex.Name = ey.Name
 						return nil
 					}
 				} else if ey.Name == common.Number {
-					if ex.Name == common.OakCoreMathInt || ex.Name == common.OakCoreMathFloat {
+					if ex.Name == common.NarCoreMathInt || ex.Name == common.NarCoreMathFloat {
 						ey.Name = ex.Name
 						return nil
 					}
@@ -1920,12 +1920,12 @@ func unify(x typed.Type, y typed.Type, loc []ast.Location, subst map[uint64]type
 					}
 					return nil
 				} else if ex.Name == common.Number {
-					if ey.Name == common.OakCoreMathInt || ey.Name == common.OakCoreMathFloat {
+					if ey.Name == common.NarCoreMathInt || ey.Name == common.NarCoreMathFloat {
 						ex.Name = ey.Name
 						return nil
 					}
 				} else if ey.Name == common.Number {
-					if ex.Name == common.OakCoreMathInt || ex.Name == common.OakCoreMathFloat {
+					if ex.Name == common.NarCoreMathInt || ex.Name == common.NarCoreMathFloat {
 						ey.Name = ex.Name
 						return nil
 					}
@@ -1975,7 +1975,7 @@ func unifyUnbound(v *typed.TUnbound, typ typed.Type, loc []ast.Location, subst m
 		case *typed.TNative:
 			{
 				e := typ.(*typed.TNative)
-				if e.Name == common.OakCoreMathInt || e.Name == common.OakCoreMathFloat {
+				if e.Name == common.NarCoreMathInt || e.Name == common.NarCoreMathFloat {
 					_, err := applyType(typ, subst)
 					if err != nil {
 						return err
@@ -2202,7 +2202,7 @@ func applyType(t typed.Type, subst map[uint64]typed.Type) (typed.Type, error) {
 					switch x.(type) {
 					case *typed.TNative:
 						e2 := x.(*typed.TNative)
-						if e2.Name == common.OakCoreMathInt || e2.Name == common.OakCoreMathFloat {
+						if e2.Name == common.NarCoreMathInt || e2.Name == common.NarCoreMathFloat {
 							isNum = true
 						}
 					case *typed.TUnbound:

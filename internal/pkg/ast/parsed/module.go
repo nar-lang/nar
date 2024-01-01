@@ -1,7 +1,7 @@
 package parsed
 
 import (
-	"oak-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast"
 )
 
 type Import struct {

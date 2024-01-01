@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"oak-compiler/internal/pkg/common"
-	oakc "oak-compiler/pkg"
+	"nar-compiler/internal/pkg/common"
+	narc "nar-compiler/pkg"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,7 +13,7 @@ import (
 
 func main() {
 	homeDir, _ := os.UserHomeDir()
-	defaultCacheDir := filepath.Join(homeDir, ".oak")
+	defaultCacheDir := filepath.Join(homeDir, ".nar")
 
 	out := flag.String("out", "build", "output file path (or directory if linking)")
 	release := flag.Bool("release", false, "strip debug symbols")
@@ -30,7 +30,7 @@ func main() {
 	log := &common.LogWriter{}
 
 	if *lsp != "" {
-		err := oakc.LanguageServer(*lsp, *lspPort, *cacheDir)
+		err := narc.LanguageServer(*lsp, *lspPort, *cacheDir)
 		if err != nil {
 			log.Err(err)
 		}
@@ -38,12 +38,12 @@ func main() {
 	}
 
 	if len(flag.Args()) == 0 {
-		log.Err(common.NewSystemError(fmt.Errorf("no input packages, run compiler as `oak <path-to-package>`")))
+		log.Err(common.NewSystemError(fmt.Errorf("no input packages, run compiler as `nar <path-to-package>`")))
 	} else {
 
-		linker := oakc.GetLinker(*link)
+		linker := narc.GetLinker(*link)
 
-		loadedPackages, entry := oakc.Compile(
+		loadedPackages, entry := narc.Compile(
 			flag.Args(), linker.GetOutFileLocation(*out),
 			!*release, *upgrade, *cacheDir, log)
 		if !log.HasErrors() {

@@ -2,9 +2,9 @@ package processors
 
 import (
 	"fmt"
-	"oak-compiler/internal/pkg/ast"
-	"oak-compiler/internal/pkg/ast/parsed"
-	"oak-compiler/internal/pkg/common"
+	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast/parsed"
+	"nar-compiler/internal/pkg/common"
 	"os"
 	"slices"
 	"strconv"

@@ -2,7 +2,7 @@ package typed
 
 import (
 	"fmt"
-	"oak-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast"
 )
 
 type Expression interface {

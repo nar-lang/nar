@@ -20,18 +20,18 @@
 * [ ] Compilation performance improvements
   
 ## Libraries
-* [x] Oak.Core library + tests
-* [x] Oak.Program library
-* [x] Oak.Time
-* [ ] Oak.Random
-* [ ] Oak.Tests library
+* [x] Nar.Core library + tests
+* [x] Nar.Program library
+* [x] Nar.Time
+* [ ] Nar.Random
+* [ ] Nar.Tests library
   * [x] Simple tests
   * [ ] Fuzz tests
-* [ ] Oak.Leaf library (game engine)
-  * [ ] Oak.Leaf.GL
-  * [ ] Oak.Leaf.Sprite
-  * [ ] Oak.Leaf.Input
-  * [ ] Oak.Leaf.UI
+* [ ] Nar.Leaf library (game engine)
+  * [ ] Nar.Leaf.GL
+  * [ ] Nar.Leaf.Sprite
+  * [ ] Nar.Leaf.Input
+  * [ ] Nar.Leaf.UI
 * [ ] ...
 
 ## Quality Of Life

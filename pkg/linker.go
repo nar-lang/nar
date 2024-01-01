@@ -1,9 +1,9 @@
-package oakc
+package narc
 
 import (
-	"oak-compiler/internal/pkg/ast"
-	"oak-compiler/internal/pkg/common"
-	"oak-compiler/internal/pkg/linkers"
+	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/common"
+	"nar-compiler/internal/pkg/linkers"
 )
 
 type Linker interface {

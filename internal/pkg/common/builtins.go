@@ -2,7 +2,7 @@ package common
 
 import (
 	"fmt"
-	"oak-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast"
 )
 
 type Constraint ast.Identifier
@@ -13,20 +13,20 @@ const (
 )
 
 var (
-	OakCoreBasicsName      = ast.QualifiedIdentifier("Oak.Core.Basics")
-	OakCoreBasicsTrueName  = ast.Identifier("True")
-	OakCoreBasicsFalseName = ast.Identifier("False")
+	NarCoreBasicsName      = ast.QualifiedIdentifier("Nar.Core.Basics")
+	NarCoreBasicsTrueName  = ast.Identifier("True")
+	NarCoreBasicsFalseName = ast.Identifier("False")
 
-	OakCoreMath         = ast.QualifiedIdentifier("Oak.Core.Math")
-	OakCoreMathNeg      = ast.Identifier("neg")
-	OakCoreCharChar     = MakeFullIdentifier("Oak.Core.Char", "Char")
-	OakCoreMathInt      = MakeFullIdentifier("Oak.Core.Math", "Int")
-	OakCoreMathFloat    = MakeFullIdentifier("Oak.Core.Math", "Float")
-	OakCoreBasicsUnit   = MakeFullIdentifier(OakCoreBasicsName, "Unit")
-	OakCoreStringString = MakeFullIdentifier("Oak.Core.String", "String")
-	OakCoreListList     = MakeFullIdentifier("Oak.Core.List", "List")
+	NarCoreMath         = ast.QualifiedIdentifier("Nar.Core.Math")
+	NarCoreMathNeg      = ast.Identifier("neg")
+	NarCoreCharChar     = MakeFullIdentifier("Nar.Core.Char", "Char")
+	NarCoreMathInt      = MakeFullIdentifier("Nar.Core.Math", "Int")
+	NarCoreMathFloat    = MakeFullIdentifier("Nar.Core.Math", "Float")
+	NarCoreBasicsUnit   = MakeFullIdentifier(NarCoreBasicsName, "Unit")
+	NarCoreStringString = MakeFullIdentifier("Nar.Core.String", "String")
+	NarCoreListList     = MakeFullIdentifier("Nar.Core.List", "List")
 	Number              = MakeFullIdentifier("", ast.Identifier(ConstraintNumber))
-	OakCoreBasicsBool   = MakeFullIdentifier(OakCoreBasicsName, "Bool")
+	NarCoreBasicsBool   = MakeFullIdentifier(NarCoreBasicsName, "Bool")
 )
 
 func MakeFullIdentifier(moduleName ast.QualifiedIdentifier, name ast.Identifier) ast.FullIdentifier {

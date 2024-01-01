@@ -1,4 +1,4 @@
-module oak-compiler
+module nar-compiler
 
 go 1.21
 

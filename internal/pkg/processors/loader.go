@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-git/go-git/v5"
-	"oak-compiler/internal/pkg/ast"
-	"oak-compiler/internal/pkg/common"
+	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/common"
 	"os"
 	"path/filepath"
 	"slices"
@@ -92,7 +92,7 @@ func loadPackageWithPath(
 	url string, absPath string, cacheDir string, progress Progress, upgrade bool,
 	loadedPackages map[ast.PackageIdentifier]*ast.LoadedPackage,
 ) (*ast.LoadedPackage, error) {
-	packageFilePath := filepath.Join(absPath, "oak.json")
+	packageFilePath := filepath.Join(absPath, "nar.json")
 	fileData, err := os.ReadFile(packageFilePath)
 	var loaded *ast.LoadedPackage
 
@@ -131,7 +131,7 @@ func loadPackageWithPath(
 	}
 
 	if insert {
-		src, err := readDir(filepath.Join(absPath, "src"), ".oak", nil)
+		src, err := readDir(filepath.Join(absPath, "src"), ".nar", nil)
 		if err != nil {
 			return nil, common.NewSystemError(fmt.Errorf(
 				"failed to read package `%s` sources: %w", url, err))

@@ -1,12 +1,12 @@
-package oakc
+package narc
 
 import (
 	"bufio"
 	"fmt"
 	"io"
 	"log"
+	"nar-compiler/internal/pkg/lsp"
 	"net"
-	"oak-compiler/internal/pkg/lsp"
 	"os"
 	"strconv"
 	"strings"

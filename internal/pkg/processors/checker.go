@@ -2,9 +2,9 @@ package processors
 
 import (
 	"fmt"
-	"oak-compiler/internal/pkg/ast"
-	"oak-compiler/internal/pkg/ast/typed"
-	"oak-compiler/internal/pkg/common"
+	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast/typed"
+	"nar-compiler/internal/pkg/common"
 	"slices"
 	"strings"
 )
@@ -529,7 +529,7 @@ func simplifyPattern(pattern typed.Pattern) (Pattern, error) {
 					{Name: "Nil"},
 					{Name: "Cons", Values: []typed.Type{a, &typed.TNative{
 						Location: e.Location,
-						Name:     common.OakCoreListList,
+						Name:     common.NarCoreListList,
 						Args:     []typed.Type{a},
 					}}},
 				},
@@ -559,7 +559,7 @@ func simplifyPattern(pattern typed.Pattern) (Pattern, error) {
 					{Name: "Nil"},
 					{Name: "Cons", Values: []typed.Type{a, &typed.TNative{
 						Location: e.Location,
-						Name:     common.OakCoreListList,
+						Name:     common.NarCoreListList,
 						Args:     []typed.Type{a},
 					}}},
 				},
