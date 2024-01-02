@@ -156,7 +156,10 @@ func composeExpression(
 			id := common.MakeFullIdentifier(e.ModuleName, e.DefinitionName)
 			funcIndex, ok := binary.FuncsMap[id]
 			if !ok {
-				return nil, nil, common.NewCompilerError(fmt.Sprintf("global definition `%v` not found", id))
+				return nil, nil, common.Error{
+					Location: e.Location,
+					Message:  fmt.Sprintf("global definition `%v` not found", id),
+				}
 			}
 			ops, locations = loadGlobal(funcIndex, e.Location, ops, locations)
 			break

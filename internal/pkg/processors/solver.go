@@ -48,9 +48,9 @@ func Solve(
 	moduleName ast.QualifiedIdentifier,
 	modules map[ast.QualifiedIdentifier]*normalized.Module,
 	typedModules map[ast.QualifiedIdentifier]*typed.Module,
-) error {
+) (errors []error) {
 	if _, ok := typedModules[moduleName]; ok {
-		return nil
+		return
 	}
 
 	m := modules[moduleName]
@@ -58,7 +58,8 @@ func Solve(
 	for dep := range m.Dependencies {
 		if dep != moduleName {
 			if err := Solve(dep, modules, typedModules); err != nil {
-				return err
+				errors = append(errors, err...)
+				return
 			}
 		}
 	}
@@ -89,7 +90,8 @@ func Solve(
 
 		td, err := annotateDefinition(modules, localTyped, m.Name, def, nil)
 		if err != nil {
-			return err
+			errors = append(errors, err)
+			continue
 		}
 
 		if dumpDebugOutput {
@@ -104,7 +106,8 @@ func Solve(
 
 		eqs, err = equatizeDefinition(eqs, td, localDefsMap{}, nil, nil)
 		if err != nil {
-			return err
+			errors = append(errors, err)
+			continue
 		}
 
 		if dumpDebugOutput {
@@ -127,17 +130,19 @@ func Solve(
 
 		if err != nil {
 			if _, ok := err.(common.Error); !ok {
-				return common.Error{
+				err = common.Error{
 					Location: def.Location,
 					Message:  fmt.Sprintf("failed while trying to solve type of %s.%s: %s", m.Name, def.Name, err.Error()),
 				}
 			}
-			return err
+			errors = append(errors, err)
+			continue
 		}
 
 		td, err = applyDefinition(td, subst)
 		if err != nil {
-			return err
+			errors = append(errors, err)
+			continue
 		}
 
 		if dumpDebugOutput {
@@ -149,7 +154,7 @@ func Solve(
 
 		o.Definitions = append(o.Definitions, td)
 	}
-	return nil
+	return
 }
 
 func annotateDefinition(
@@ -821,11 +826,16 @@ func getAnnotatedGlobal(
 			Message:  fmt.Sprintf("module `%s` not found", moduleName),
 		}
 	}
-	nDef, ok := common.Find(func(definition *normalized.Definition) bool {
-		return definition.Name == definitionName
-	}, mod.Definitions)
+	nDef, ok := common.Find(
+		func(definition *normalized.Definition) bool {
+			return definition.Name == definitionName
+		},
+		mod.Definitions)
 	if !ok {
-		return nil, common.NewCompilerError(fmt.Sprintf("definition `%s` not found", definitionName))
+		return nil, common.Error{
+			Location: loc,
+			Message:  fmt.Sprintf("definition `%s` not found", definitionName),
+		}
 	}
 
 	def, ok := common.Find(func(definition *typed.Definition) bool {
@@ -1655,6 +1665,9 @@ func unifyAll(eqs []equation, loc []ast.Location) (map[uint64]typed.Type, error)
 	var i int
 	subst := map[uint64]typed.Type{}
 	for _, eq := range eqs {
+		if eq.left == nil || eq.right == nil {
+			continue
+		}
 		var extra []ast.Location
 		if eq.loc != nil {
 			extra = append(extra, *eq.loc)
@@ -1934,6 +1947,9 @@ func unify(x typed.Type, y typed.Type, loc []ast.Location, subst map[uint64]type
 		}
 	default:
 		return common.NewCompilerError("impossible case")
+	}
+	if x == nil || y == nil {
+		print("todo")
 	}
 	return common.Error{
 		Extra:   append(loc, x.GetLocation(), y.GetLocation()),

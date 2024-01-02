@@ -10,10 +10,9 @@
 * [x] Check if all cases are exhaustive
 * [x] Check if function parameters are exhaustive (for data types)
 * [x] Smart import system
-
+* [x] Support of \uNNNN string characters
 
 ## Compiler v0.2
-* [ ] Support of \uNNNN string characters
 * [ ] Nested record fields access
 * [ ] Prefix operators (like infix ones, neg is ugly)
 * [ ] "tree shaking" to strip unused code

@@ -14,13 +14,24 @@ import (
 
 func (s *server) compiler() {
 	modifiedDocs := map[lsp.DocumentURI]struct{}{}
+	forcedDocs := map[lsp.DocumentURI]struct{}{}
 	modifiedPackages := map[ast.PackageIdentifier]struct{}{}
+
+	doc := <-s.compileChan
+	modifiedDocs[doc.uri] = struct{}{}
+	if doc.force {
+		forcedDocs[doc.uri] = struct{}{}
+	}
+
 	for {
 		waitTimeout := true
 		for waitTimeout {
 			select {
-			case docUri := <-s.compileChan:
-				modifiedDocs[docUri] = struct{}{}
+			case doc = <-s.compileChan:
+				modifiedDocs[doc.uri] = struct{}{}
+				if doc.force {
+					forcedDocs[doc.uri] = struct{}{}
+				}
 				continue
 			case <-time.After(500 * time.Millisecond):
 				waitTimeout = false
@@ -30,6 +41,11 @@ func (s *server) compiler() {
 
 		if len(modifiedDocs) == 0 {
 			continue
+		}
+
+		for uri := range forcedDocs {
+			delete(forcedDocs, uri)
+			s.getPackageOfDocument(uri, true)
 		}
 
 		for name, mod := range s.parsedModules {
@@ -47,7 +63,7 @@ func (s *server) compiler() {
 
 		for uri := range modifiedDocs {
 			delete(modifiedDocs, uri)
-			pkgName := s.getPackageOfDocument(uri)
+			pkgName := s.getPackageOfDocument(uri, false)
 			if pkgName != "" {
 				modifiedPackages[pkgName] = struct{}{}
 			}
@@ -71,7 +87,7 @@ func findPackageRoot(path string) string {
 	return ""
 }
 
-func (s *server) getPackageOfDocument(path lsp.DocumentURI) ast.PackageIdentifier {
+func (s *server) getPackageOfDocument(path lsp.DocumentURI, forceReload bool) ast.PackageIdentifier {
 	pkgRoot, ok := s.documentToPackageRoot[path]
 	if !ok {
 		safePath := string(path)
@@ -88,7 +104,10 @@ func (s *server) getPackageOfDocument(path lsp.DocumentURI) ast.PackageIdentifie
 	}
 
 	pkgName, ok := s.packageRootToName[pkgRoot]
-	if !ok {
+	if !ok || forceReload {
+		if forceReload {
+			delete(s.loadedPackages, pkgName)
+		}
 		progress := func(_ float32, msg string) {
 			s.notify("window/showMessage", lsp.ShowMessageParams{
 				Type: lsp.MTInfo, Message: msg,

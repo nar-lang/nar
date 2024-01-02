@@ -26,7 +26,7 @@ type server struct {
 	responseChan     chan rpcResponse
 	notificationChan chan rpcNotification
 	inChan           chan []byte
-	compileChan      chan lsp.DocumentURI
+	compileChan      chan docChange
 
 	openedDocuments       map[lsp.DocumentURI]*lsp.TextDocumentItem
 	documentToPackageRoot map[lsp.DocumentURI]string
@@ -35,6 +35,11 @@ type server struct {
 	parsedModules         map[ast.QualifiedIdentifier]*parsed.Module
 	normalizedModules     map[ast.QualifiedIdentifier]*normalized.Module
 	typedModules          map[ast.QualifiedIdentifier]*typed.Module
+}
+
+type docChange struct {
+	uri   lsp.DocumentURI
+	force bool
 }
 
 type LanguageServer interface {
@@ -47,7 +52,7 @@ func NewServer(cacheDir string, writeResponse func([]byte)) LanguageServer {
 		inChan:                make(chan []byte, 16),
 		responseChan:          make(chan rpcResponse, 16),
 		notificationChan:      make(chan rpcNotification, 128),
-		compileChan:           make(chan lsp.DocumentURI, 1024),
+		compileChan:           make(chan docChange, 1024),
 		log:                   &common.LogWriter{},
 		cacheDir:              cacheDir,
 		openedDocuments:       map[lsp.DocumentURI]*lsp.TextDocumentItem{},

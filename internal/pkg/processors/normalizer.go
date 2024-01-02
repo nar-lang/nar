@@ -20,31 +20,29 @@ type namedTypeMap map[ast.FullIdentifier]*normalized.TPlaceholder
 func PreNormalize(
 	moduleName ast.QualifiedIdentifier,
 	modules map[ast.QualifiedIdentifier]*parsed.Module,
-) error {
+) (errors []error) {
 	m, ok := modules[moduleName]
 	if !ok {
-		return nil
+		return
 	}
 
 	flattenDataTypes(m)
-	if err := unwrapImports(m, modules); err != nil {
-		return err
-	}
-	return nil
+	return unwrapImports(m, modules)
 }
 
 func Normalize(
 	moduleName ast.QualifiedIdentifier,
 	modules map[ast.QualifiedIdentifier]*parsed.Module,
 	normalizedModules map[ast.QualifiedIdentifier]*normalized.Module,
-) error {
+) (errors []error) {
 	if _, ok := normalizedModules[moduleName]; ok {
-		return nil
+		return
 	}
 
 	m, ok := modules[moduleName]
 	if !ok {
-		return common.Error{Location: m.Location, Message: fmt.Sprintf("module `%s` not found", moduleName)}
+		errors = []error{common.Error{Location: m.Location, Message: fmt.Sprintf("module `%s` not found", moduleName)}}
+		return
 	}
 
 	o := &normalized.Module{
@@ -57,11 +55,15 @@ func Normalize(
 	for _, def := range m.Definitions {
 		nDef, params, err := normalizeDefinition(modules, m, def, o)
 		if err != nil {
-			return err
+			errors = append(errors, err)
+			continue
 		}
-		nDef.Expression, err = flattenLambdas(nDef.Name, nDef.Expression, o, params)
-		if err != nil {
-			return err
+		if nDef.Expression != nil {
+			nDef.Expression, err = flattenLambdas(nDef.Name, nDef.Expression, o, params)
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			}
 		}
 		o.Definitions = append(o.Definitions, nDef)
 	}
@@ -70,11 +72,11 @@ func Normalize(
 
 	for modName := range o.Dependencies {
 		if err := Normalize(modName, modules, normalizedModules); err != nil {
-			return err
+			errors = append(errors, err...)
 		}
 	}
 
-	return nil
+	return
 }
 
 func extractLocals(pattern normalized.Pattern, locals map[ast.Identifier]struct{}) error {
@@ -719,14 +721,15 @@ func flattenDataTypes(m *parsed.Module) {
 	}
 }
 
-func unwrapImports(module *parsed.Module, modules map[ast.QualifiedIdentifier]*parsed.Module) error {
+func unwrapImports(module *parsed.Module, modules map[ast.QualifiedIdentifier]*parsed.Module) (errors []error) {
 	for i, imp := range module.Imports {
 		m, ok := modules[imp.ModuleIdentifier]
 		if !ok {
-			return common.Error{
+			errors = append(errors, common.Error{
 				Location: imp.Location,
 				Message:  fmt.Sprintf("module `%s` not found", imp.ModuleIdentifier),
-			}
+			})
+			continue
 		}
 		modName := m.Name
 		if imp.Alias != nil {
@@ -776,7 +779,7 @@ func unwrapImports(module *parsed.Module, modules map[ast.QualifiedIdentifier]*p
 		imp.Exposing = exp
 		module.Imports[i] = imp
 	}
-	return nil
+	return
 }
 
 func normalizeDefinition(
@@ -799,9 +802,11 @@ func normalizeDefinition(
 		return nil, nil, err
 	}
 	locals := maps.Clone(params)
-	o.Expression, err = normalizeExpression(locals, modules, module, def.Expression, normalizedModule)
-	if err != nil {
-		return nil, nil, err
+	if def.Expression != nil {
+		o.Expression, err = normalizeExpression(locals, modules, module, def.Expression, normalizedModule)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	o.Type, err = normalizeType(modules, module, nil, def.Type, nil)
 	if err != nil {

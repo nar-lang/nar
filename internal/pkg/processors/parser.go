@@ -12,7 +12,7 @@ import (
 	"unicode"
 )
 
-func ParseWithContent(filePath string, fileContent string) (*parsed.Module, error) {
+func ParseWithContent(filePath string, fileContent string) (*parsed.Module, []error) {
 	src := &source{
 		filePath: filePath,
 		text:     []rune(fileContent),
@@ -20,10 +20,10 @@ func ParseWithContent(filePath string, fileContent string) (*parsed.Module, erro
 	return parseModule(src)
 }
 
-func Parse(filePath string) (*parsed.Module, error) {
+func Parse(filePath string) (*parsed.Module, []error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, common.NewSystemError(fmt.Errorf("failed to read module `%s`: %w", filePath, err))
+		return nil, []error{common.NewSystemError(fmt.Errorf("failed to read module `%s`: %w", filePath, err))}
 	}
 	return ParseWithContent(filePath, string(data))
 }
@@ -360,22 +360,77 @@ func parseChar(src *source) (*rune, error) {
 	if !isOk(src) {
 		return nil, newError(*src, "character is not closed before end of file")
 	}
+	escaped := src.text[src.cursor] == SmbEscape
 
+	var r rune
+
+	if escaped {
+		src.cursor++
+		r = unicode.ToLower(src.text[src.cursor])
+
+		switch r {
+		case '0':
+			r = '\u0000'
+			break
+		case 'a':
+			r = '\a'
+			break
+		case 'b':
+			r = '\b'
+			break
+		case 'f':
+			r = '\f'
+			break
+		case 'n':
+			r = '\n'
+			break
+		case 'r':
+			r = '\r'
+			break
+		case 't':
+			r = '\t'
+			break
+		case 'v':
+			r = '\v'
+			break
+		case SmbQuoteChar:
+			r = SmbQuoteChar
+			break
+		case SmbEscape:
+			r = SmbEscape
+			break
+		case 'u':
+			src.cursor++
+			if !isOk(src) {
+				return nil, newError(*src, "expected unicode character here")
+			}
+			var value []rune
+			for i := 0; i < 4; i++ {
+				if !isOk(src) || !unicode.IsDigit(src.text[src.cursor]) {
+					return nil, newError(*src, "expected unicode character here")
+				}
+				value = append(value, src.text[src.cursor])
+				src.cursor++
+			}
+			valueStr := string(value)
+			valueInt, err := strconv.ParseInt(valueStr, 16, 32)
+			if err != nil {
+				return nil, newError(*src, "failed to parse unicode character: "+err.Error())
+			}
+			r = rune(valueInt)
+			break
+		default:
+			return nil, newError(*src, "unknown escape sequence")
+		}
+	} else {
+		r = src.text[src.cursor]
+	}
 	src.cursor++
-
 	if !isOk(src) || SmbQuoteChar != src.text[src.cursor] {
 		return nil, newError(*src, "expected "+string(SmbQuoteChar)+"here")
 	}
 	src.cursor++
 
-	if src.text[src.cursor-2] == SmbEscape {
-		if !isOk(src) || SmbQuoteChar != src.text[src.cursor] {
-			return nil, newError(*src, "expected "+string(SmbQuoteChar)+"here")
-		}
-		src.cursor++
-	}
-
-	r := src.text[src.cursor-2]
 	skipComment(src)
 	return &r, nil
 }
@@ -1417,107 +1472,120 @@ func parseImport(src *source) (*parsed.Import, error) {
 	}, nil
 }
 
-func parseInfixFn(src *source) (*parsed.Infix, error) {
+func parseInfixFn(src *source) (infix *parsed.Infix, err error) {
 	if !readExact(src, KwInfix) {
-		return nil, nil
+		return
 	}
 	cursor := src.cursor
 	hidden := readExact(src, KwHidden)
 
 	name := parseInfixIdentifier(src, true)
 	if nil == name {
-		return nil, newError(*src, "expected infix statement name here")
+		err = newError(*src, "expected infix statement name here")
+		return
 	}
+
+	infix = &parsed.Infix{
+		Location: loc(src, cursor),
+		Hidden:   hidden,
+		Name:     *name,
+	}
+
 	if !readExact(src, SeqColon) {
-		return nil, newError(*src, "expected `:` here")
+		err = newError(*src, "expected `:` here")
+		return
 	}
 	if !readExact(src, SeqParenthesisOpen) {
-		return nil, newError(*src, "expected `(` here")
-	}
-	var assoc parsed.Associativity
-	if readExact(src, KwLeft) {
-		assoc = parsed.Left
-	} else if readExact(src, KwRight) {
-		assoc = parsed.Right
-	} else if readExact(src, KwNon) {
-		assoc = parsed.None
-	} else {
-		return nil, newError(*src, "expected `left`, `right` or `non` here")
+		err = newError(*src, "expected `(` here")
+		return
 	}
 
-	precedence, err := parseInt(src)
+	if readExact(src, KwLeft) {
+		infix.Associativity = parsed.Left
+	} else if readExact(src, KwRight) {
+		infix.Associativity = parsed.Right
+	} else if readExact(src, KwNon) {
+		infix.Associativity = parsed.None
+	} else {
+		err = newError(*src, "expected `left`, `right` or `non` here")
+		return
+	}
+
+	var precedence *int64
+	precedence, err = parseInt(src)
 	if err != nil {
-		return nil, err
+		return
 	}
 	if precedence == nil {
-		return nil, newError(*src, "expected precedence (integer number) here")
+		err = newError(*src, "expected precedence (integer number) here")
+		return
 	}
+	infix.Precedence = int(*precedence)
 
 	if !readExact(src, SeqParenthesisClose) {
-		return nil, newError(*src, "expected `)` here")
+		err = newError(*src, "expected `)` here")
+		return
 	}
 	if !readExact(src, SeqEqual) {
-		return nil, newError(*src, "expected `=` here")
+		err = newError(*src, "expected `=` here")
+		return
 	}
 
 	aliasCursor := src.cursor
 	alias := readIdentifier(src, false)
 	if nil == alias {
-		return nil, newError(*src, "expected definition name here")
+		err = newError(*src, "expected definition name here")
+		return
 	}
-	return &parsed.Infix{
-		Location:      loc(src, cursor),
-		Hidden:        hidden,
-		Name:          *name,
-		Associativity: assoc,
-		Precedence:    int(*precedence),
-		AliasLocation: loc(src, aliasCursor),
-		Alias:         ast.Identifier(*alias),
-	}, nil
+	infix.Alias = ast.Identifier(*alias)
+	infix.AliasLocation = loc(src, aliasCursor)
+	return
 }
 
-func parseAlias(src *source) (*parsed.Alias, error) {
+func parseAlias(src *source) (alias *parsed.Alias, err error) {
 	if !readExact(src, KwAlias) {
-		return nil, nil
+		return
 	}
 
 	cursor := src.cursor
 	hidden := readExact(src, KwHidden)
 	native := readExact(src, KwNative)
-	var type_ parsed.Type
 	name := readIdentifier(src, false)
 
 	if nil == name {
-		return nil, newError(*src, "expected alias name here")
+		err = newError(*src, "expected alias name here")
 	}
-	typeParams, err := parseTypeParamNames(src)
+
+	alias = &parsed.Alias{
+		Location: loc(src, cursor),
+		Hidden:   hidden,
+		Name:     ast.Identifier(*name),
+	}
+
+	alias.Params, err = parseTypeParamNames(src)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	if !native {
 		if !readExact(src, SeqEqual) {
-			return nil, newError(*src, "expected `=` here")
+			err = newError(*src, "expected `=` here")
+			return
 		}
-		type_, err = parseType(src)
+		alias.Type, err = parseType(src)
 		if err != nil {
-			return nil, err
+			return
 		}
-		if nil == type_ {
-			return nil, newError(*src, "expected definedReturn declaration here")
+		if nil == alias.Type {
+			err = newError(*src, "expected definedReturn declaration here")
+			return
 		}
 	}
 
-	return &parsed.Alias{
-		Location: loc(src, cursor),
-		Hidden:   hidden,
-		Name:     ast.Identifier(*name),
-		Params:   typeParams,
-		Type:     type_,
-	}, nil
+	return
 }
 
-func parseDataType(src *source) (*parsed.DataType, error) {
+func parseDataType(src *source) (dataType *parsed.DataType, err error) {
 	if !readExact(src, KwType) {
 		return nil, nil
 	}
@@ -1526,83 +1594,95 @@ func parseDataType(src *source) (*parsed.DataType, error) {
 	hidden := readExact(src, KwHidden)
 	name := readIdentifier(src, false)
 	if nil == name {
-		return nil, newError(*src, "expected data name here")
+		err = newError(*src, "expected data name here")
+		return
 	}
-	typeParams, err := parseTypeParamNames(src)
+
+	dataType = &parsed.DataType{
+		Location: loc(src, cursor),
+		Hidden:   hidden,
+		Name:     ast.Identifier(*name),
+	}
+
+	dataType.Params, err = parseTypeParamNames(src)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	if !readExact(src, SeqEqual) {
-		return nil, newError(*src, "expected `=` here")
+		err = newError(*src, "expected `=` here")
+		return
 	}
 
-	var options []parsed.DataTypeOption
 	for {
-		option, err := parseDataOption(src)
+		var option *parsed.DataTypeOption
+		option, err = parseDataOption(src)
 		if err != nil {
-			return nil, err
+			return
 		}
-		options = append(options, *option)
+		dataType.Options = append(dataType.Options, *option)
 		if !readExact(src, SeqBar) {
 			break
 		}
 	}
-	return &parsed.DataType{
-		Location: loc(src, cursor),
-		Hidden:   hidden,
-		Name:     ast.Identifier(*name),
-		Params:   typeParams,
-		Options:  options,
-	}, nil
+	return
 }
 
-func parseDefinition(src *source, modName ast.QualifiedIdentifier) (*parsed.Definition, error) {
+func parseDefinition(src *source, modName ast.QualifiedIdentifier) (def *parsed.Definition, err error) {
 	cursor := src.cursor
 
 	if !readExact(src, KwDef) {
-		return nil, nil
+		return
 	}
 	hidden := readExact(src, KwHidden)
 	native := readExact(src, KwNative)
 	name := readIdentifier(src, false)
-	var type_ parsed.Type
-	var expr parsed.Expression
 
 	if nil == name {
-		return nil, newError(*src, "expected data name here")
+		err = newError(*src, "expected data name here")
+		return
+	}
+
+	def = &parsed.Definition{
+		Location: loc(src, cursor),
+		Hidden:   hidden,
+		Name:     ast.Identifier(*name),
 	}
 
 	typeCursor := src.cursor
-	params, ret, err := parseSignature(src)
+	params, ret, typeErr := parseSignature(src)
 	if err != nil {
-		return nil, err
+		err = typeErr
+		return
 	}
 	if nil == params {
 		if readExact(src, SeqColon) {
-			type_, err = parseType(src)
+			def.Type, err = parseType(src)
 			if err != nil {
-				return nil, err
+				return
 			}
-			if nil == type_ {
-				return nil, newError(*src, "expected definedReturn here")
+			if nil == def.Type {
+				err = newError(*src, "expected definedReturn here")
+				return
 			}
 		}
 		if native {
-			expr = parsed.NativeCall{
+			def.Expression = parsed.NativeCall{
 				Location: loc(src, typeCursor),
 				Name:     common.MakeFullIdentifier(modName, ast.Identifier(*name)),
 			}
 		} else {
 			if !readExact(src, SeqEqual) {
-				return nil, newError(*src, "expected `=` here")
+				err = newError(*src, "expected `=` here")
+				return
 			}
-			expr, err = parseExpression(src, false)
+			def.Expression, err = parseExpression(src, false)
 			if err != nil {
-				return nil, err
+				return
 			}
-			if nil == expr {
-				return nil, newError(*src, "expected expression here")
+			if nil == def.Expression {
+				err = newError(*src, "expected expression here")
+				return
 			}
 		}
 	} else {
@@ -1615,57 +1695,56 @@ func parseDefinition(src *source, modName ast.QualifiedIdentifier) (*parsed.Defi
 						Name:     ast.QualifiedIdentifier(named.Name),
 					})
 				} else {
-					return nil, newError(*src,
+					err = newError(*src,
 						"native function should start with lowercase letter and cannot be a pattern match")
+					return
 				}
 			}
-			expr = parsed.NativeCall{
+			def.Expression = parsed.NativeCall{
 				Location: loc(src, typeCursor),
 				Name:     common.MakeFullIdentifier(modName, ast.Identifier(*name)),
 				Args:     args,
 			}
 		} else {
 			if !readExact(src, SeqEqual) {
-				return nil, newError(*src, "expected `=` here")
+				err = newError(*src, "expected `=` here")
+				return
 			}
-			expr, err = parseExpression(src, false)
+			def.Expression, err = parseExpression(src, false)
 			if err != nil {
-				return nil, err
+				return
 			}
-			if nil == expr {
-				return nil, newError(*src, "expected expression here")
+			if nil == def.Expression {
+				err = newError(*src, "expected expression here")
+				return
 			}
 		}
 
-		type_ = parsed.TFunc{
+		def.Type = parsed.TFunc{
 			Location: loc(src, typeCursor),
 			Params:   common.Map(func(x parsed.Pattern) parsed.Type { return x.GetType() }, params),
 			Return:   ret,
 		}
+		def.Params = params
 	}
-
-	return &parsed.Definition{
-		Location:   loc(src, cursor),
-		Hidden:     hidden,
-		Name:       ast.Identifier(*name),
-		Params:     params,
-		Expression: expr,
-		Type:       type_,
-	}, nil
+	return
 }
 
-func parseModule(src *source) (*parsed.Module, error) {
+func parseModule(src *source) (module *parsed.Module, errors []error) {
 	skipComment(src)
 
 	if !readExact(src, KwModule) {
-		return nil, newError(*src, "expected `module` keyword here")
+		errors = append(errors, newError(*src, "expected `module` keyword here"))
+		return
 	}
 
 	name := readIdentifier(src, true)
 
 	if nil == name {
-		return nil, newError(*src, "expected module name here")
+		errors = append(errors, newError(*src, "expected module name here"))
+		return
 	}
+
 	m := parsed.Module{
 		Name:     *name,
 		Location: loc(src, 0),
@@ -1674,7 +1753,8 @@ func parseModule(src *source) (*parsed.Module, error) {
 	for {
 		imp, err := parseImport(src)
 		if err != nil {
-			return nil, err
+			errors = append(errors, err)
+			skipToNextStatement(src)
 		}
 		if imp == nil {
 			break
@@ -1684,46 +1764,83 @@ func parseModule(src *source) (*parsed.Module, error) {
 
 	for {
 		alias, err := parseAlias(src)
-		if err != nil {
-			return nil, err
-		}
 		if alias != nil {
 			m.Aliases = append(m.Aliases, *alias)
+			if err == nil {
+				continue
+			}
+		}
+		if err != nil {
+			errors = append(errors, err)
+			skipToNextStatement(src)
 			continue
 		}
 
 		infixFn, err := parseInfixFn(src)
-		if err != nil {
-			return nil, err
-		}
 		if infixFn != nil {
 			m.InfixFns = append(m.InfixFns, *infixFn)
+			if err == nil {
+				continue
+			}
+		}
+		if err != nil {
+			errors = append(errors, err)
+			skipToNextStatement(src)
 			continue
 		}
 
 		definition, err := parseDefinition(src, *name)
-		if err != nil {
-			return nil, err
-		}
 		if definition != nil {
 			m.Definitions = append(m.Definitions, *definition)
+			if err == nil {
+				continue
+			}
+		}
+		if err != nil {
+			errors = append(errors, err)
+			skipToNextStatement(src)
 			continue
 		}
 
 		dataType, err := parseDataType(src)
-		if err != nil {
-			return nil, err
-		}
+
 		if dataType != nil {
 			m.DataTypes = append(m.DataTypes, *dataType)
+			if err == nil {
+				continue
+			}
+		}
+		if err != nil {
+			errors = append(errors, err)
+			skipToNextStatement(src)
 			continue
 		}
 
 		if isOk(src) {
-			return nil, newError(*src, "failed to parse statement")
+			errors = append(errors, newError(*src, "failed to parse statement"))
+			if skipToNextStatement(src) {
+				continue
+			}
 		}
 		break
 	}
 
-	return &m, nil
+	return &m, errors
+}
+
+func skipToNextStatement(src *source) bool {
+	for isOk(src) {
+		src.cursor++
+		start := src.cursor
+
+		if readExact(src, KwAlias) ||
+			readExact(src, KwDef) ||
+			readExact(src, KwType) ||
+			readExact(src, KwInfix) ||
+			readExact(src, KwModule) {
+			src.cursor = start
+			return true
+		}
+	}
+	return false
 }

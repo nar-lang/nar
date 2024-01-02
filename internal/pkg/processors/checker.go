@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func CheckPatterns(modules map[ast.QualifiedIdentifier]*typed.Module) error {
+func CheckPatterns(modules map[ast.QualifiedIdentifier]*typed.Module) (errors []error) {
 	var names []ast.QualifiedIdentifier
 	for name := range modules {
 		names = append(names, name)
@@ -21,11 +21,12 @@ func CheckPatterns(modules map[ast.QualifiedIdentifier]*typed.Module) error {
 		for _, definition := range module.Definitions {
 			err := checkDefinition(definition)
 			if err != nil {
-				return err
+				errors = append(errors, err)
+				continue
 			}
 		}
 	}
-	return nil
+	return
 }
 
 func checkDefinition(definition *typed.Definition) error {
@@ -38,6 +39,9 @@ func checkDefinition(definition *typed.Definition) error {
 }
 
 func checkExpression(expression typed.Expression) error {
+	if expression == nil {
+		return nil
+	}
 	switch expression.(type) {
 	case *typed.Select:
 		e := expression.(*typed.Select)

@@ -40,13 +40,13 @@ func (s *server) S_setTraceNotification(params *traceNotificationParams) error {
 
 func (s *server) TextDocument_didOpen(params *lsp.DidOpenTextDocumentParams) error {
 	s.openedDocuments[params.TextDocument.URI] = &params.TextDocument
-	s.compileChan <- params.TextDocument.URI
+	s.compileChan <- docChange{params.TextDocument.URI, true}
 	return nil
 }
 
 func (s *server) TextDocument_didChange(params *lsp.DidChangeTextDocumentParams) error {
 	s.openedDocuments[params.TextDocument.URI].Text = params.ContentChanges[0].Text
-	s.compileChan <- params.TextDocument.URI
+	s.compileChan <- docChange{params.TextDocument.URI, false}
 	return nil
 
 }
