@@ -66,6 +66,7 @@ func Solve(
 
 	o := typed.Module{
 		Name:         m.Name,
+		Location:     m.Location,
 		Dependencies: m.Dependencies,
 	}
 
@@ -720,7 +721,7 @@ func annotateExpression(
 				return nil, err
 			}
 			t := def.DefinedType
-			if len(def.Params) > 0 {
+			if len(def.Params) > 0 && t != nil {
 				t = t.(*typed.TFunc).Return
 			}
 			args, err := common.MapError(annotate, e.Args)
@@ -731,12 +732,16 @@ func annotateExpression(
 			if err != nil {
 				return nil, err
 			}
+			var dt *typed.TData
+			if t != nil {
+				dt = t.(*typed.TData)
+			}
 			o = &typed.Constructor{
 				Location:   e.Location,
 				Type:       type_,
 				DataName:   common.MakeFullIdentifier(e.ModuleName, e.DataName),
 				OptionName: e.OptionName,
-				DataType:   t.(*typed.TData),
+				DataType:   dt,
 				Args:       args,
 			}
 			break
@@ -1578,16 +1583,16 @@ func equatizeExpression(
 	case *typed.Constructor:
 		{
 			e := expr.(*typed.Constructor)
+			r := typed.TData{Location: e.Location, Name: e.DataName}
+			if e.DataType != nil {
+				r.Options = e.DataType.Options
+				r.Args = e.DataType.Args
+			}
 			eqs = append(eqs, equation{
-				loc:  loc,
-				left: e.Type,
-				right: &typed.TData{
-					Location: e.Location,
-					Name:     e.DataName,
-					Options:  e.DataType.Options,
-					Args:     e.DataType.Args,
-				},
-				expr: e,
+				loc:   loc,
+				left:  e.Type,
+				right: &r,
+				expr:  e,
 			})
 			for _, a := range e.Args {
 				eqs, err = equatizeExpression(eqs, a, localDefs, stack, loc)

@@ -79,7 +79,7 @@ func (b *Binary) Build(writer io.Writer, debug bool) (err error) {
 		if debug {
 			ws(fn.FilePath)
 			for _, loc := range fn.Locations {
-				l, c := loc.GetLineAndColumn()
+				l, c, _, _ := loc.GetLineAndColumn()
 				w(uint32(l))
 				w(uint32(c))
 			}

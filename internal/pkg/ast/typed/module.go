@@ -40,6 +40,7 @@ func (d *Definition) String() string {
 
 type Module struct {
 	Name         ast.QualifiedIdentifier
+	Location     ast.Location
 	Dependencies map[ast.QualifiedIdentifier][]ast.Identifier
 	Definitions  []*Definition
 }

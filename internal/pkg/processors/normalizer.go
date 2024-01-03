@@ -47,6 +47,7 @@ func Normalize(
 
 	o := &normalized.Module{
 		Name:         m.Name,
+		Location:     m.Location,
 		Dependencies: map[ast.QualifiedIdentifier][]ast.Identifier{},
 	}
 
@@ -56,13 +57,11 @@ func Normalize(
 		nDef, params, err := normalizeDefinition(modules, m, def, o)
 		if err != nil {
 			errors = append(errors, err)
-			continue
 		}
 		if nDef.Expression != nil {
 			nDef.Expression, err = flattenLambdas(nDef.Name, nDef.Expression, o, params)
 			if err != nil {
 				errors = append(errors, err)
-				continue
 			}
 		}
 		o.Definitions = append(o.Definitions, nDef)
@@ -785,34 +784,33 @@ func unwrapImports(module *parsed.Module, modules map[ast.QualifiedIdentifier]*p
 func normalizeDefinition(
 	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module, def parsed.Definition,
 	normalizedModule *normalized.Module,
-) (*normalized.Definition, map[ast.Identifier]struct{}, error) {
+) (o *normalized.Definition, params map[ast.Identifier]struct{}, err error) {
 	lastDefinitionId++
-	o := &normalized.Definition{
+	o = &normalized.Definition{
 		Id:       lastDefinitionId,
 		Name:     def.Name,
 		Location: def.Location,
 		Hidden:   def.Hidden,
 	}
-	params := map[ast.Identifier]struct{}{}
-	var err error
+	params = map[ast.Identifier]struct{}{}
 	o.Params, err = common.MapError(func(x parsed.Pattern) (normalized.Pattern, error) {
 		return normalizePattern(params, modules, module, x, normalizedModule)
 	}, def.Params)
 	if err != nil {
-		return nil, nil, err
+		return
 	}
 	locals := maps.Clone(params)
 	if def.Expression != nil {
 		o.Expression, err = normalizeExpression(locals, modules, module, def.Expression, normalizedModule)
 		if err != nil {
-			return nil, nil, err
+			return
 		}
 	}
 	o.Type, err = normalizeType(modules, module, nil, def.Type, nil)
 	if err != nil {
-		return nil, nil, err
+		return
 	}
-	return o, params, nil
+	return
 }
 
 func normalizePattern(
@@ -902,7 +900,7 @@ func normalizePattern(
 				return nil, common.Error{
 					Location: e.Location,
 					Message: fmt.Sprintf(
-						"ambiguous data constructor `%s`. Can be one of [%s]. "+
+						"ambiguous data constructor `%s`, it can be one of %s. "+
 							"Use import or qualified identifer to clarify which one to use",
 						e.Name, common.Join(ids, ", ")),
 				}
@@ -1010,7 +1008,7 @@ func normalizeExpression(
 			return common.Error{
 				Location: loc,
 				Message: fmt.Sprintf(
-					"ambiguous infix identifier `%s`. Can be one of [%s]. Use import to clarify which one to use",
+					"ambiguous infix identifier `%s`, it can be one of %s. Use import to clarify which one to use",
 					name, common.Join(ids, ", ")),
 			}
 		}
@@ -1025,7 +1023,7 @@ func normalizeExpression(
 			return common.Error{
 				Location: loc,
 				Message: fmt.Sprintf(
-					"ambiguous identifier `%s`. Can be one of [%s]. Use import or qualified identifer to clarify which one to use",
+					"ambiguous identifier `%s`, it can be one of %s. Use import or qualified identifer to clarify which one to use",
 					name, common.Join(ids, ", ")),
 			}
 		}
@@ -1490,7 +1488,10 @@ func normalizeExpression(
 				return normalizeExpression(locals, modules, module, varAccess, normalizedModule)
 			}
 
-			return nil, common.Error{Location: e.Location, Message: "identifier not found"}
+			return nil, common.Error{
+				Location: e.Location,
+				Message:  fmt.Sprintf("identifier `%s` not found", e.Location.Text()),
+			}
 		}
 	case parsed.InfixVar:
 		{
@@ -1833,7 +1834,7 @@ func normalizeType(
 				return nil, common.Error{
 					Location: e.Location,
 					Message: fmt.Sprintf(
-						"ambiguous type `%s`. Can be one of [%s]. Use import or qualified name to clarify which one to use",
+						"ambiguous type `%s`, it can be one of %s. Use import or qualified name to clarify which one to use",
 						e.Name, common.Join(ids, ", ")),
 				}
 			}

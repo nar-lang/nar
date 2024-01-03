@@ -85,7 +85,7 @@ func composeDefinition(
 	return bytecode.Func{
 		NumArgs:   uint32(len(def.Params)),
 		Ops:       ops,
-		FilePath:  def.Location.FilePath,
+		FilePath:  def.Location.FilePath(),
 		Locations: locations,
 	}, nil
 }

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"pkg.nimblebun.works/go-lsp"
-	"strings"
 	"time"
 )
 
@@ -50,7 +49,8 @@ func (s *server) compiler() {
 
 		for name, mod := range s.parsedModules {
 			for uri := range modifiedDocs {
-				if "file://"+mod.Location.FilePath == string(uri) {
+				path := uriToPath(uri)
+				if mod.Location.FilePath() == path {
 					delete(s.parsedModules, name)
 					delete(s.normalizedModules, name)
 					delete(s.typedModules, name)
@@ -87,16 +87,13 @@ func findPackageRoot(path string) string {
 	return ""
 }
 
-func (s *server) getPackageOfDocument(path lsp.DocumentURI, forceReload bool) ast.PackageIdentifier {
-	pkgRoot, ok := s.documentToPackageRoot[path]
+func (s *server) getPackageOfDocument(uri lsp.DocumentURI, forceReload bool) ast.PackageIdentifier {
+	pkgRoot, ok := s.documentToPackageRoot[uri]
 	if !ok {
-		safePath := string(path)
-		if strings.HasPrefix(safePath, "file://") {
-			safePath = safePath[7:]
-		}
-		pkgRoot = findPackageRoot(safePath)
+		path := uriToPath(uri)
+		pkgRoot = findPackageRoot(path)
 		if pkgRoot != "" {
-			s.documentToPackageRoot[path] = pkgRoot
+			s.documentToPackageRoot[uri] = pkgRoot
 		}
 	}
 	if pkgRoot == "" {
@@ -113,7 +110,8 @@ func (s *server) getPackageOfDocument(path lsp.DocumentURI, forceReload bool) as
 				Type: lsp.MTInfo, Message: msg,
 			})
 		}
-		pkg, err := processors.LoadPackage(pkgRoot, s.cacheDir, "", progress, false, s.loadedPackages)
+		pkg, err := processors.LoadPackage(
+			pkgRoot, s.cacheDir, "", progress, false, s.loadedPackages)
 		if err != nil {
 			s.log.Err(err)
 		}
@@ -137,7 +135,7 @@ func (s *server) compile(pkgNames []ast.PackageIdentifier) {
 		s.typedModules,
 		log,
 		func(modulePath string) string {
-			if doc, ok := s.openedDocuments[lsp.DocumentURI("file://"+modulePath)]; ok {
+			if doc, ok := s.openedDocuments[pathToUri(modulePath)]; ok {
 				return doc.Text
 			}
 			return ""
@@ -150,7 +148,7 @@ func (s *server) compile(pkgNames []ast.PackageIdentifier) {
 
 	for _, moduleName := range affectedModuleNames {
 		if mod, ok := s.parsedModules[moduleName]; ok {
-			uri := lsp.DocumentURI("file://" + mod.Location.FilePath)
+			uri := pathToUri(mod.Location.FilePath())
 			if _, reported := diagnosticData[uri]; !reported {
 				s.notify("textDocument/publishDiagnostics", lsp.PublishDiagnosticsParams{
 					URI:         uri,
@@ -172,30 +170,19 @@ func (s *server) extractDiagnosticsData(log *common.LogWriter) map[lsp.DocumentU
 	diagnosticsData := map[lsp.DocumentURI][]lsp.Diagnostic{}
 
 	insertDiagnostic := func(e common.Error, severity lsp.DiagnosticSeverity) {
-		if e.Location.FilePath == "" {
+		if e.Location.IsEmpty() {
 			e.Location = e.Extra[0]
 			e.Extra = e.Extra[1:]
 		}
-		uri := lsp.DocumentURI("file://" + e.Location.FilePath)
-		line, c := e.Location.GetLineAndColumn()
+		uri := pathToUri(e.Location.FilePath())
 		diagnosticsData[uri] = append(diagnosticsData[uri], lsp.Diagnostic{
-			Range: lsp.Range{
-				Start: lsp.Position{Line: line - 1, Character: c - 1},
-				End:   lsp.Position{Line: line - 1, Character: c},
-			},
+			Range:    *locToRange(e.Location),
 			Severity: lsp.DSError,
 			Message:  e.Message,
 			RelatedInformation: common.Map(func(l ast.Location) lsp.DiagnosticRelatedInformation {
-				line, c := e.Location.GetLineAndColumn()
 				return lsp.DiagnosticRelatedInformation{
-					Location: lsp.Location{
-						URI: lsp.DocumentURI("file://" + l.FilePath),
-						Range: lsp.Range{
-							Start: lsp.Position{Line: line - 1, Character: c - 1},
-							End:   lsp.Position{Line: line - 1, Character: c},
-						},
-					},
-					Message: "?",
+					Location: *locToLocation(l),
+					Message:  "?",
 				}
 			}, e.Extra),
 		})

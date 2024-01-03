@@ -91,18 +91,19 @@ type source struct {
 	log      *common.LogWriter
 }
 
-func loc(src *source, cursor uint32) ast.Location {
-	return ast.Location{FilePath: src.filePath, FileContent: src.text, Position: cursor}
+func loc(src *source, start uint32) ast.Location {
+	end := src.cursor - 1
+	for end > start && unicode.IsSpace(src.text[end]) {
+		end--
+	}
+	end++
+	return ast.NewLocation(src.filePath, src.text, start, end)
 }
 
 func newError(src source, msg string) error {
 	return common.Error{
-		Location: ast.Location{
-			FilePath:    src.filePath,
-			FileContent: src.text,
-			Position:    src.cursor,
-		},
-		Message: msg,
+		Location: loc(&src, src.cursor),
+		Message:  msg,
 	}
 }
 
@@ -1324,7 +1325,7 @@ func finishParseExpression(src *source, expr parsed.Expression, negate bool) (pa
 			items = append(items, parsed.BinOpItem{Expression: final})
 		}
 
-		return parsed.BinOp{Location: loc(src, cursor), Items: items}, nil
+		return parsed.BinOp{Location: loc(src, expr.GetLocation().Start()), Items: items}, nil
 	}
 
 	if readExact(src, SeqParenthesisOpen) {
@@ -1347,7 +1348,8 @@ func finishParseExpression(src *source, expr parsed.Expression, negate bool) (pa
 			}
 			return nil, newError(*src, "expected `,` or `)` here")
 		}
-		return finishParseExpression(src, parsed.Apply{Location: loc(src, cursor), Func: expr, Args: items}, negate)
+		return finishParseExpression(src,
+			parsed.Apply{Location: loc(src, expr.GetLocation().Start()), Func: expr, Args: items}, negate)
 	}
 
 	if readExact(src, SeqDot) {
@@ -1362,7 +1364,7 @@ func finishParseExpression(src *source, expr parsed.Expression, negate bool) (pa
 		}, negate)
 	}
 	if negate {
-		expr = parsed.Negate{Location: loc(src, cursor), Nested: expr}
+		expr = parsed.Negate{Location: loc(src, expr.GetLocation().Start()), Nested: expr}
 	}
 	return expr, nil
 }
@@ -1727,6 +1729,7 @@ func parseDefinition(src *source, modName ast.QualifiedIdentifier) (def *parsed.
 		}
 		def.Params = params
 	}
+	def.Location = loc(src, cursor)
 	return
 }
 

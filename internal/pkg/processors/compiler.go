@@ -51,7 +51,7 @@ func Compile(
 		for _, modulePath := range pkg.Sources {
 			var parsedModule *parsed.Module
 			for _, m := range parsedModules { //todo: can use hashmap
-				if m.Location.FilePath == modulePath {
+				if m.Location.FilePath() == modulePath {
 					parsedModule = m
 				}
 			}

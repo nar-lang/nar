@@ -16,26 +16,25 @@ type Error struct {
 
 func (e Error) Error() string {
 	sb := strings.Builder{}
-	if e.Location.FilePath != "" {
-		line, col := e.Location.GetLineAndColumn()
-		sb.WriteString(fmt.Sprintf("%s:%d:%d %s\n", e.Location.FilePath, line, col, e.Message))
+	cursorString := e.Location.CursorString()
+	if cursorString != "" {
+		sb.WriteString(fmt.Sprintf("%s %s\n", cursorString, e.Message))
 	}
 
 	var uniqueExtra []ast.Location
 	for _, e := range e.Extra {
 		if !slices.ContainsFunc(uniqueExtra, func(x ast.Location) bool {
-			return x.FilePath == e.FilePath && x.Position == e.Position
+			return x.EqualsTo(e)
 		}) {
 			uniqueExtra = append(uniqueExtra, e)
 		}
 	}
 
 	for _, extra := range uniqueExtra {
-		line, col := extra.GetLineAndColumn()
-		sb.WriteString(fmt.Sprintf("  ->%s:%d:%d\n", extra.FilePath, line, col))
+		sb.WriteString(fmt.Sprintf("+ %s\n", extra.CursorString()))
 	}
 
-	if e.Location.FilePath == "" {
+	if e.Location.IsEmpty() {
 		sb.WriteString(fmt.Sprintf("%s\n", e.Message))
 	}
 	return sb.String()

@@ -159,13 +159,17 @@ func (s *server) handleMessage(msg []byte) error {
 		} else {
 			err, _ := results[1].Interface().(error)
 
-			if nil != err {
-				return err
+			if nil == err {
+				var result []byte
+				if result, err = json.Marshal(results[0].Interface()); err == nil {
+					response.Result = result
+				}
 			}
-			if result, err := json.Marshal(results[0].Interface()); err != nil {
-				return err
-			} else {
-				response.Result = result
+			if nil != err {
+				response.Error = &rpcError{
+					Code:    rpcInternalError,
+					Message: err.Error(),
+				}
 			}
 		}
 	} else {

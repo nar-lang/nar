@@ -16,6 +16,7 @@ type Definition struct {
 
 type Module struct {
 	Name         ast.QualifiedIdentifier
+	Location     ast.Location
 	Dependencies map[ast.QualifiedIdentifier][]ast.Identifier
 	Definitions  []*Definition
 }
