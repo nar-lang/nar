@@ -59,21 +59,25 @@ func findStatement(
 	findExpression = func(
 		loc ast.Location, expr parsed.Expression,
 	) (parsed.Expression, parsed.Type) {
+		if expr == nil {
+			return nil, nil
+		}
+
 		switch expr.(type) {
 		case parsed.Access:
 			e := expr.(parsed.Access)
-			if e.Record.GetLocation().Contains(loc) {
+			if e.Record != nil && e.Record.GetLocation().Contains(loc) {
 				return findExpression(loc, e.Record)
 			}
 			break
 		case parsed.Apply:
 			e := expr.(parsed.Apply)
 			for _, a := range e.Args {
-				if a.GetLocation().Contains(loc) {
+				if a != nil && a.GetLocation().Contains(loc) {
 					return findExpression(loc, a)
 				}
 			}
-			if e.Func.GetLocation().Contains(loc) {
+			if e.Func != nil && e.Func.GetLocation().Contains(loc) {
 				return findExpression(loc, e.Func)
 			}
 			break
@@ -81,38 +85,38 @@ func findStatement(
 			break
 		case parsed.If:
 			e := expr.(parsed.If)
-			if e.Condition.GetLocation().Contains(loc) {
+			if e.Condition != nil && e.Condition.GetLocation().Contains(loc) {
 				return findExpression(loc, e.Condition)
 			}
-			if e.Positive.GetLocation().Contains(loc) {
+			if e.Positive != nil && e.Positive.GetLocation().Contains(loc) {
 				return findExpression(loc, e.Positive)
 			}
-			if e.Negative.GetLocation().Contains(loc) {
+			if e.Negative != nil && e.Negative.GetLocation().Contains(loc) {
 				return findExpression(loc, e.Negative)
 			}
 			break
 		case parsed.LetMatch:
 			e := expr.(parsed.LetMatch)
-			if e.Nested.GetLocation().Contains(loc) {
+			if e.Nested != nil && e.Nested.GetLocation().Contains(loc) {
 				return findExpression(loc, e.Nested)
 			}
-			if e.Value.GetLocation().Contains(loc) {
+			if e.Value != nil && e.Value.GetLocation().Contains(loc) {
 				return findExpression(loc, e.Value)
 			}
 			break
 		case parsed.LetDef:
 			e := expr.(parsed.LetDef)
-			if e.Body.GetLocation().Contains(loc) {
+			if e.Body != nil && e.Body.GetLocation().Contains(loc) {
 				return findExpression(loc, e.Nested)
 			}
-			if e.Nested.GetLocation().Contains(loc) {
+			if e.Body != nil && e.Nested.GetLocation().Contains(loc) {
 				return findExpression(loc, e.Nested)
 			}
 			break
 		case parsed.List:
 			e := expr.(parsed.List)
 			for _, a := range e.Items {
-				if a.GetLocation().Contains(loc) {
+				if a != nil && a.GetLocation().Contains(loc) {
 					return findExpression(loc, a)
 				}
 			}
@@ -120,25 +124,25 @@ func findStatement(
 		case parsed.Record:
 			e := expr.(parsed.Record)
 			for _, f := range e.Fields {
-				if f.Value.GetLocation().Contains(loc) {
+				if f.Value != nil && f.Value.GetLocation().Contains(loc) {
 					return findExpression(loc, f.Value)
 				}
 			}
 			break
 		case parsed.Select:
 			e := expr.(parsed.Select)
-			if e.Condition.GetLocation().Contains(loc) {
+			if e.Condition != nil && e.Condition.GetLocation().Contains(loc) {
 				return findExpression(loc, e.Condition)
 			}
 			for _, cs := range e.Cases {
-				if cs.Expression.GetLocation().Contains(loc) {
+				if cs.Expression != nil && cs.Expression.GetLocation().Contains(loc) {
 					return findExpression(loc, cs.Expression)
 				}
 			}
 		case parsed.Tuple:
 			e := expr.(parsed.Tuple)
 			for _, f := range e.Items {
-				if f.GetLocation().Contains(loc) {
+				if f != nil && f.GetLocation().Contains(loc) {
 					return findExpression(loc, f)
 				}
 			}
@@ -146,14 +150,14 @@ func findStatement(
 		case parsed.Update:
 			e := expr.(parsed.Update)
 			for _, f := range e.Fields {
-				if f.Value.GetLocation().Contains(loc) {
+				if f.Value != nil && f.Value.GetLocation().Contains(loc) {
 					return findExpression(loc, f.Value)
 				}
 			}
 			break
 		case parsed.Lambda:
 			e := expr.(parsed.Lambda)
-			if e.Body.GetLocation().Contains(loc) {
+			if e.Body != nil && e.Body.GetLocation().Contains(loc) {
 				return findExpression(loc, e.Body)
 			}
 			break
@@ -162,21 +166,21 @@ func findStatement(
 		case parsed.BinOp:
 			e := expr.(parsed.BinOp)
 			for _, i := range e.Items {
-				if i.Expression.GetLocation().Contains(loc) {
+				if i.Expression != nil && i.Expression.GetLocation().Contains(loc) {
 					return findExpression(loc, i.Expression)
 				}
 			}
 			break
 		case parsed.Negate:
 			e := expr.(parsed.Negate)
-			if e.Nested.GetLocation().Contains(loc) {
+			if e.Nested != nil && e.Nested.GetLocation().Contains(loc) {
 				return findExpression(loc, e.Nested)
 			}
 			break
 		case parsed.Constructor:
 			e := expr.(parsed.Constructor)
 			for _, a := range e.Args {
-				if a.GetLocation().Contains(loc) {
+				if a != nil && a.GetLocation().Contains(loc) {
 					return findExpression(loc, a)
 				}
 			}
@@ -186,7 +190,7 @@ func findStatement(
 		case parsed.NativeCall:
 			e := expr.(parsed.NativeCall)
 			for _, a := range e.Args {
-				if a.GetLocation().Contains(loc) {
+				if a != nil && a.GetLocation().Contains(loc) {
 					return findExpression(loc, a)
 				}
 			}

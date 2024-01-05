@@ -19,18 +19,18 @@
 * [ ] Compilation performance improvements
   
 ## Libraries
-* [x] Nar.Core library + tests
+* [x] Nar.Base library + tests
 * [x] Nar.Program library
 * [x] Nar.Time
 * [ ] Nar.Random
 * [ ] Nar.Tests library
   * [x] Simple tests
   * [ ] Fuzz tests
-* [ ] Nar.Leaf library (game engine)
-  * [ ] Nar.Leaf.GL
-  * [ ] Nar.Leaf.Sprite
-  * [ ] Nar.Leaf.Input
-  * [ ] Nar.Leaf.UI
+* [ ] Narwal library (game engine)
+  * [ ] Narwal.GL
+  * [ ] Narwal.Sprite
+  * [ ] Narwal.Input
+  * [ ] Narwal.UI
 * [ ] ...
 
 ## Quality Of Life

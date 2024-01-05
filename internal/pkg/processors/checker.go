@@ -346,6 +346,9 @@ func firstCtor(ctors map[ast.DataOptionIdentifier]*typed.TData) *typed.TData {
 func collectCtors(matrix [][]Pattern) map[ast.DataOptionIdentifier]*typed.TData {
 	ctors := map[ast.DataOptionIdentifier]*typed.TData{}
 	for _, row := range matrix {
+		if row == nil {
+			return nil
+		}
 		if c, ok := row[0].(PatternConstructor); ok {
 			ctors[c.Name] = c.Union
 		}
