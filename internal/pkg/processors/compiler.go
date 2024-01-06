@@ -66,6 +66,9 @@ func Compile(
 				for _, e := range errors {
 					log.Err(e)
 				}
+				if parsedModule == nil {
+					continue
+				}
 
 				parsedModule.PackageName = pkg.Package.Name
 				parsedModule.ReferencedPackages = referencedPackages

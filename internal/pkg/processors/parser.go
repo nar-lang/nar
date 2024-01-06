@@ -92,6 +92,9 @@ type source struct {
 }
 
 func loc(src *source, start uint32) ast.Location {
+	if src.cursor == 0 {
+		return ast.NewLocation(src.filePath, src.text, 0, 0)
+	}
 	end := src.cursor - 1
 	for end > start && unicode.IsSpace(src.text[end]) {
 		end--

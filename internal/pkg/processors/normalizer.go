@@ -963,6 +963,7 @@ func normalizePattern(
 				Location: e.Location,
 				Type:     type_,
 				Fields: common.Map(func(x parsed.PRecordField) normalized.PRecordField {
+					locals[x.Name] = struct{}{}
 					return normalized.PRecordField{Location: x.Location, Name: x.Name}
 				}, e.Fields),
 			}, nil

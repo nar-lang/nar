@@ -53,7 +53,10 @@ func Solve(
 		return
 	}
 
-	m := modules[moduleName]
+	m, ok := modules[moduleName]
+	if !ok {
+		return nil
+	}
 
 	for dep := range m.Dependencies {
 		if dep != moduleName {
@@ -369,6 +372,7 @@ func annotatePattern(symbols symbolsMap,
 				if err != nil {
 					return typed.PRecordField{}, err
 				}
+				symbols[f.Name] = type_
 				return typed.PRecordField{
 					Location: f.Location,
 					Name:     f.Name,
