@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"errors"
+	"fmt"
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/common"
 	"nar-compiler/internal/pkg/processors"
@@ -125,6 +126,11 @@ func (s *server) getPackageOfDocument(uri lsp.DocumentURI, forceReload bool) ast
 }
 
 func (s *server) compile(pkgNames []ast.PackageIdentifier) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.reportError(fmt.Sprintf("internal error:\n%v", r))
+		}
+	}()
 	log := &common.LogWriter{}
 
 	affectedModuleNames := processors.Compile(

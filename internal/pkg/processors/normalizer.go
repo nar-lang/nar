@@ -1819,9 +1819,6 @@ func normalizeType(
 		{
 			e := t.(parsed.TNamed)
 			x, m, ids, err := findParsedType(modules, module, e.Name, e.Args)
-			if err != nil {
-
-			}
 			if ids == nil && typeModule != nil {
 				x, m, ids, err = findParsedType(modules, typeModule, e.Name, e.Args)
 				if err != nil {
@@ -1839,6 +1836,15 @@ func normalizeType(
 						e.Name, common.Join(ids, ", ")),
 				}
 			}
+			if named, ok := x.(parsed.TNamed); ok {
+				if named.Name == e.Name {
+					return nil, common.Error{
+						Location: named.Location,
+						Message:  fmt.Sprintf("type `%s` aliased to itself", e.Name),
+					}
+				}
+			}
+
 			return normalizeType(modules, module, m, x, namedTypes)
 		}
 	}
@@ -1917,7 +1923,7 @@ func findParsedDefinitionImpl(
 		}
 
 		//5. search by definition name as module name
-		if unicode.IsUpper([]rune(defName)[0]) {
+		if len(defName) > 0 && unicode.IsUpper([]rune(defName)[0]) {
 			modDotName := string("." + defName)
 			for modId, submodule := range modules {
 				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {

@@ -121,6 +121,12 @@ func (s *server) sender(writeResponse func([]byte)) {
 }
 
 func (s *server) handleMessage(msg []byte) error {
+	defer func() {
+		if r := recover(); r != nil {
+			s.reportError(fmt.Sprintf("internal error:\n%v", r))
+		}
+	}()
+
 	var call rpcCall
 	if err := json.Unmarshal(msg, &call); nil != err {
 		return err
@@ -194,4 +200,11 @@ func (s *server) notify(message string, params any) {
 			Params:  data,
 		}
 	}
+}
+
+func (s *server) reportError(message string) {
+	s.notify("window/showMessage", lsp.ShowMessageParams{
+		Type:    lsp.MTError,
+		Message: message,
+	})
 }

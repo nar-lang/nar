@@ -1557,14 +1557,15 @@ func parseAlias(src *source) (alias *parsed.Alias, err error) {
 	native := readExact(src, KwNative)
 	name := readIdentifier(src, false)
 
-	if nil == name {
-		err = newError(*src, "expected alias name here")
-	}
-
 	alias = &parsed.Alias{
 		Location: loc(src, cursor),
 		Hidden:   hidden,
-		Name:     ast.Identifier(*name),
+	}
+
+	if nil == name {
+		err = newError(*src, "expected alias name here")
+	} else {
+		alias.Name = ast.Identifier(*name)
 	}
 
 	alias.Params, err = parseTypeParamNames(src)
