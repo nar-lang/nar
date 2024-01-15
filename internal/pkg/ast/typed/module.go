@@ -7,18 +7,26 @@ import (
 )
 
 type Definition struct {
-	Id          uint64
-	Name        ast.Identifier
-	Location    ast.Location
-	Params      []Pattern
-	Expression  Expression
-	DefinedType Type
-	Hidden      bool
+	Id           uint64
+	Name         ast.Identifier
+	Location     ast.Location
+	Params       []Pattern
+	Expression   Expression
+	DeclaredType Type
+	Hidden       bool
+}
+
+func (d *Definition) GetLocation() ast.Location {
+	return d.Location
+}
+
+func (d *Definition) String() string {
+	return fmt.Sprintf("Definition(%v,%v,%v,%v,%v)", d.Name, d.Params, d.Expression, d.DeclaredType, d.Location)
 }
 
 func (d *Definition) GetType() Type {
 	if d.Expression == nil {
-		return d.DefinedType
+		return d.DeclaredType
 	}
 
 	defType := d.Expression.GetType()
@@ -32,10 +40,6 @@ func (d *Definition) GetType() Type {
 	}
 
 	return defType
-}
-
-func (d *Definition) String() string {
-	return fmt.Sprintf("Def([%v], %v)", common.Join(d.Params, ", "), d.Expression)
 }
 
 type Module struct {

@@ -7,10 +7,12 @@ import (
 	"strings"
 )
 
+type UnboundMap map[uint64]string
+
 type Type interface {
-	fmt.Stringer
 	_type()
 	GetLocation() ast.Location
+	ToString(m UnboundMap, currentModule ast.QualifiedIdentifier) string
 }
 
 type TFunc struct {
@@ -25,8 +27,16 @@ func (t *TFunc) GetLocation() ast.Location {
 	return t.Location
 }
 
-func (t *TFunc) String() string {
-	return fmt.Sprintf("(%v): %v", common.Join(t.Params, ", "), t.Return)
+func (t *TFunc) ToString(m UnboundMap, currentModule ast.QualifiedIdentifier) string {
+	return fmt.Sprintf("(%s): %s", common.Fold(
+		func(x Type, s string) string {
+			if s != "" {
+				s += ", "
+			}
+			return s + x.ToString(m, "")
+		},
+		"", t.Params),
+		t.Return.ToString(m, ""))
 }
 
 type TRecord struct {
@@ -41,12 +51,12 @@ func (t *TRecord) GetLocation() ast.Location {
 	return t.Location
 }
 
-func (t *TRecord) String() string {
+func (t *TRecord) ToString(m UnboundMap, currentModule ast.QualifiedIdentifier) string {
 	sb := strings.Builder{}
 	sb.WriteString("{")
 	c := len(t.Fields)
 	for n, v := range t.Fields {
-		sb.WriteString(fmt.Sprintf("%s:%v", n, v))
+		sb.WriteString(fmt.Sprintf("%s:%s", n, v.ToString(m, "")))
 		c--
 		if c > 0 {
 			sb.WriteString(", ")
@@ -67,8 +77,13 @@ func (t *TTuple) GetLocation() ast.Location {
 	return t.Location
 }
 
-func (t *TTuple) String() string {
-	return fmt.Sprintf("( %v )", common.Join(t.Items, ", "))
+func (t *TTuple) ToString(m UnboundMap, currentModule ast.QualifiedIdentifier) string {
+	return fmt.Sprintf("( %v )", common.Fold(func(x Type, s string) string {
+		if s != "" {
+			s += ", "
+		}
+		return s + x.ToString(m, "")
+	}, "", t.Items))
 }
 
 type TNative struct {
@@ -83,12 +98,21 @@ func (t *TNative) GetLocation() ast.Location {
 	return t.Location
 }
 
-func (t *TNative) String() string {
-	tp := common.Join(t.Args, ", ")
+func (t *TNative) ToString(m UnboundMap, currentModule ast.QualifiedIdentifier) string {
+	tp := common.Fold(func(x Type, s string) string {
+		if s != "" {
+			s += ", "
+		}
+		return s + x.ToString(m, "")
+	}, "", t.Args)
 	if tp != "" {
 		tp = "[" + tp + "]"
 	}
-	return fmt.Sprintf("%v%v", t.Name, tp)
+	s := string(t.Name)
+	if currentModule != "" && strings.HasPrefix(s, string(currentModule)) {
+		s = s[len(currentModule)+1:]
+	}
+	return fmt.Sprintf("%s%s", s, tp)
 }
 
 type DataOption struct {
@@ -98,8 +122,6 @@ type DataOption struct {
 
 func (d DataOption) String() string {
 	return fmt.Sprintf("%s(%v)", d.Name, len(d.Values))
-	//TODO: it fails to handle recursive types
-	//return fmt.Sprintf("%s(%v)", d.Name, common.Join(d.Values, ", "))
 }
 
 type TData struct {
@@ -115,14 +137,28 @@ func (t *TData) GetLocation() ast.Location {
 	return t.Location
 }
 
-func (t *TData) String() string {
-	return fmt.Sprintf("%s(%v)", t.Name, common.Join(t.Options, ", "))
+func (t *TData) ToString(m UnboundMap, currentModule ast.QualifiedIdentifier) string {
+	s := string(t.Name)
+	if currentModule != "" && strings.HasPrefix(s, string(currentModule)) {
+		s = s[len(currentModule)+1:]
+	}
+	tp := common.Fold(func(x Type, s string) string {
+		if s != "" {
+			s += ", "
+		}
+		return s + x.ToString(m, "")
+	}, "", t.Args)
+	if tp != "" {
+		tp = "[" + tp + "]"
+	}
+	return s + tp
 }
 
 type TUnbound struct {
 	ast.Location
 	Index      uint64
 	Constraint common.Constraint
+	GivenName  ast.Identifier
 }
 
 func (*TUnbound) _type() {}
@@ -131,6 +167,22 @@ func (t *TUnbound) GetLocation() ast.Location {
 	return t.Location
 }
 
-func (t *TUnbound) String() string {
-	return fmt.Sprintf("_%d", t.Index)
+func (t *TUnbound) ToString(m UnboundMap, currentModule ast.QualifiedIdentifier) string {
+	if t.GivenName != "" {
+		m[t.Index] = string(t.GivenName)
+		return string(t.GivenName)
+	}
+	if n, ok := m[t.Index]; ok {
+		return n
+	}
+	i := uint64(0)
+	for {
+		if _, ok := m[i]; ok {
+			continue
+		}
+		break
+	}
+	v := string(rune(int('a') + int(i)))
+	m[t.Index] = v
+	return v
 }

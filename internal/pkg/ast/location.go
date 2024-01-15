@@ -22,10 +22,10 @@ func NewLocationCursor(filePath string, content []rune, start uint32) Location {
 	return NewLocation(filePath, content, start, start)
 }
 
-func NewLocationSrc(filePath string, content []rune, line int, column int) Location {
+func NewLocationSrc(filePath string, content []rune, line uint32, column uint32) Location {
 	pos := uint32(0)
-	lineCount := 0
-	columnCount := 0
+	lineCount := uint32(0)
+	columnCount := uint32(0)
 	for i := uint32(0); i < uint32(len(content)); i++ {
 		if lineCount == line && columnCount == column {
 			pos = i
@@ -95,4 +95,12 @@ func (loc Location) Contains(cursor Location) bool {
 
 func (loc Location) Start() uint32 {
 	return loc.start
+}
+
+func (loc Location) End() uint32 {
+	return loc.end
+}
+
+func (loc Location) Size() uint32 {
+	return loc.end - loc.start
 }

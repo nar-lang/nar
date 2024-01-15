@@ -102,6 +102,9 @@ func loc(src *source, start uint32) ast.Location {
 	end++
 	return ast.NewLocation(src.filePath, src.text, start, end)
 }
+func eb(src *source, start uint32) *parsed.ExpressionBase {
+	return &parsed.ExpressionBase{Location: loc(src, start)}
+}
 
 func newError(src source, msg string) error {
 	return common.Error{
@@ -614,7 +617,7 @@ func parseType(src *source) (parsed.Type, error) {
 	//signature/tuple/unit
 	if readExact(src, SeqParenthesisOpen) {
 		if readExact(src, SeqParenthesisClose) {
-			return parsed.TUnit{Location: loc(src, cursor)}, nil
+			return &parsed.TUnit{Location: loc(src, cursor)}, nil
 		}
 
 		var items []parsed.Type
@@ -647,12 +650,12 @@ func parseType(src *source) (parsed.Type, error) {
 			if nil == ret {
 				return nil, newError(*src, "expected return type here")
 			}
-			return parsed.TFunc{Location: loc(src, cursor), Return: ret, Params: items}, nil
+			return &parsed.TFunc{Location: loc(src, cursor), Return: ret, Params: items}, nil
 		} else {
 			if 1 == len(items) {
 				return items[0], nil
 			} else {
-				return parsed.TTuple{Location: loc(src, cursor), Items: items}, nil
+				return &parsed.TTuple{Location: loc(src, cursor), Items: items}, nil
 			}
 		}
 	}
@@ -698,12 +701,12 @@ func parseType(src *source) (parsed.Type, error) {
 			return nil, newError(*src, "expected `,` or `}` here")
 		}
 
-		return parsed.TRecord{Location: loc(src, cursor), Fields: fields}, nil
+		return &parsed.TRecord{Location: loc(src, cursor), Fields: fields}, nil
 	}
 
 	if name := readIdentifier(src, true); nil != name {
 		if unicode.IsLower([]rune(*name)[0]) {
-			return parsed.TTypeParameter{Location: loc(src, cursor), Name: ast.Identifier(*name)}, nil
+			return &parsed.TTypeParameter{Location: loc(src, cursor), Name: ast.Identifier(*name)}, nil
 		} else {
 			var typeParams []parsed.Type
 			if readExact(src, SeqBracketsOpen) {
@@ -727,7 +730,7 @@ func parseType(src *source) (parsed.Type, error) {
 				}
 			}
 
-			return parsed.TNamed{Location: loc(src, cursor), Name: *name, Args: typeParams}, nil
+			return &parsed.TNamed{Location: loc(src, cursor), Name: *name, Args: typeParams}, nil
 		}
 	}
 	return nil, nil
@@ -739,7 +742,7 @@ func parsePattern(src *source) (parsed.Pattern, error) {
 	//tuple/unit
 	if readExact(src, SeqParenthesisOpen) {
 		if readExact(src, SeqParenthesisClose) {
-			return finishParsePattern(src, parsed.PConst{
+			return finishParsePattern(src, &parsed.PConst{
 				Location: loc(src, cursor),
 				Value:    ast.CUnit{},
 			})
@@ -765,7 +768,7 @@ func parsePattern(src *source) (parsed.Pattern, error) {
 		if 1 == len(items) {
 			return finishParsePattern(src, items[0])
 		}
-		return finishParsePattern(src, parsed.PTuple{
+		return finishParsePattern(src, &parsed.PTuple{
 			Location: loc(src, cursor),
 			Items:    items,
 		})
@@ -794,7 +797,7 @@ func parsePattern(src *source) (parsed.Pattern, error) {
 			return nil, newError(*src, "expected `,` or `}` here")
 		}
 
-		return finishParsePattern(src, parsed.PRecord{
+		return finishParsePattern(src, &parsed.PRecord{
 			Location: loc(src, cursor),
 			Fields:   fields,
 		})
@@ -803,7 +806,7 @@ func parsePattern(src *source) (parsed.Pattern, error) {
 	//list
 	if readExact(src, SeqBracketsOpen) {
 		if readExact(src, SeqBracketsClose) {
-			return finishParsePattern(src, parsed.PList{Location: loc(src, cursor), Items: nil})
+			return finishParsePattern(src, &parsed.PList{Location: loc(src, cursor), Items: nil})
 		}
 
 		var items []parsed.Pattern
@@ -825,7 +828,7 @@ func parsePattern(src *source) (parsed.Pattern, error) {
 			return nil, newError(*src, "expected `,` or `}` here")
 		}
 
-		return finishParsePattern(src, parsed.PList{Location: loc(src, cursor), Items: items})
+		return finishParsePattern(src, &parsed.PList{Location: loc(src, cursor), Items: items})
 	}
 
 	//union
@@ -851,21 +854,21 @@ func parsePattern(src *source) (parsed.Pattern, error) {
 				return nil, newError(*src, "expected `,` or `)` here")
 			}
 		}
-		return finishParsePattern(src, parsed.PDataOption{Location: loc(src, cursor), Name: *name, Values: items})
+		return finishParsePattern(src, &parsed.PDataOption{Location: loc(src, cursor), Name: *name, Values: items})
 	} else {
 		src.cursor = cursor
 	}
 
 	name = readIdentifier(src, false)
 	if nil != name && unicode.IsLower([]rune(*name)[0]) {
-		return finishParsePattern(src, parsed.PNamed{Location: loc(src, cursor), Name: ast.Identifier(*name)})
+		return finishParsePattern(src, &parsed.PNamed{Location: loc(src, cursor), Name: ast.Identifier(*name)})
 	} else {
 		src.cursor = cursor
 	}
 
 	//anything
 	if readExact(src, SeqUnderscore) {
-		return finishParsePattern(src, parsed.PAny{Location: loc(src, cursor)})
+		return finishParsePattern(src, &parsed.PAny{Location: loc(src, cursor)})
 	}
 
 	const_, err := parseConst(src)
@@ -873,7 +876,7 @@ func parsePattern(src *source) (parsed.Pattern, error) {
 		return nil, err
 	}
 	if nil != const_ {
-		return finishParsePattern(src, parsed.PConst{Location: loc(src, cursor), Value: const_})
+		return finishParsePattern(src, &parsed.PConst{Location: loc(src, cursor), Value: const_})
 	}
 
 	return nil, nil
@@ -899,7 +902,7 @@ func finishParsePattern(src *source, pattern parsed.Pattern) (parsed.Pattern, er
 			return nil, newError(*src, "expected pattern alias name here")
 		}
 		return finishParsePattern(src,
-			parsed.PAlias{Location: loc(src, cursor), Alias: ast.Identifier(*name), Nested: pattern})
+			&parsed.PAlias{Location: loc(src, cursor), Alias: ast.Identifier(*name), Nested: pattern})
 	}
 
 	if readExact(src, SeqBar) {
@@ -911,7 +914,7 @@ func finishParsePattern(src *source, pattern parsed.Pattern) (parsed.Pattern, er
 			return nil, newError(*src, "expected list tail pattern here")
 		}
 
-		return finishParsePattern(src, parsed.PCons{Location: loc(src, cursor), Head: pattern, Tail: tail})
+		return finishParsePattern(src, &parsed.PCons{Location: loc(src, cursor), Head: pattern, Tail: tail})
 	}
 
 	return pattern, nil
@@ -966,7 +969,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 		return nil, err
 	}
 	if nil != const_ {
-		return finishParseExpression(src, parsed.Const{Location: loc(src, cursor), Value: const_}, negate)
+		return finishParseExpression(src, &parsed.Const{ExpressionBase: eb(src, cursor), Value: const_}, negate)
 	}
 
 	//list
@@ -992,7 +995,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 				return nil, newError(*src, "expected `,` or `]` here")
 			}
 		}
-		return finishParseExpression(src, parsed.List{Location: loc(src, cursor), Items: items}, negate)
+		return finishParseExpression(src, &parsed.List{ExpressionBase: eb(src, cursor), Items: items}, negate)
 	}
 
 	//negate
@@ -1003,7 +1006,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 	//infix value
 	infix := parseInfixIdentifier(src, true)
 	if nil != infix {
-		return finishParseExpression(src, parsed.InfixVar{Location: loc(src, cursor), Infix: *infix}, negate)
+		return finishParseExpression(src, &parsed.InfixVar{ExpressionBase: eb(src, cursor), Infix: *infix}, negate)
 	}
 
 	//lambda
@@ -1030,7 +1033,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 			return nil, newError(*src, "expected lambda expression body here")
 		}
 		return finishParseExpression(src,
-			parsed.Lambda{Location: loc(src, cursor), Params: patterns, Body: body, Return: ret}, negate)
+			&parsed.Lambda{ExpressionBase: eb(src, cursor), Params: patterns, Body: body, Return: ret}, negate)
 	}
 
 	//if
@@ -1057,7 +1060,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 			return nil, newError(*src, "expected negative branch expression here")
 		}
 		return finishParseExpression(src,
-			parsed.If{Location: loc(src, cursor), Condition: condition, Positive: positive, Negative: negative},
+			&parsed.If{ExpressionBase: eb(src, cursor), Condition: condition, Positive: positive, Negative: negative},
 			negate)
 	}
 
@@ -1065,6 +1068,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 	if readExact(src, KwLet) {
 		defCursor := src.cursor
 		name := readIdentifier(src, false)
+		nameLoc := loc(src, defCursor)
 		typeCursor := src.cursor
 		params, ret, err := parseSignature(src)
 		if err != nil {
@@ -1086,11 +1090,11 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 			if nil == value {
 				return nil, newError(*src, "expected function body here")
 			}
-			pattern = parsed.PNamed{
+			pattern = &parsed.PNamed{
 				Location: loc(src, defCursor),
 				Name:     ast.Identifier(*name),
 			}
-			fnType = parsed.TFunc{
+			fnType = &parsed.TFunc{
 				Location: loc(src, typeCursor),
 				Params:   common.Map(func(x parsed.Pattern) parsed.Type { return x.GetType() }, params),
 				Return:   ret,
@@ -1128,20 +1132,21 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 			return nil, newError(*src, "expected expression here")
 		}
 		if isDef {
-			return finishParseExpression(src, parsed.LetDef{
-				Location: loc(src, cursor),
-				Name:     ast.Identifier(*name),
-				Params:   params,
-				Body:     value,
-				FnType:   fnType,
-				Nested:   nested,
+			return finishParseExpression(src, &parsed.LetDef{
+				ExpressionBase: eb(src, cursor),
+				Name:           ast.Identifier(*name),
+				NameLocation:   nameLoc,
+				Params:         params,
+				Body:           value,
+				FnType:         fnType,
+				Nested:         nested,
 			}, negate)
 		} else {
-			return finishParseExpression(src, parsed.LetMatch{
-				Location: loc(src, cursor),
-				Pattern:  pattern,
-				Value:    value,
-				Nested:   nested,
+			return finishParseExpression(src, &parsed.LetMatch{
+				ExpressionBase: eb(src, cursor),
+				Pattern:        pattern,
+				Value:          value,
+				Nested:         nested,
 			}, negate)
 		}
 	}
@@ -1189,7 +1194,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 		if 0 == len(cases) {
 			return nil, newError(*src, "expected case expression here")
 		}
-		return finishParseExpression(src, parsed.Select{Location: loc(src, cursor), Condition: condition, Cases: cases}, negate)
+		return finishParseExpression(src, &parsed.Select{ExpressionBase: eb(src, cursor), Condition: condition, Cases: cases}, negate)
 	}
 
 	//accessor
@@ -1198,13 +1203,13 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 		if nil == name {
 			return nil, newError(*src, "expected accessor name here")
 		}
-		return finishParseExpression(src, parsed.Accessor{Location: loc(src, cursor), FieldName: ast.Identifier(*name)}, negate)
+		return finishParseExpression(src, &parsed.Accessor{ExpressionBase: eb(src, cursor), FieldName: ast.Identifier(*name)}, negate)
 	}
 
 	//record / update
 	if readExact(src, SeqBracesOpen) {
 		if readExact(src, SeqBracesClose) {
-			return finishParseExpression(src, parsed.Record{Location: loc(src, cursor)}, negate)
+			return finishParseExpression(src, &parsed.Record{ExpressionBase: eb(src, cursor)}, negate)
 		}
 
 		recCursor := src.cursor
@@ -1250,17 +1255,17 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 		}
 
 		if nil == name {
-			return finishParseExpression(src, parsed.Record{Location: loc(src, cursor), Fields: fields}, negate)
+			return finishParseExpression(src, &parsed.Record{ExpressionBase: eb(src, cursor), Fields: fields}, negate)
 		} else {
 			return finishParseExpression(src,
-				parsed.Update{Location: loc(src, cursor), RecordName: *name, Fields: fields}, negate)
+				&parsed.Update{ExpressionBase: eb(src, cursor), RecordName: *name, Fields: fields}, negate)
 		}
 	}
 
 	//tuple / void / precedence
 	if readExact(src, SeqParenthesisOpen) {
 		if readExact(src, SeqParenthesisClose) {
-			return finishParseExpression(src, parsed.Const{Location: loc(src, cursor), Value: ast.CUnit{}}, negate)
+			return finishParseExpression(src, &parsed.Const{ExpressionBase: eb(src, cursor), Value: ast.CUnit{}}, negate)
 		}
 
 		var items []parsed.Expression
@@ -1285,19 +1290,19 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 
 		if 1 == len(items) {
 			expr := items[0]
-			if bop, ok := expr.(parsed.BinOp); ok {
+			if bop, ok := expr.(*parsed.BinOp); ok {
 				bop.InParentheses = true
 				expr = bop
 			}
 			return finishParseExpression(src, expr, negate)
 		} else {
-			return finishParseExpression(src, parsed.Tuple{Location: loc(src, cursor), Items: items}, negate)
+			return finishParseExpression(src, &parsed.Tuple{ExpressionBase: eb(src, cursor), Items: items}, negate)
 		}
 	}
 
 	name := readIdentifier(src, true)
 	if nil != name {
-		return finishParseExpression(src, parsed.Var{Location: loc(src, cursor), Name: *name}, negate)
+		return finishParseExpression(src, &parsed.Var{ExpressionBase: eb(src, cursor), Name: *name}, negate)
 	}
 
 	return nil, nil
@@ -1317,18 +1322,18 @@ func finishParseExpression(src *source, expr parsed.Expression, negate bool) (pa
 		}
 
 		if negate {
-			expr = parsed.Negate{Location: loc(src, cursor), Nested: expr}
+			expr = &parsed.Negate{ExpressionBase: eb(src, cursor), Nested: expr}
 		}
 
 		items := []parsed.BinOpItem{{Expression: expr}, {Infix: *infixOp}}
 
-		if bop, ok := final.(parsed.BinOp); ok && !bop.InParentheses {
+		if bop, ok := final.(*parsed.BinOp); ok && !bop.InParentheses {
 			items = append(items, bop.Items...)
 		} else {
 			items = append(items, parsed.BinOpItem{Expression: final})
 		}
 
-		return parsed.BinOp{Location: loc(src, expr.GetLocation().Start()), Items: items}, nil
+		return &parsed.BinOp{ExpressionBase: eb(src, expr.GetLocation().Start()), Items: items}, nil
 	}
 
 	if readExact(src, SeqParenthesisOpen) {
@@ -1352,7 +1357,7 @@ func finishParseExpression(src *source, expr parsed.Expression, negate bool) (pa
 			return nil, newError(*src, "expected `,` or `)` here")
 		}
 		return finishParseExpression(src,
-			parsed.Apply{Location: loc(src, expr.GetLocation().Start()), Func: expr, Args: items}, negate)
+			&parsed.Apply{ExpressionBase: eb(src, expr.GetLocation().Start()), Func: expr, Args: items}, negate)
 	}
 
 	if readExact(src, SeqDot) {
@@ -1360,14 +1365,14 @@ func finishParseExpression(src *source, expr parsed.Expression, negate bool) (pa
 		if nil == name {
 			return nil, newError(*src, "expected field name here")
 		}
-		return finishParseExpression(src, parsed.Access{
-			Location:  loc(src, cursor),
-			Record:    expr,
-			FieldName: ast.Identifier(*name),
+		return finishParseExpression(src, &parsed.Access{
+			ExpressionBase: eb(src, cursor),
+			Record:         expr,
+			FieldName:      ast.Identifier(*name),
 		}, negate)
 	}
 	if negate {
-		expr = parsed.Negate{Location: loc(src, expr.GetLocation().Start()), Nested: expr}
+		expr = &parsed.Negate{ExpressionBase: eb(src, expr.GetLocation().Start()), Nested: expr}
 	}
 	return expr, nil
 }
@@ -1673,9 +1678,9 @@ func parseDefinition(src *source, modName ast.QualifiedIdentifier) (def *parsed.
 			}
 		}
 		if native {
-			def.Expression = parsed.NativeCall{
-				Location: loc(src, typeCursor),
-				Name:     common.MakeFullIdentifier(modName, ast.Identifier(*name)),
+			def.Expression = &parsed.NativeCall{
+				ExpressionBase: eb(src, typeCursor),
+				Name:           common.MakeFullIdentifier(modName, ast.Identifier(*name)),
 			}
 		} else {
 			if !readExact(src, SeqEqual) {
@@ -1695,10 +1700,10 @@ func parseDefinition(src *source, modName ast.QualifiedIdentifier) (def *parsed.
 		if native {
 			var args []parsed.Expression
 			for _, x := range params {
-				if named, ok := x.(parsed.PNamed); ok {
-					args = append(args, parsed.Var{
-						Location: x.GetLocation(),
-						Name:     ast.QualifiedIdentifier(named.Name),
+				if named, ok := x.(*parsed.PNamed); ok {
+					args = append(args, &parsed.Var{
+						ExpressionBase: &parsed.ExpressionBase{Location: x.GetLocation()},
+						Name:           ast.QualifiedIdentifier(named.Name),
 					})
 				} else {
 					err = newError(*src,
@@ -1706,10 +1711,10 @@ func parseDefinition(src *source, modName ast.QualifiedIdentifier) (def *parsed.
 					return
 				}
 			}
-			def.Expression = parsed.NativeCall{
-				Location: loc(src, typeCursor),
-				Name:     common.MakeFullIdentifier(modName, ast.Identifier(*name)),
-				Args:     args,
+			def.Expression = &parsed.NativeCall{
+				ExpressionBase: eb(src, typeCursor),
+				Name:           common.MakeFullIdentifier(modName, ast.Identifier(*name)),
+				Args:           args,
 			}
 		} else {
 			if !readExact(src, SeqEqual) {
@@ -1726,7 +1731,7 @@ func parseDefinition(src *source, modName ast.QualifiedIdentifier) (def *parsed.
 			}
 		}
 
-		def.Type = parsed.TFunc{
+		def.Type = &parsed.TFunc{
 			Location: loc(src, typeCursor),
 			Params:   common.Map(func(x parsed.Pattern) parsed.Type { return x.GetType() }, params),
 			Return:   ret,
@@ -1798,7 +1803,7 @@ func parseModule(src *source) (module *parsed.Module, errors []error) {
 
 		definition, err := parseDefinition(src, *name)
 		if definition != nil {
-			m.Definitions = append(m.Definitions, *definition)
+			m.Definitions = append(m.Definitions, definition)
 			if err == nil {
 				continue
 			}

@@ -78,24 +78,24 @@ func Normalize(
 	return
 }
 
-func extractLocals(pattern normalized.Pattern, locals map[ast.Identifier]struct{}) error {
+func extractLocals(pattern normalized.Pattern, locals map[ast.Identifier]normalized.Pattern) error {
 	switch pattern.(type) {
-	case normalized.PAlias:
+	case *normalized.PAlias:
 		{
-			e := pattern.(normalized.PAlias)
-			locals[e.Alias] = struct{}{}
+			e := pattern.(*normalized.PAlias)
+			locals[e.Alias] = pattern
 			if err := extractLocals(e.Nested, locals); err != nil {
 				return err
 			}
 			break
 		}
-	case normalized.PAny:
+	case *normalized.PAny:
 		{
 			break
 		}
-	case normalized.PCons:
+	case *normalized.PCons:
 		{
-			e := pattern.(normalized.PCons)
+			e := pattern.(*normalized.PCons)
 			if err := extractLocals(e.Head, locals); err != nil {
 				return err
 			}
@@ -104,13 +104,13 @@ func extractLocals(pattern normalized.Pattern, locals map[ast.Identifier]struct{
 			}
 			break
 		}
-	case normalized.PConst:
+	case *normalized.PConst:
 		{
 			break
 		}
-	case normalized.PDataOption:
+	case *normalized.PDataOption:
 		{
-			e := pattern.(normalized.PDataOption)
+			e := pattern.(*normalized.PDataOption)
 			for _, v := range e.Values {
 				if err := extractLocals(v, locals); err != nil {
 					return err
@@ -118,9 +118,9 @@ func extractLocals(pattern normalized.Pattern, locals map[ast.Identifier]struct{
 			}
 			break
 		}
-	case normalized.PList:
+	case *normalized.PList:
 		{
-			e := pattern.(normalized.PList)
+			e := pattern.(*normalized.PList)
 			for _, v := range e.Items {
 				if err := extractLocals(v, locals); err != nil {
 					return err
@@ -128,23 +128,23 @@ func extractLocals(pattern normalized.Pattern, locals map[ast.Identifier]struct{
 			}
 			break
 		}
-	case normalized.PNamed:
+	case *normalized.PNamed:
 		{
-			e := pattern.(normalized.PNamed)
-			locals[e.Name] = struct{}{}
+			e := pattern.(*normalized.PNamed)
+			locals[e.Name] = pattern
 			break
 		}
-	case normalized.PRecord:
+	case *normalized.PRecord:
 		{
-			e := pattern.(normalized.PRecord)
+			e := pattern.(*normalized.PRecord)
 			for _, v := range e.Fields {
-				locals[v.Name] = struct{}{}
+				locals[v.Name] = pattern
 			}
 			break
 		}
-	case normalized.PTuple:
+	case *normalized.PTuple:
 		{
-			e := pattern.(normalized.PTuple)
+			e := pattern.(*normalized.PTuple)
 			for _, v := range e.Items {
 				if err := extractLocals(v, locals); err != nil {
 					return err
@@ -160,7 +160,7 @@ func extractLocals(pattern normalized.Pattern, locals map[ast.Identifier]struct{
 
 func extractLambda(
 	loc ast.Location, parentName ast.Identifier, params []normalized.Pattern, body normalized.Expression,
-	m *normalized.Module, locals map[ast.Identifier]struct{},
+	m *normalized.Module, locals map[ast.Identifier]normalized.Pattern,
 	name ast.Identifier,
 ) (def *normalized.Definition, usedLocals []ast.Identifier, replacement normalized.Expression, errOut error) {
 	lastLambdaId++
@@ -180,7 +180,10 @@ func extractLambda(
 		Name: lambdaName,
 		Params: append(
 			common.Map(func(x ast.Identifier) normalized.Pattern {
-				return normalized.PNamed{Location: loc, Name: x}
+				return &normalized.PNamed{
+					PatternBase: &normalized.PatternBase{Location: loc},
+					Name:        x,
+				}
 			}, usedLocals),
 			params...),
 		Expression: body,
@@ -190,29 +193,31 @@ func extractLambda(
 	m.Definitions = append(m.Definitions, def)
 
 	replacement = normalized.Global{
-		Location:       loc,
+		ExpressionBase: &normalized.ExpressionBase{Location: loc},
 		ModuleName:     m.Name,
 		DefinitionName: def.Name,
 	}
+	body.GetPredecessor().SetSuccessor(replacement)
 
 	if len(usedLocals) > 0 {
 		replacement = normalized.Apply{
-			Location: loc,
-			Func:     replacement,
+			ExpressionBase: &normalized.ExpressionBase{Location: loc},
+			Func:           replacement,
 			Args: common.Map(func(x ast.Identifier) normalized.Expression {
 				return normalized.Local{
-					Location: loc,
-					Name:     x,
+					ExpressionBase: &normalized.ExpressionBase{Location: loc},
+					Name:           x,
 				}
 			}, usedLocals),
 		}
+		body.GetPredecessor().SetSuccessor(replacement)
 	}
 
 	return
 }
 
-func extractParamNames(params []normalized.Pattern) (map[ast.Identifier]struct{}, error) {
-	paramNames := map[ast.Identifier]struct{}{}
+func extractParamNames(params []normalized.Pattern) (map[ast.Identifier]normalized.Pattern, error) {
+	paramNames := map[ast.Identifier]normalized.Pattern{}
 	for _, p := range params {
 		if err := extractLocals(p, paramNames); err != nil {
 			return nil, err
@@ -223,7 +228,7 @@ func extractParamNames(params []normalized.Pattern) (map[ast.Identifier]struct{}
 
 func flattenLambdas(
 	parentName ast.Identifier,
-	expr normalized.Expression, m *normalized.Module, locals map[ast.Identifier]struct{},
+	expr normalized.Expression, m *normalized.Module, locals map[ast.Identifier]normalized.Pattern,
 ) (normalized.Expression, error) {
 	var err error
 	switch expr.(type) {
@@ -256,20 +261,23 @@ func flattenLambdas(
 			if len(usedLocals) > 0 {
 				replName := ast.Identifier(fmt.Sprintf("_lambda_closue_%d", lastLambdaId))
 				replaceMap := map[ast.Identifier]normalized.Expression{}
-				replaceMap[e.Name] = normalized.Local{
-					Location: e.Location,
-					Name:     replName,
+				r := normalized.Local{
+					ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+					Name:           replName,
 				}
+				replaceMap[e.Name] = r
+				e.GetPredecessor().SetSuccessor(r)
 
 				let := normalized.LetMatch{
-					Location: e.Location,
-					Pattern: normalized.PNamed{
-						Location: e.Location,
-						Name:     replName,
+					ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+					Pattern: &normalized.PNamed{
+						PatternBase: &normalized.PatternBase{Location: e.Location},
+						Name:        replName,
 					},
 					Value:  replacement,
 					Nested: def.Expression,
 				}
+				e.GetPredecessor().SetSuccessor(let)
 				def.Expression = let
 				def.Expression, err = replaceLocals(def.Expression, replaceMap)
 				if err != nil {
@@ -653,12 +661,13 @@ func replaceLocals(
 func flattenDataTypes(m *parsed.Module) {
 	for _, it := range m.DataTypes {
 		typeArgs := common.Map(func(x ast.Identifier) parsed.Type {
-			return parsed.TTypeParameter{
+			return &parsed.TTypeParameter{
 				Location: it.Location,
 				Name:     x,
 			}
 		}, it.Params)
-		dataType := parsed.TData{
+
+		dataType := &parsed.TData{
 			Location: it.Location,
 			Name:     common.MakeFullIdentifier(m.Name, it.Name),
 			Args:     typeArgs,
@@ -679,22 +688,26 @@ func flattenDataTypes(m *parsed.Module) {
 		for _, option := range it.Options {
 			var type_ parsed.Type = dataType
 			if len(option.Values) > 0 {
-				type_ = parsed.TFunc{
+				type_ = &parsed.TFunc{
 					Location: it.Location,
 					Params:   option.Values,
 					Return:   type_,
 				}
 			}
-			var body parsed.Expression = parsed.Constructor{
-				Location:   option.Location,
+			var body parsed.Expression = &parsed.Constructor{
+				ExpressionBase: &parsed.ExpressionBase{
+					Location: option.Location,
+				},
 				ModuleName: m.Name,
 				DataName:   it.Name,
 				OptionName: option.Name,
 				Args: common.Map(
 					func(i int) parsed.Expression {
-						return parsed.Var{
-							Location: option.Location,
-							Name:     ast.QualifiedIdentifier(fmt.Sprintf("p%d", i)),
+						return &parsed.Var{
+							ExpressionBase: &parsed.ExpressionBase{
+								Location: option.Location,
+							},
+							Name: ast.QualifiedIdentifier(fmt.Sprintf("p%d", i)),
 						}
 					},
 					common.Range(0, len(option.Values)),
@@ -703,12 +716,12 @@ func flattenDataTypes(m *parsed.Module) {
 
 			params := common.Map(
 				func(i int) parsed.Pattern {
-					return parsed.PNamed{Location: option.Location, Name: ast.Identifier(fmt.Sprintf("p%d", i))}
+					return &parsed.PNamed{Location: option.Location, Name: ast.Identifier(fmt.Sprintf("p%d", i))}
 				},
 				common.Range(0, len(option.Values)),
 			)
 
-			m.Definitions = append(m.Definitions, parsed.Definition{
+			m.Definitions = append(m.Definitions, &parsed.Definition{
 				Location:   option.Location,
 				Hidden:     option.Hidden || it.Hidden,
 				Name:       option.Name,
@@ -760,7 +773,7 @@ func unwrapImports(module *parsed.Module, modules map[ast.QualifiedIdentifier]*p
 		for _, a := range m.Aliases {
 			if !a.Hidden {
 				expose(string(a.Name), string(a.Name))
-				if dt, ok := a.Type.(parsed.TData); ok {
+				if dt, ok := a.Type.(*parsed.TData); ok {
 					for _, v := range dt.Options {
 						if !v.Hidden {
 							expose(string(v.Name), string(a.Name))
@@ -782,9 +795,9 @@ func unwrapImports(module *parsed.Module, modules map[ast.QualifiedIdentifier]*p
 }
 
 func normalizeDefinition(
-	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module, def parsed.Definition,
+	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module, def *parsed.Definition,
 	normalizedModule *normalized.Module,
-) (o *normalized.Definition, params map[ast.Identifier]struct{}, err error) {
+) (o *normalized.Definition, params map[ast.Identifier]normalized.Pattern, err error) {
 	lastDefinitionId++
 	o = &normalized.Definition{
 		Id:       lastDefinitionId,
@@ -792,7 +805,7 @@ func normalizeDefinition(
 		Location: def.Location,
 		Hidden:   def.Hidden,
 	}
-	params = map[ast.Identifier]struct{}{}
+	params = map[ast.Identifier]normalized.Pattern{}
 	o.Params, err = common.MapError(func(x parsed.Pattern) (normalized.Pattern, error) {
 		return normalizePattern(params, modules, module, x, normalizedModule)
 	}, def.Params)
@@ -814,7 +827,7 @@ func normalizeDefinition(
 }
 
 func normalizePattern(
-	locals map[ast.Identifier]struct{},
+	locals map[ast.Identifier]normalized.Pattern,
 	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module,
 	pattern parsed.Pattern,
 	normalizedModule *normalized.Module,
@@ -824,40 +837,40 @@ func normalizePattern(
 	}
 
 	switch pattern.(type) {
-	case parsed.PAlias:
+	case *parsed.PAlias:
 		{
-			e := pattern.(parsed.PAlias)
-			locals[e.Alias] = struct{}{}
-			nested, err := normalize(e.Nested)
+			e := pattern.(*parsed.PAlias)
+			np := &normalized.PAlias{
+				PatternBase: &normalized.PatternBase{Location: e.Location},
+				Alias:       e.Alias,
+			}
+			locals[e.Alias] = np
+			var err error
+			np.Nested, err = normalize(e.Nested)
 			if err != nil {
 				return nil, err
 			}
+			np.Type, err = normalizeType(modules, module, nil, e.Type, nil)
+			if err != nil {
+				return nil, err
+			}
+			return np, nil
+		}
+	case *parsed.PAny:
+		{
+			e := pattern.(*parsed.PAny)
 			type_, err := normalizeType(modules, module, nil, e.Type, nil)
 			if err != nil {
 				return nil, err
 			}
-			return normalized.PAlias{
-				Location: e.Location,
-				Type:     type_,
-				Alias:    e.Alias,
-				Nested:   nested,
+			return &normalized.PAny{
+				PatternBase: &normalized.PatternBase{Location: e.Location},
+				Type:        type_,
 			}, nil
 		}
-	case parsed.PAny:
+	case *parsed.PCons:
 		{
-			e := pattern.(parsed.PAny)
-			type_, err := normalizeType(modules, module, nil, e.Type, nil)
-			if err != nil {
-				return nil, err
-			}
-			return normalized.PAny{
-				Location: e.Location,
-				Type:     type_,
-			}, nil
-		}
-	case parsed.PCons:
-		{
-			e := pattern.(parsed.PCons)
+			e := pattern.(*parsed.PCons)
 			head, err := normalize(e.Head)
 			if err != nil {
 				return nil, err
@@ -870,30 +883,30 @@ func normalizePattern(
 			if err != nil {
 				return nil, err
 			}
-			return normalized.PCons{
-				Location: e.Location,
-				Type:     type_,
-				Head:     head,
-				Tail:     tail,
+			return &normalized.PCons{
+				PatternBase: &normalized.PatternBase{Location: e.Location},
+				Type:        type_,
+				Head:        head,
+				Tail:        tail,
 			}, nil
 		}
-	case parsed.PConst:
+	case *parsed.PConst:
 		{
-			e := pattern.(parsed.PConst)
+			e := pattern.(*parsed.PConst)
 			type_, err := normalizeType(modules, module, nil, e.Type, nil)
 			if err != nil {
 				return nil, err
 			}
-			return normalized.PConst{
-				Location: e.Location,
-				Type:     type_,
-				Value:    e.Value,
+			return &normalized.PConst{
+				PatternBase: &normalized.PatternBase{Location: e.Location},
+				Type:        type_,
+				Value:       e.Value,
 			}, nil
 		}
-	case parsed.PDataOption:
+	case *parsed.PDataOption:
 		{
-			e := pattern.(parsed.PDataOption)
-			def, mod, ids := findParsedDefinition(modules, module, e.Name, normalizedModule)
+			e := pattern.(*parsed.PDataOption)
+			def, mod, ids := FindParsedDefinition(modules, module, e.Name, normalizedModule)
 			if len(ids) == 0 {
 				return nil, common.Error{Location: e.Location, Message: "data constructor not found"}
 			} else if len(ids) > 1 {
@@ -913,17 +926,17 @@ func normalizePattern(
 			if err != nil {
 				return nil, err
 			}
-			return normalized.PDataOption{
-				Location:       e.Location,
+			return &normalized.PDataOption{
+				PatternBase:    &normalized.PatternBase{Location: e.Location},
 				Type:           type_,
 				ModuleName:     mod.Name,
 				DefinitionName: def.Name,
 				Values:         values,
 			}, nil
 		}
-	case parsed.PList:
+	case *parsed.PList:
 		{
-			e := pattern.(parsed.PList)
+			e := pattern.(*parsed.PList)
 			items, err := common.MapError(normalize, e.Items)
 			if err != nil {
 				return nil, err
@@ -932,45 +945,49 @@ func normalizePattern(
 			if err != nil {
 				return nil, err
 			}
-			return normalized.PList{
-				Location: e.Location,
-				Type:     type_,
-				Items:    items,
+			return &normalized.PList{
+				PatternBase: &normalized.PatternBase{Location: e.Location},
+				Type:        type_,
+				Items:       items,
 			}, nil
 		}
-	case parsed.PNamed:
+	case *parsed.PNamed:
 		{
-			e := pattern.(parsed.PNamed)
-			locals[e.Name] = struct{}{}
+			e := pattern.(*parsed.PNamed)
+			np := &normalized.PNamed{
+				PatternBase: &normalized.PatternBase{Location: e.Location},
+				Name:        e.Name,
+			}
+			locals[e.Name] = np
+			var err error
+			np.Type, err = normalizeType(modules, module, nil, e.Type, nil)
+			if err != nil {
+				return nil, err
+			}
+			return np, nil
+		}
+	case *parsed.PRecord:
+		{
+			e := pattern.(*parsed.PRecord)
 			type_, err := normalizeType(modules, module, nil, e.Type, nil)
 			if err != nil {
 				return nil, err
 			}
-			return normalized.PNamed{
-				Location: e.Location,
-				Type:     type_,
-				Name:     e.Name,
-			}, nil
-		}
-	case parsed.PRecord:
-		{
-			e := pattern.(parsed.PRecord)
-			type_, err := normalizeType(modules, module, nil, e.Type, nil)
-			if err != nil {
-				return nil, err
-			}
-			return normalized.PRecord{
-				Location: e.Location,
-				Type:     type_,
+			return &normalized.PRecord{
+				PatternBase: &normalized.PatternBase{Location: e.Location},
+				Type:        type_,
 				Fields: common.Map(func(x parsed.PRecordField) normalized.PRecordField {
-					locals[x.Name] = struct{}{}
+					locals[x.Name] = &normalized.PNamed{
+						PatternBase: &normalized.PatternBase{Location: x.Location},
+						Name:        x.Name,
+					}
 					return normalized.PRecordField{Location: x.Location, Name: x.Name}
 				}, e.Fields),
 			}, nil
 		}
-	case parsed.PTuple:
+	case *parsed.PTuple:
 		{
-			e := pattern.(parsed.PTuple)
+			e := pattern.(*parsed.PTuple)
 			items, err := common.MapError(normalize, e.Items)
 			if err != nil {
 				return nil, err
@@ -979,10 +996,10 @@ func normalizePattern(
 			if err != nil {
 				return nil, err
 			}
-			return normalized.PTuple{
-				Location: e.Location,
-				Type:     type_,
-				Items:    items,
+			return &normalized.PTuple{
+				PatternBase: &normalized.PatternBase{Location: e.Location},
+				Type:        type_,
+				Items:       items,
 			}, nil
 		}
 	}
@@ -990,7 +1007,7 @@ func normalizePattern(
 }
 
 func normalizeExpression(
-	locals map[ast.Identifier]struct{},
+	locals map[ast.Identifier]normalized.Pattern,
 	modules map[ast.QualifiedIdentifier]*parsed.Module,
 	module *parsed.Module,
 	expr parsed.Expression,
@@ -1031,22 +1048,22 @@ func normalizeExpression(
 	}
 
 	switch expr.(type) {
-	case parsed.Access:
+	case *parsed.Access:
 		{
-			e := expr.(parsed.Access)
+			e := expr.(*parsed.Access)
 			record, err := normalize(e.Record)
 			if err != nil {
 				return nil, err
 			}
-			return normalized.Access{
-				Location:  e.Location,
-				Record:    record,
-				FieldName: e.FieldName,
-			}, nil
+			return e.SetSuccessor(normalized.Access{
+				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+				Record:         record,
+				FieldName:      e.FieldName,
+			}), nil
 		}
-	case parsed.Apply:
+	case *parsed.Apply:
 		{
-			e := expr.(parsed.Apply)
+			e := expr.(*parsed.Apply)
 			fn, err := normalize(e.Func)
 			if err != nil {
 				return nil, err
@@ -1055,38 +1072,38 @@ func normalizeExpression(
 			if err != nil {
 				return nil, err
 			}
-			return normalized.Apply{
-				Location: e.Location,
-				Func:     fn,
-				Args:     args,
-			}, nil
+			return e.SetSuccessor(normalized.Apply{
+				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+				Func:           fn,
+				Args:           args,
+			}), nil
 		}
-	case parsed.Const:
+	case *parsed.Const:
 		{
-			e := expr.(parsed.Const)
-			return normalized.Const{
-				Location: e.Location,
-				Value:    e.Value,
-			}, nil
+			e := expr.(*parsed.Const)
+			return e.SetSuccessor(normalized.Const{
+				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+				Value:          e.Value,
+			}), nil
 		}
-	case parsed.Constructor:
+	case *parsed.Constructor:
 		{
-			e := expr.(parsed.Constructor)
+			e := expr.(*parsed.Constructor)
 			args, err := common.MapError(normalize, e.Args)
 			if err != nil {
 				return nil, err
 			}
-			return normalized.Constructor{
-				Location:   e.Location,
-				ModuleName: e.ModuleName,
-				DataName:   e.DataName,
-				OptionName: e.OptionName,
-				Args:       args,
-			}, nil
+			return e.SetSuccessor(normalized.Constructor{
+				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+				ModuleName:     e.ModuleName,
+				DataName:       e.DataName,
+				OptionName:     e.OptionName,
+				Args:           args,
+			}), nil
 		}
-	case parsed.If:
+	case *parsed.If:
 		{
-			e := expr.(parsed.If)
+			e := expr.(*parsed.If)
 			boolType := &normalized.TData{
 				Location: e.Location,
 				Name:     common.NarCoreBasicsBool,
@@ -1107,14 +1124,14 @@ func normalizeExpression(
 			if err != nil {
 				return nil, err
 			}
-			return normalized.Select{
-				Location:  e.Location,
-				Condition: condition,
+			return e.SetSuccessor(normalized.Select{
+				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+				Condition:      condition,
 				Cases: []normalized.SelectCase{
 					{
 						Location: e.Positive.GetLocation(),
-						Pattern: normalized.PDataOption{
-							Location:       e.Positive.GetLocation(),
+						Pattern: &normalized.PDataOption{
+							PatternBase:    &normalized.PatternBase{Location: e.Positive.GetLocation()},
 							Type:           boolType,
 							ModuleName:     common.NarCoreBasicsName,
 							DefinitionName: common.NarCoreBasicsTrueName,
@@ -1123,8 +1140,8 @@ func normalizeExpression(
 					},
 					{
 						Location: e.Negative.GetLocation(),
-						Pattern: normalized.PDataOption{
-							Location:       e.Negative.GetLocation(),
+						Pattern: &normalized.PDataOption{
+							PatternBase:    &normalized.PatternBase{Location: e.Negative.GetLocation()},
 							Type:           boolType,
 							ModuleName:     common.NarCoreBasicsName,
 							DefinitionName: common.NarCoreBasicsFalseName,
@@ -1132,11 +1149,11 @@ func normalizeExpression(
 						Expression: negative,
 					},
 				},
-			}, nil
+			}), nil
 		}
-	case parsed.LetMatch:
+	case *parsed.LetMatch:
 		{
-			e := expr.(parsed.LetMatch)
+			e := expr.(*parsed.LetMatch)
 			innerLocals := maps.Clone(locals)
 			pattern, err := normalizePattern(innerLocals, modules, module, e.Pattern, normalizedModule)
 			if err != nil {
@@ -1150,18 +1167,21 @@ func normalizeExpression(
 			if err != nil {
 				return nil, err
 			}
-			return normalized.LetMatch{
-				Location: e.Location,
-				Pattern:  pattern,
-				Value:    value,
-				Nested:   nested,
-			}, nil
+			return e.SetSuccessor(normalized.LetMatch{
+				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+				Pattern:        pattern,
+				Value:          value,
+				Nested:         nested,
+			}), nil
 		}
-	case parsed.LetDef:
+	case *parsed.LetDef:
 		{
-			e := expr.(parsed.LetDef)
+			e := expr.(*parsed.LetDef)
 			innerLocals := maps.Clone(locals)
-			innerLocals[e.Name] = struct{}{}
+			innerLocals[e.Name] = &normalized.PNamed{
+				PatternBase: &normalized.PatternBase{Location: e.NameLocation},
+				Name:        e.Name,
+			}
 			params, err := common.MapError(func(x parsed.Pattern) (normalized.Pattern, error) {
 				return normalizePattern(innerLocals, modules, module, x, normalizedModule)
 			}, e.Params)
@@ -1180,43 +1200,43 @@ func normalizeExpression(
 			if err != nil {
 				return nil, err
 			}
-			return normalized.LetDef{
-				Location: e.Location,
-				Name:     e.Name,
-				Params:   params,
-				FnType:   type_,
-				Body:     body,
-				Nested:   nested,
-			}, nil
+			return e.SetSuccessor(normalized.LetDef{
+				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+				Name:           e.Name,
+				Params:         params,
+				FnType:         type_,
+				Body:           body,
+				Nested:         nested,
+			}), nil
 		}
-	case parsed.List:
+	case *parsed.List:
 		{
-			e := expr.(parsed.List)
+			e := expr.(*parsed.List)
 			items, err := common.MapError(normalize, e.Items)
 			if err != nil {
 				return nil, err
 			}
-			return normalized.List{
-				Location: e.Location,
-				Items:    items,
-			}, nil
+			return e.SetSuccessor(normalized.List{
+				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+				Items:          items,
+			}), nil
 		}
-	case parsed.NativeCall:
+	case *parsed.NativeCall:
 		{
-			e := expr.(parsed.NativeCall)
+			e := expr.(*parsed.NativeCall)
 			args, err := common.MapError(normalize, e.Args)
 			if err != nil {
 				return nil, err
 			}
-			return normalized.NativeCall{
-				Location: e.Location,
-				Name:     e.Name,
-				Args:     args,
-			}, nil
+			return e.SetSuccessor(normalized.NativeCall{
+				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+				Name:           e.Name,
+				Args:           args,
+			}), nil
 		}
-	case parsed.Record:
+	case *parsed.Record:
 		{
-			e := expr.(parsed.Record)
+			e := expr.(*parsed.Record)
 			fields, err := common.MapError(func(i parsed.RecordField) (normalized.RecordField, error) {
 				value, err := normalize(i.Value)
 				if err != nil {
@@ -1231,14 +1251,14 @@ func normalizeExpression(
 			if err != nil {
 				return nil, err
 			}
-			return normalized.Record{
-				Location: e.Location,
-				Fields:   fields,
-			}, nil
+			return e.SetSuccessor(normalized.Record{
+				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+				Fields:         fields,
+			}), nil
 		}
-	case parsed.Select:
+	case *parsed.Select:
 		{
-			e := expr.(parsed.Select)
+			e := expr.(*parsed.Select)
 			condition, err := normalize(e.Condition)
 			if err != nil {
 				return nil, err
@@ -1262,28 +1282,28 @@ func normalizeExpression(
 			if err != nil {
 				return nil, err
 			}
-			return normalized.Select{
-				Location:  e.Location,
-				Condition: condition,
-				Cases:     cases,
-			}, nil
+			return e.SetSuccessor(normalized.Select{
+				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+				Condition:      condition,
+				Cases:          cases,
+			}), nil
 		}
-	case parsed.Tuple:
+	case *parsed.Tuple:
 		{
-			e := expr.(parsed.Tuple)
+			e := expr.(*parsed.Tuple)
 			items, err := common.MapError(normalize, e.Items)
 			if err != nil {
 				return nil, err
 			}
-			return normalized.Tuple{
-				Location: e.Location,
-				Items:    items,
-			}, nil
+			return e.SetSuccessor(normalized.Tuple{
+				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+				Items:          items,
+			}), nil
 		}
-	case parsed.Update:
+	case *parsed.Update:
 		{
-			e := expr.(parsed.Update)
-			d, m, ids := findParsedDefinition(modules, module, e.RecordName, normalizedModule)
+			e := expr.(*parsed.Update)
+			d, m, ids := FindParsedDefinition(modules, module, e.RecordName, normalizedModule)
 			fields, err := common.MapError(func(i parsed.RecordField) (normalized.RecordField, error) {
 				value, err := normalize(i.Value)
 				if err != nil {
@@ -1301,25 +1321,25 @@ func normalizeExpression(
 
 			if len(ids) == 1 {
 
-				return normalized.UpdateGlobal{
-					Location:       e.Location,
+				return e.SetSuccessor(normalized.UpdateGlobal{
+					ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
 					ModuleName:     m.Name,
 					DefinitionName: d.Name,
 					Fields:         fields,
-				}, nil
+				}), nil
 			} else if len(ids) > 1 {
 				return nil, newAmbiguousDefinitionError(ids, e.RecordName, e.Location)
 			}
 
-			return normalized.UpdateLocal{
-				Location:   e.Location,
-				RecordName: ast.Identifier(e.RecordName),
-				Fields:     fields,
-			}, nil
+			return e.SetSuccessor(normalized.UpdateLocal{
+				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+				RecordName:     ast.Identifier(e.RecordName),
+				Fields:         fields,
+			}), nil
 		}
-	case parsed.Lambda:
+	case *parsed.Lambda:
 		{
-			e := expr.(parsed.Lambda)
+			e := expr.(*parsed.Lambda)
 			params, err := common.MapError(func(x parsed.Pattern) (normalized.Pattern, error) {
 				return normalizePattern(locals, modules, module, x, normalizedModule)
 			}, e.Params)
@@ -1330,30 +1350,34 @@ func normalizeExpression(
 			if err != nil {
 				return nil, err
 			}
-			return normalized.Lambda{
-				Location: e.Location,
-				Params:   params,
-				Body:     body,
-			}, nil
+			return e.SetSuccessor(normalized.Lambda{
+				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+				Params:         params,
+				Body:           body,
+			}), nil
 		}
-	case parsed.Accessor:
+	case *parsed.Accessor:
 		{
-			e := expr.(parsed.Accessor)
-			return normalize(parsed.Lambda{
-				Params: []parsed.Pattern{parsed.PNamed{Location: e.Location, Name: "x"}},
-				Body: parsed.Access{
-					Location: e.Location,
-					Record: parsed.Var{
+			e := expr.(*parsed.Accessor)
+			return normalize(&parsed.Lambda{
+				Params: []parsed.Pattern{&parsed.PNamed{Location: e.Location, Name: "x"}},
+				Body: &parsed.Access{
+					ExpressionBase: &parsed.ExpressionBase{
 						Location: e.Location,
-						Name:     "x",
+					},
+					Record: &parsed.Var{
+						ExpressionBase: &parsed.ExpressionBase{
+							Location: e.Location,
+						},
+						Name: "x",
 					},
 					FieldName: e.FieldName,
 				},
 			})
 		}
-	case parsed.BinOp:
+	case *parsed.BinOp:
 		{
-			e := expr.(parsed.BinOp)
+			e := expr.(*parsed.BinOp)
 			var output []parsed.BinOpItem
 			var operators []parsed.BinOpItem
 			for _, o1 := range e.Items {
@@ -1421,67 +1445,72 @@ func normalizeExpression(
 						}
 					}
 
-					return normalized.Apply{
-						Location: e.Location,
+					return e.SetSuccessor(normalized.Apply{
+						ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
 						Func: normalized.Global{
-							Location:       e.Location,
+							ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
 							ModuleName:     m.Name,
 							DefinitionName: infixA.Alias,
 						},
 						Args: []normalized.Expression{left, right},
-					}, nil
+					}), nil
 				}
 			}
 
 			return buildTree()
 		}
-	case parsed.Negate:
+	case *parsed.Negate:
 		{
-			e := expr.(parsed.Negate)
+			e := expr.(*parsed.Negate)
 			nested, err := normalize(e.Nested)
 			if err != nil {
 				return nil, err
 			}
-			return normalized.Apply{
-				Location: e.Location,
+			return e.SetSuccessor(normalized.Apply{
+				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
 				Func: normalized.Global{
-					Location:       e.Location,
+					ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
 					ModuleName:     common.NarCoreMath,
 					DefinitionName: common.NarCoreMathNeg,
 				},
 				Args: []normalized.Expression{nested},
-			}, nil
+			}), nil
 		}
-	case parsed.Var:
+	case *parsed.Var:
 		{
-			e := expr.(parsed.Var)
-			if _, ok := locals[ast.Identifier(e.Name)]; ok {
-				return normalized.Local{
-					Location: e.Location,
-					Name:     ast.Identifier(e.Name),
-				}, nil
+			e := expr.(*parsed.Var)
+			if lc, ok := locals[ast.Identifier(e.Name)]; ok {
+				return e.SetSuccessor(normalized.Local{
+					ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
+					Name:           ast.Identifier(e.Name),
+					Target:         lc,
+				}), nil
 			}
 
-			d, m, ids := findParsedDefinition(modules, module, e.Name, normalizedModule)
+			d, m, ids := FindParsedDefinition(modules, module, e.Name, normalizedModule)
 			if len(ids) == 1 {
-				return normalized.Global{
-					Location:       e.Location,
+				return e.SetSuccessor(normalized.Global{
+					ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
 					ModuleName:     m.Name,
 					DefinitionName: d.Name,
-				}, nil
+				}), nil
 			} else if len(ids) > 1 {
 				return nil, newAmbiguousDefinitionError(ids, e.Name, e.Location)
 			}
 
 			parts := strings.Split(string(e.Name), ".")
 			if len(parts) > 1 {
-				varAccess := parsed.Expression(parsed.Var{
-					Location: e.Location,
-					Name:     ast.QualifiedIdentifier(parts[0]),
+				varAccess := parsed.Expression(&parsed.Var{
+					ExpressionBase: &parsed.ExpressionBase{
+						Location: e.Location,
+					},
+					Name: ast.QualifiedIdentifier(parts[0]),
 				})
 				for i := 1; i < len(parts); i++ {
-					varAccess = parsed.Access{
-						Location:  e.Location,
+					varAccess = &parsed.Access{
+						ExpressionBase: &parsed.ExpressionBase{
+							Location: e.Location,
+						},
 						Record:    varAccess,
 						FieldName: ast.Identifier(parts[i]),
 					}
@@ -1494,19 +1523,19 @@ func normalizeExpression(
 				Message:  fmt.Sprintf("identifier `%s` not found", e.Location.Text()),
 			}
 		}
-	case parsed.InfixVar:
+	case *parsed.InfixVar:
 		{
-			e := expr.(parsed.InfixVar)
+			e := expr.(*parsed.InfixVar)
 			if i, m, ids := findParsedInfixFn(modules, module, e.Infix); len(ids) != 1 {
 				return nil, newAmbiguousInfixError(ids, e.Infix, e.Location)
-			} else if d, _, ids := findParsedDefinition(nil, m, ast.QualifiedIdentifier(i.Alias), normalizedModule); len(ids) != 1 {
+			} else if d, _, ids := FindParsedDefinition(nil, m, ast.QualifiedIdentifier(i.Alias), normalizedModule); len(ids) != 1 {
 				return nil, newAmbiguousDefinitionError(ids, ast.QualifiedIdentifier(i.Alias), e.Location)
 			} else {
-				return normalized.Global{
-					Location:       e.Location,
+				return e.SetSuccessor(normalized.Global{
+					ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
 					ModuleName:     m.Name,
 					DefinitionName: d.Name,
-				}, nil
+				}), nil
 			}
 		}
 	}
@@ -1514,7 +1543,8 @@ func normalizeExpression(
 }
 
 func extractUsedLocals(
-	expr normalized.Expression, definedLocals map[ast.Identifier]struct{}, params map[ast.Identifier]struct{},
+	expr normalized.Expression, definedLocals map[ast.Identifier]normalized.Pattern,
+	params map[ast.Identifier]normalized.Pattern,
 ) ([]ast.Identifier, error) {
 	usedLocals := map[ast.Identifier]struct{}{}
 	if err := extractUsedLocalsSet(expr, definedLocals, usedLocals); err != nil {
@@ -1531,7 +1561,7 @@ func extractUsedLocals(
 
 func extractUsedLocalsSet(
 	expr normalized.Expression,
-	definedLocals map[ast.Identifier]struct{},
+	definedLocals map[ast.Identifier]normalized.Pattern,
 	usedLocals map[ast.Identifier]struct{},
 ) error {
 	switch expr.(type) {
@@ -1701,9 +1731,9 @@ func normalizeType(
 		return normalizeType(modules, module, typeModule, x, namedTypes)
 	}
 	switch t.(type) {
-	case parsed.TFunc:
+	case *parsed.TFunc:
 		{
-			e := t.(parsed.TFunc)
+			e := t.(*parsed.TFunc)
 			params, err := common.MapError(normalize, e.Params)
 			if err != nil {
 				return nil, err
@@ -1718,9 +1748,9 @@ func normalizeType(
 				Return:   ret,
 			}), nil
 		}
-	case parsed.TRecord:
+	case *parsed.TRecord:
 		{
-			e := t.(parsed.TRecord)
+			e := t.(*parsed.TRecord)
 			fields := map[ast.Identifier]normalized.Type{}
 			for n, v := range e.Fields {
 				var err error
@@ -1734,9 +1764,9 @@ func normalizeType(
 				Fields:   fields,
 			}, nil
 		}
-	case parsed.TTuple:
+	case *parsed.TTuple:
 		{
-			e := t.(parsed.TTuple)
+			e := t.(*parsed.TTuple)
 			items, err := common.MapError(normalize, e.Items)
 			if err != nil {
 				return nil, err
@@ -1746,16 +1776,16 @@ func normalizeType(
 				Items:    items,
 			}, nil
 		}
-	case parsed.TUnit:
+	case *parsed.TUnit:
 		{
-			e := t.(parsed.TUnit)
+			e := t.(*parsed.TUnit)
 			return &normalized.TUnit{
 				Location: e.Location,
 			}, nil
 		}
-	case parsed.TData:
+	case *parsed.TData:
 		{
-			e := t.(parsed.TData)
+			e := t.(*parsed.TData)
 			if namedTypes == nil {
 				namedTypes = namedTypeMap{}
 			}
@@ -1787,6 +1817,7 @@ func normalizeType(
 					Values: values,
 				}, nil
 			}, e.Options)
+
 			return &normalized.TData{
 				Location: e.Location,
 				Name:     e.Name,
@@ -1794,9 +1825,9 @@ func normalizeType(
 				Options:  options,
 			}, nil
 		}
-	case parsed.TNative:
+	case *parsed.TNative:
 		{
-			e := t.(parsed.TNative)
+			e := t.(*parsed.TNative)
 			args, err := common.MapError(normalize, e.Args)
 			if err != nil {
 				return nil, err
@@ -1807,17 +1838,17 @@ func normalizeType(
 				Args:     args,
 			}, nil
 		}
-	case parsed.TTypeParameter:
+	case *parsed.TTypeParameter:
 		{
-			e := t.(parsed.TTypeParameter)
+			e := t.(*parsed.TTypeParameter)
 			return &normalized.TTypeParameter{
 				Location: e.Location,
 				Name:     e.Name,
 			}, nil
 		}
-	case parsed.TNamed:
+	case *parsed.TNamed:
 		{
-			e := t.(parsed.TNamed)
+			e := t.(*parsed.TNamed)
 			x, m, ids, err := findParsedType(modules, module, e.Name, e.Args)
 			if ids == nil && typeModule != nil {
 				x, m, ids, err = findParsedType(modules, typeModule, e.Name, e.Args)
@@ -1836,7 +1867,7 @@ func normalizeType(
 						e.Name, common.Join(ids, ", ")),
 				}
 			}
-			if named, ok := x.(parsed.TNamed); ok {
+			if named, ok := x.(*parsed.TNamed); ok {
 				if named.Name == e.Name {
 					return nil, common.Error{
 						Location: named.Location,
@@ -1851,12 +1882,12 @@ func normalizeType(
 	return nil, common.NewCompilerError("impossible case")
 }
 
-func findParsedDefinition(
+func FindParsedDefinition(
 	modules map[ast.QualifiedIdentifier]*parsed.Module,
 	module *parsed.Module,
 	name ast.QualifiedIdentifier,
 	normalizedModule *normalized.Module,
-) (parsed.Definition, *parsed.Module, []ast.FullIdentifier) {
+) (*parsed.Definition, *parsed.Module, []ast.FullIdentifier) {
 	d, m, id := findParsedDefinitionImpl(modules, module, name)
 	if len(id) == 1 {
 		normalizedModule.Dependencies[m.Name] =
@@ -1867,8 +1898,8 @@ func findParsedDefinition(
 
 func findParsedDefinitionImpl(
 	modules map[ast.QualifiedIdentifier]*parsed.Module, module *parsed.Module, name ast.QualifiedIdentifier,
-) (parsed.Definition, *parsed.Module, []ast.FullIdentifier) {
-	var defNameEq = func(x parsed.Definition) bool {
+) (*parsed.Definition, *parsed.Module, []ast.FullIdentifier) {
+	var defNameEq = func(x *parsed.Definition) bool {
 		return ast.QualifiedIdentifier(x.Name) == name
 	}
 
@@ -1892,7 +1923,7 @@ func findParsedDefinitionImpl(
 			}
 		}
 
-		var rDef parsed.Definition
+		var rDef *parsed.Definition
 		var rModule *parsed.Module
 		var rIdent []ast.FullIdentifier
 
@@ -1958,7 +1989,7 @@ func findParsedDefinitionImpl(
 		}
 	}
 
-	return parsed.Definition{}, nil, nil
+	return nil, nil, nil
 }
 
 func findParsedInfixFn(
@@ -2011,7 +2042,7 @@ func findParsedType(
 	if alias, ok := common.Find(aliasNameEq, module.Aliases); ok {
 		id := common.MakeFullIdentifier(module.Name, alias.Name)
 		if alias.Type == nil {
-			return parsed.TNative{
+			return &parsed.TNative{
 				Location: alias.Location,
 				Name:     id,
 				Args:     args,
@@ -2131,71 +2162,100 @@ func applyTypeArgs(t parsed.Type, params map[ast.Identifier]parsed.Type) (parsed
 	doMap := func(x parsed.Type) (parsed.Type, error) { return applyTypeArgs(x, params) }
 	var err error
 	switch t.(type) {
-	case parsed.TFunc:
+	case *parsed.TFunc:
 		{
-			e := t.(parsed.TFunc)
-			e.Params, err = common.MapError(doMap, e.Params)
+			p := t.(*parsed.TFunc)
+			e := &parsed.TFunc{
+				Location: p.Location,
+				Params:   nil,
+				Return:   nil,
+			}
+			e.Params, err = common.MapError(doMap, p.Params)
 			if err != nil {
 				return nil, err
 			}
-			e.Return, err = applyTypeArgs(e.Return, params)
+			e.Return, err = applyTypeArgs(p.Return, params)
 			if err != nil {
 				return nil, err
 			}
-			return t, nil
+			return e, nil
 		}
-	case parsed.TRecord:
+	case *parsed.TRecord:
 		{
-			e := t.(parsed.TRecord)
-			for name, f := range e.Fields {
+			p := t.(*parsed.TRecord)
+			e := &parsed.TRecord{
+				Location: p.Location,
+				Fields:   map[ast.Identifier]parsed.Type{},
+			}
+			for name, f := range p.Fields {
 				e.Fields[name], err = applyTypeArgs(f, params)
 				if err != nil {
 					return nil, err
 				}
 			}
-			return t, nil
+			return e, nil
 		}
-	case parsed.TTuple:
+	case *parsed.TTuple:
 		{
-			e := t.(parsed.TTuple)
-			e.Items, err = common.MapError(doMap, e.Items)
+			p := t.(*parsed.TTuple)
+			e := &parsed.TTuple{
+				Location: p.Location,
+				Items:    nil,
+			}
+			e.Items, err = common.MapError(doMap, p.Items)
 			if err != nil {
 				return nil, err
 			}
-			return t, nil
+			return e, nil
 		}
-	case parsed.TUnit:
+	case *parsed.TUnit:
 		return t, nil
-	case parsed.TData:
+	case *parsed.TData:
 		{
-			e := t.(parsed.TData)
-			e.Args, err = common.MapError(doMap, e.Args)
+			p := t.(*parsed.TData)
+			e := &parsed.TData{
+				Location: p.Location,
+				Name:     p.Name,
+				Options:  p.Options,
+				Args:     nil,
+			}
+			e.Args, err = common.MapError(doMap, p.Args)
 			if err != nil {
 				return nil, err
 			}
 			return e, nil
 		}
-	case parsed.TNamed:
+	case *parsed.TNamed:
 		{
-			e := t.(parsed.TNamed)
-			e.Args, err = common.MapError(doMap, e.Args)
+			p := t.(*parsed.TNamed)
+			e := &parsed.TNamed{
+				Location: p.Location,
+				Name:     p.Name,
+				Args:     nil,
+			}
+			e.Args, err = common.MapError(doMap, p.Args)
 			if err != nil {
 				return nil, err
 			}
 			return e, nil
 		}
-	case parsed.TNative:
+	case *parsed.TNative:
 		{
-			e := t.(parsed.TNative)
-			e.Args, err = common.MapError(doMap, e.Args)
+			p := t.(*parsed.TNative)
+			e := &parsed.TNative{
+				Location: p.Location,
+				Name:     p.Name,
+				Args:     nil,
+			}
+			e.Args, err = common.MapError(doMap, p.Args)
 			if err != nil {
 				return nil, err
 			}
 			return e, nil
 		}
-	case parsed.TTypeParameter:
+	case *parsed.TTypeParameter:
 		{
-			e := t.(parsed.TTypeParameter)
+			e := t.(*parsed.TTypeParameter)
 			return params[e.Name], nil
 		}
 	}

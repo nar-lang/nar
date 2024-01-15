@@ -9,27 +9,28 @@ import (
 	"nar-compiler/internal/pkg/ast/parsed"
 	"nar-compiler/internal/pkg/ast/typed"
 	"nar-compiler/internal/pkg/common"
+	"nar-compiler/internal/pkg/lsp/protocol"
 	"os"
-	"pkg.nimblebun.works/go-lsp"
 	"reflect"
+	"runtime/debug"
 	"strings"
 )
 
 type server struct {
 	cacheDir string
 	log      *common.LogWriter
+	trace    protocol.TraceValues
 
-	rootURI          lsp.DocumentURI
-	trace            lsp.TraceType
-	workspaceFolders []lsp.WorkspaceFolder
+	rootURI          protocol.DocumentURI
+	workspaceFolders []protocol.WorkspaceFolder
 	initialized      bool
 	responseChan     chan rpcResponse
 	notificationChan chan rpcNotification
 	inChan           chan []byte
 	compileChan      chan docChange
 
-	openedDocuments       map[lsp.DocumentURI]*lsp.TextDocumentItem
-	documentToPackageRoot map[lsp.DocumentURI]string
+	openedDocuments       map[protocol.DocumentURI]*protocol.TextDocumentItem
+	documentToPackageRoot map[protocol.DocumentURI]string
 	packageRootToName     map[string]ast.PackageIdentifier
 	loadedPackages        map[ast.PackageIdentifier]*ast.LoadedPackage
 	parsedModules         map[ast.QualifiedIdentifier]*parsed.Module
@@ -38,7 +39,7 @@ type server struct {
 }
 
 type docChange struct {
-	uri   lsp.DocumentURI
+	uri   protocol.DocumentURI
 	force bool
 }
 
@@ -55,8 +56,8 @@ func NewServer(cacheDir string, writeResponse func([]byte)) LanguageServer {
 		compileChan:           make(chan docChange, 1024),
 		log:                   &common.LogWriter{},
 		cacheDir:              cacheDir,
-		openedDocuments:       map[lsp.DocumentURI]*lsp.TextDocumentItem{},
-		documentToPackageRoot: map[lsp.DocumentURI]string{},
+		openedDocuments:       map[protocol.DocumentURI]*protocol.TextDocumentItem{},
+		documentToPackageRoot: map[protocol.DocumentURI]string{},
 		packageRootToName:     map[string]ast.PackageIdentifier{},
 		loadedPackages:        map[ast.PackageIdentifier]*ast.LoadedPackage{},
 		parsedModules:         map[ast.QualifiedIdentifier]*parsed.Module{},
@@ -123,7 +124,7 @@ func (s *server) sender(writeResponse func([]byte)) {
 func (s *server) handleMessage(msg []byte) error {
 	defer func() {
 		if r := recover(); r != nil {
-			s.reportError(fmt.Sprintf("internal error:\n%v", r))
+			s.reportError(fmt.Sprintf("internal error:\n%v\n\n%s", r, debug.Stack()))
 		}
 	}()
 
@@ -203,8 +204,9 @@ func (s *server) notify(message string, params any) {
 }
 
 func (s *server) reportError(message string) {
-	s.notify("window/showMessage", lsp.ShowMessageParams{
-		Type:    lsp.MTError,
+	s.notify("window/showMessage", protocol.ShowMessageParams{
+		Type:    protocol.Error,
 		Message: message,
 	})
+	fmt.Println(message)
 }

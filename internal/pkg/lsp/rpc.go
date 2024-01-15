@@ -3,32 +3,35 @@ package lsp
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"pkg.nimblebun.works/go-lsp"
+	"nar-compiler/internal/pkg/ast/typed"
+	"nar-compiler/internal/pkg/common"
+	"nar-compiler/internal/pkg/lsp/protocol"
 )
 
-func (s *server) Initialize(params *lsp.InitializeParams) (lsp.InitializeResult, error) {
+func (s *server) Initialize(params *protocol.InitializeParams) (protocol.InitializeResult, error) {
 	s.rootURI = params.RootURI
-	s.trace = params.Trace
 	s.workspaceFolders = params.WorkspaceFolders
+	if params.Trace != nil {
+		s.trace = *params.Trace
+	}
 
-	return lsp.InitializeResult{
-		Capabilities: lsp.ServerCapabilities{
-			TextDocumentSync: &lsp.TextDocumentSyncOptions{
+	return protocol.InitializeResult{
+		Capabilities: protocol.ServerCapabilities{
+			TextDocumentSync: &protocol.TextDocumentSyncOptions{
 				OpenClose: true,
-				Change:    lsp.TDSyncKindFull,
+				Change:    protocol.Full,
 			},
-			HoverProvider: &lsp.HoverOptions{},
-			DeclarationProvider: &lsp.DeclarationRegistrationOptions{
-				DeclarationOptions: lsp.DeclarationOptions{},
-				TextDocumentRegistrationOptions: lsp.TextDocumentRegistrationOptions{
-					DocumentSelector: []lsp.DocumentFilter{
-						{Pattern: "**/*.nar"},
-					},
-				},
-				StaticRegistrationOptions: lsp.StaticRegistrationOptions{},
+
+			CompletionProvider: nil,
+			HoverProvider: &protocol.Or_ServerCapabilities_hoverProvider{
+				Value: true,
+			},
+			SignatureHelpProvider: nil,
+			DefinitionProvider: &protocol.Or_ServerCapabilities_definitionProvider{
+				Value: protocol.DefinitionOptions{},
 			},
 		},
-		ServerInfo: lsp.ServerInfo{
+		ServerInfo: &protocol.PServerInfoMsg_initialize{
 			Name:    "Nar Language Server",
 			Version: "0.1.0",
 		},
@@ -45,116 +48,132 @@ func (s *server) Shutdown(_ *nothing) error {
 	return nil
 }
 
-func (s *server) S_setTraceNotification(params *traceNotificationParams) error {
+func (s *server) S_setTraceNotification(params *protocol.SetTraceParams) error {
 	s.trace = params.Value
 	return nil
 }
 
-func (s *server) TextDocument_didOpen(params *lsp.DidOpenTextDocumentParams) error {
+func (s *server) TextDocument_didOpen(params *protocol.DidOpenTextDocumentParams) error {
 	s.openedDocuments[params.TextDocument.URI] = &params.TextDocument
 	s.compileChan <- docChange{params.TextDocument.URI, true}
 	return nil
 }
 
-func (s *server) TextDocument_didChange(params *lsp.DidChangeTextDocumentParams) error {
+func (s *server) TextDocument_didChange(params *protocol.DidChangeTextDocumentParams) error {
 	s.openedDocuments[params.TextDocument.URI].Text = params.ContentChanges[0].Text
 	s.compileChan <- docChange{params.TextDocument.URI, false}
 	return nil
 
 }
 
-func (s *server) TextDocument_didClose(params *lsp.DidCloseTextDocumentParams) error {
+func (s *server) TextDocument_didClose(params *protocol.DidCloseTextDocumentParams) error {
+	if pr, ok := s.documentToPackageRoot[params.TextDocument.URI]; ok {
+		if pid, ok := s.packageRootToName[pr]; ok {
+			if p, ok := s.loadedPackages[pid]; ok {
+				for id, mod := range s.parsedModules {
+					if mod.PackageName == p.Package.Name {
+						delete(s.parsedModules, id)
+						delete(s.normalizedModules, id)
+						delete(s.typedModules, id)
+					}
+				}
+				delete(s.loadedPackages, pid)
+			}
+			delete(s.packageRootToName, pr)
+		}
+		delete(s.documentToPackageRoot, params.TextDocument.URI)
+	}
 	delete(s.openedDocuments, params.TextDocument.URI)
+
 	return nil
 }
 
-/*func (s *server) TextDocument_declaration(params *lsp.DeclarationParams) (*lsp.Location, error) {
-	if doc, ok := s.openedDocuments[params.TextDocument.URI]; ok {
-		loc := ast.NewLocationSrc(
-			uriToPath(doc.URI),
-			[]rune(doc.Text),
-			params.Position.Line,
-			params.Position.Character)
-		for _, m := range s.typedModules {
-			if m.Location.FilePath() == loc.FilePath() {
-				d, e, t := findStatement(loc, m)
-				if t != nil {
-					return locToLocation(t.GetLocation()), nil
-				}
-				if e != nil {
-					if g, ok := e.(*typed.Global); ok {
-						if pm, ok := s.parsedModules[g.ModuleName]; ok {
-							if d, ok := common.Find(func(d parsed.Definition) bool { return d.Name == g.DefinitionName }, pm.Definitions); ok {
-								return locToLocation(d.Location), nil
-							}
-						}
+func (s *server) TextDocument_definition(params *protocol.DefinitionParams) (result *protocol.Location, err error) {
+	_, wl := s.findDefinition(params.TextDocument.URI, params.Position.Line, params.Position.Character)
+	if wl != nil {
+		return locToLocation(wl.GetLocation()), nil
+	}
+	return nil, nil
+}
 
-					}
+func (s *server) TextDocument_hover(params *protocol.HoverParams) (*protocol.Hover, error) {
+	var text string
 
-				}
-				if d != nil {
-					return locToLocation(d.Location), nil
-				}
+	src, wl := s.findDefinition(params.TextDocument.URI, params.Position.Line, params.Position.Character)
+	var moduleName ast.QualifiedIdentifier
+	if wl != nil {
+		for _, m := range s.parsedModules {
+			if m.Location.FilePath() == wl.GetLocation().FilePath() {
+				moduleName = m.Name
+				break
 			}
 		}
 	}
-	return nil, nil
-}*/
+	switch wl.(type) {
+	case *typed.Definition:
+		{
+			td := wl.(*typed.Definition)
+			text = fmt.Sprintf("defined in `%s`\n\n```nar\ndef %s", moduleName, td.Name)
+			um := typed.UnboundMap{}
+			if len(td.Params) > 0 {
+				text += "(" + common.Fold(func(p typed.Pattern, s string) string {
+					if s != "" {
+						s += ", "
+					}
+					return s + p.ToString(um, true, moduleName)
+				}, "", td.Params) + "): "
+				text += td.Expression.GetType().ToString(um, moduleName)
+			} else if td.DeclaredType != nil {
+				text += ": " + td.DeclaredType.ToString(um, moduleName)
+			} else {
+				text += ": " + td.GetType().ToString(um, moduleName)
+			}
+			text += "\n```"
+		}
+	case typed.Pattern:
+		pt := wl.(typed.Pattern)
 
-func (s *server) TextDocument_hover(params *lsp.HoverParams) (*lsp.Hover, error) {
-	if doc, ok := s.openedDocuments[params.TextDocument.URI]; ok {
-		loc := ast.NewLocationSrc(
-			uriToPath(doc.URI),
-			[]rune(doc.Text),
-			params.Position.Line,
-			params.Position.Character)
-		for _, m := range s.parsedModules {
-			if m.Location.FilePath() == loc.FilePath() {
-				d, e, t := findStatement(loc, m)
-				if t != nil {
-					/*return &lsp.Hover{
-						Contents: lsp.MarkupContent{
-							Kind:  lsp.MKPlainText,
-							Value: t.String(),
-						},
-						Range: locToRange(t.GetLocation()),
-					}, nil*/
-				}
-				if e != nil {
-					return &lsp.Hover{
-						Contents: lsp.MarkupContent{
-							Kind:  lsp.MKPlainText,
-							Value: getHelp(e),
-						},
-						Range: locToRange(e.GetLocation()),
-					}, nil
-					/*if g, ok := e.(*typed.Global); ok {
-						if pm, ok := s.parsedModules[g.ModuleName]; ok {
-							if d, ok := common.Find(func(d parsed.Definition) bool { return d.Name == g.DefinitionName }, pm.Definitions); ok {
-								return &lsp.Hover{
-									Contents: lsp.MarkupContent{
-										Kind:  lsp.MKPlainText,
-										Value: string(d.Name),
-									},
-									Range: locToRange(d.Location),
-								}, nil
-							}
-						}
+		um := typed.UnboundMap{}
 
-					}*/
-
-				}
-				if d != nil {
-					return &lsp.Hover{
-						Contents: lsp.MarkupContent{
-							Kind:  lsp.MKPlainText,
-							Value: fmt.Sprintf("definition of `%s`", d.Name),
-						},
-						Range: locToRange(d.Location),
-					}, nil
+		for _, tm := range s.typedModules {
+			if tm.Location.FilePath() == pt.GetLocation().FilePath() {
+				for _, d := range tm.Definitions {
+					if d.Location.Contains(pt.GetLocation()) {
+						d.GetType().ToString(um, moduleName)
+					}
 				}
 			}
 		}
+
+		if do, ok := pt.(*typed.PDataOption); ok {
+			text += fmt.Sprintf("```nar\n%s", do.OptionName)
+			args := common.Fold(func(p typed.Pattern, s string) string {
+				if s != "" {
+					s += ", "
+				}
+				return s + p.ToString(um, true, moduleName)
+			}, "", do.Args)
+			if args != "" {
+				text += "(" + args + ")"
+			}
+			text += ": " + pt.GetType().ToString(um, moduleName)
+			text += "\n```"
+
+		} else {
+			text = fmt.Sprintf(
+				"local variable\n```nar\n%s: %s\n```",
+				src.GetLocation().Text(),
+				pt.GetType().ToString(um, moduleName))
+		}
+	}
+	if text != "" {
+		return &protocol.Hover{
+			Contents: protocol.MarkupContent{
+				Kind:  protocol.Markdown,
+				Value: text,
+			},
+			Range: locToRange(src.GetLocation()),
+		}, nil
 	}
 	return nil, nil
 }

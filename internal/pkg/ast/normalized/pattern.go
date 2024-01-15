@@ -6,90 +6,81 @@ import (
 
 type Pattern interface {
 	_pattern()
+	GetLocation() ast.Location
+}
+
+type PatternBase struct {
+	Location ast.Location
+}
+
+func (p *PatternBase) _pattern() {}
+
+func (p *PatternBase) GetLocation() ast.Location {
+	return p.Location
 }
 
 type PAlias struct {
-	ast.Location
-	Type
+	*PatternBase
+	Type   Type
 	Alias  ast.Identifier
 	Nested Pattern
 }
 
-func (PAlias) _pattern() {}
-
 type PAny struct {
-	ast.Location
-	Type
+	*PatternBase
+	Type Type
 }
 
-func (PAny) _pattern() {}
-
 type PCons struct {
-	ast.Location
-	Type
+	*PatternBase
+	Type       Type
 	Head, Tail Pattern
 }
 
-func (PCons) _pattern() {}
-
 type PConst struct {
-	ast.Location
-	Type
+	*PatternBase
+	Type  Type
 	Value ast.ConstValue
 }
 
-func (PConst) _pattern() {}
-
 type PDataOption struct {
-	ast.Location
-	Type
+	*PatternBase
+	Type           Type
 	ModuleName     ast.QualifiedIdentifier
 	DefinitionName ast.Identifier
 	Values         []Pattern
 }
 
-func (PDataOption) _pattern() {}
-
 type PList struct {
-	ast.Location
-	Type
+	*PatternBase
+	Type  Type
 	Items []Pattern
 }
 
-func (PList) _pattern() {}
-
 type PNamed struct {
-	ast.Location
-	Type
+	*PatternBase
+	Type Type
 	Name ast.Identifier
 }
 
-func (PNamed) _pattern() {}
-
 type PRecordField struct {
-	ast.Location
-	Name ast.Identifier
+	Location ast.Location
+	Name     ast.Identifier
 }
 
 type PRecord struct {
-	ast.Location
-	Type
+	*PatternBase
+	Type   Type
 	Fields []PRecordField
 }
 
-func (PRecord) _pattern() {}
-
 type PTuple struct {
-	ast.Location
-	Type
+	*PatternBase
+	Type  Type
 	Items []Pattern
 }
 
-func (PTuple) _pattern() {}
-
 type PUnit struct {
-	ast.Location
-	Type
+	*PatternBase
+	Type Type
 }
-
-func (PUnit) _pattern() {}

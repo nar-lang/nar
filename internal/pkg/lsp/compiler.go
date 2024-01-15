@@ -5,16 +5,17 @@ import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/common"
+	"nar-compiler/internal/pkg/lsp/protocol"
 	"nar-compiler/internal/pkg/processors"
 	"os"
 	"path/filepath"
-	"pkg.nimblebun.works/go-lsp"
+	"runtime/debug"
 	"time"
 )
 
 func (s *server) compiler() {
-	modifiedDocs := map[lsp.DocumentURI]struct{}{}
-	forcedDocs := map[lsp.DocumentURI]struct{}{}
+	modifiedDocs := map[protocol.DocumentURI]struct{}{}
+	forcedDocs := map[protocol.DocumentURI]struct{}{}
 	modifiedPackages := map[ast.PackageIdentifier]struct{}{}
 
 	doc := <-s.compileChan
@@ -88,7 +89,7 @@ func findPackageRoot(path string) string {
 	return ""
 }
 
-func (s *server) getPackageOfDocument(uri lsp.DocumentURI, forceReload bool) ast.PackageIdentifier {
+func (s *server) getPackageOfDocument(uri protocol.DocumentURI, forceReload bool) ast.PackageIdentifier {
 	pkgRoot, ok := s.documentToPackageRoot[uri]
 	if !ok {
 		path := uriToPath(uri)
@@ -107,8 +108,8 @@ func (s *server) getPackageOfDocument(uri lsp.DocumentURI, forceReload bool) ast
 			delete(s.loadedPackages, pkgName)
 		}
 		progress := func(_ float32, msg string) {
-			s.notify("window/showMessage", lsp.ShowMessageParams{
-				Type: lsp.MTInfo, Message: msg,
+			s.notify("window/showMessage", protocol.ShowMessageParams{
+				Type: protocol.Info, Message: msg,
 			})
 		}
 		pkg, err := processors.LoadPackage(
@@ -128,7 +129,8 @@ func (s *server) getPackageOfDocument(uri lsp.DocumentURI, forceReload bool) ast
 func (s *server) compile(pkgNames []ast.PackageIdentifier) {
 	defer func() {
 		if r := recover(); r != nil {
-			s.reportError(fmt.Sprintf("internal error:\n%v", r))
+			s.reportError(fmt.Sprintf("internal error:\n%v\n\n%s", r, debug.Stack()))
+
 		}
 	}()
 	log := &common.LogWriter{}
@@ -156,37 +158,37 @@ func (s *server) compile(pkgNames []ast.PackageIdentifier) {
 		if mod, ok := s.parsedModules[moduleName]; ok {
 			uri := pathToUri(mod.Location.FilePath())
 			if _, reported := diagnosticData[uri]; !reported {
-				s.notify("textDocument/publishDiagnostics", lsp.PublishDiagnosticsParams{
+				s.notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
 					URI:         uri,
-					Diagnostics: []lsp.Diagnostic{},
+					Diagnostics: []protocol.Diagnostic{},
 				})
 			}
 		}
 	}
 
 	for uri, dsx := range diagnosticData {
-		s.notify("textDocument/publishDiagnostics", lsp.PublishDiagnosticsParams{
+		s.notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
 			URI:         uri,
 			Diagnostics: dsx,
 		})
 	}
 }
 
-func (s *server) extractDiagnosticsData(log *common.LogWriter) map[lsp.DocumentURI][]lsp.Diagnostic {
-	diagnosticsData := map[lsp.DocumentURI][]lsp.Diagnostic{}
+func (s *server) extractDiagnosticsData(log *common.LogWriter) map[protocol.DocumentURI][]protocol.Diagnostic {
+	diagnosticsData := map[protocol.DocumentURI][]protocol.Diagnostic{}
 
-	insertDiagnostic := func(e common.Error, severity lsp.DiagnosticSeverity) {
+	insertDiagnostic := func(e common.Error, severity protocol.DiagnosticSeverity) {
 		if e.Location.IsEmpty() {
 			e.Location = e.Extra[0]
 			e.Extra = e.Extra[1:]
 		}
 		uri := pathToUri(e.Location.FilePath())
-		diagnosticsData[uri] = append(diagnosticsData[uri], lsp.Diagnostic{
-			Range:    *locToRange(e.Location),
-			Severity: lsp.DSError,
+		diagnosticsData[uri] = append(diagnosticsData[uri], protocol.Diagnostic{
+			Range:    locToRange(e.Location),
+			Severity: protocol.SeverityError,
 			Message:  e.Message,
-			RelatedInformation: common.Map(func(l ast.Location) lsp.DiagnosticRelatedInformation {
-				return lsp.DiagnosticRelatedInformation{
+			RelatedInformation: common.Map(func(l ast.Location) protocol.DiagnosticRelatedInformation {
+				return protocol.DiagnosticRelatedInformation{
 					Location: *locToLocation(l),
 					Message:  "?",
 				}
@@ -197,7 +199,7 @@ func (s *server) extractDiagnosticsData(log *common.LogWriter) map[lsp.DocumentU
 	for _, err := range log.Errors() {
 		var e common.Error
 		if errors.As(err, &e) {
-			insertDiagnostic(e, lsp.DSError)
+			insertDiagnostic(e, protocol.SeverityError)
 		} else {
 			s.log.Err(err)
 		}
@@ -206,7 +208,7 @@ func (s *server) extractDiagnosticsData(log *common.LogWriter) map[lsp.DocumentU
 	for _, err := range log.Warnings() {
 		var e common.Error
 		if errors.As(err, &e) {
-			insertDiagnostic(e, lsp.DSWarning)
+			insertDiagnostic(e, protocol.SeverityError)
 		} else {
 			s.log.Warn(err)
 		}

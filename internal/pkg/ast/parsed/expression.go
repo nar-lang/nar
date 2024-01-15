@@ -2,113 +2,95 @@ package parsed
 
 import (
 	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast/normalized"
 )
 
 type Expression interface {
 	_expression()
 	GetLocation() ast.Location
+	GetSuccessor() normalized.Expression
+}
+
+type ExpressionBase struct {
+	Location  ast.Location
+	successor normalized.Expression
+}
+
+func (*ExpressionBase) _expression() {}
+
+func (e *ExpressionBase) GetLocation() ast.Location {
+	return e.Location
+}
+
+func (e *ExpressionBase) GetSuccessor() normalized.Expression {
+	return e.successor
+}
+
+func (e *ExpressionBase) SetSuccessor(expr normalized.Expression) normalized.Expression {
+	e.successor = expr
+	expr.SetPredecessor(e)
+	return expr
 }
 
 type Access struct {
-	ast.Location
+	*ExpressionBase
 	Record    Expression
 	FieldName ast.Identifier
 }
 
-func (Access) _expression() {}
+func (*Access) _expression() {}
 
-func (e Access) GetLocation() ast.Location {
+func (e *Access) GetLocation() ast.Location {
 	return e.Location
 }
 
 type Apply struct {
-	ast.Location
+	*ExpressionBase
 	Func Expression
 	Args []Expression
 }
 
-func (Apply) _expression() {}
-
-func (e Apply) GetLocation() ast.Location {
-	return e.Location
-}
-
 type Const struct {
-	ast.Location
+	*ExpressionBase
 	Value ast.ConstValue
 }
 
-func (Const) _expression() {}
-
-func (e Const) GetLocation() ast.Location {
-	return e.Location
-}
-
 type If struct {
-	ast.Location
+	*ExpressionBase
 	Condition, Positive, Negative Expression
 }
 
-func (If) _expression() {}
-
-func (e If) GetLocation() ast.Location {
-	return e.Location
-}
-
 type LetMatch struct {
-	ast.Location
+	*ExpressionBase
 	Pattern Pattern
 	Value   Expression
 	Nested  Expression
 }
 
-func (LetMatch) _expression() {}
-
-func (e LetMatch) GetLocation() ast.Location {
-	return e.Location
-}
-
 type LetDef struct {
-	ast.Location
-	Name   ast.Identifier
-	Params []Pattern
-	Body   Expression
-	FnType Type
-	Nested Expression
-}
-
-func (LetDef) _expression() {}
-
-func (e LetDef) GetLocation() ast.Location {
-	return e.Location
+	*ExpressionBase
+	Name         ast.Identifier
+	NameLocation ast.Location
+	Params       []Pattern
+	Body         Expression
+	FnType       Type
+	Nested       Expression
 }
 
 type List struct {
-	ast.Location
+	*ExpressionBase
 	Items []Expression
 }
 
-func (List) _expression() {}
-
-func (e List) GetLocation() ast.Location {
-	return e.Location
-}
-
 type RecordField struct {
-	ast.Location
-	Name  ast.Identifier
-	Value Expression
+	Location ast.Location
+	Name     ast.Identifier
+	Value    Expression
 }
 
 type Record struct {
-	ast.Location
+	*ExpressionBase
 	Fields []RecordField
-}
-
-func (Record) _expression() {}
-
-func (e Record) GetLocation() ast.Location {
-	return e.Location
 }
 
 type SelectCase struct {
@@ -118,62 +100,32 @@ type SelectCase struct {
 }
 
 type Select struct {
-	ast.Location
+	*ExpressionBase
 	Condition Expression
 	Cases     []SelectCase
 }
 
-func (Select) _expression() {}
-
-func (e Select) GetLocation() ast.Location {
-	return e.Location
-}
-
 type Tuple struct {
-	ast.Location
+	*ExpressionBase
 	Items []Expression
 }
 
-func (Tuple) _expression() {}
-
-func (e Tuple) GetLocation() ast.Location {
-	return e.Location
-}
-
 type Update struct {
-	ast.Location
+	*ExpressionBase
 	RecordName ast.QualifiedIdentifier
 	Fields     []RecordField
 }
 
-func (Update) _expression() {}
-
-func (e Update) GetLocation() ast.Location {
-	return e.Location
-}
-
 type Lambda struct {
-	ast.Location
+	*ExpressionBase
 	Params []Pattern
 	Return Type
 	Body   Expression
 }
 
-func (Lambda) _expression() {}
-
-func (e Lambda) GetLocation() ast.Location {
-	return e.Location
-}
-
 type Accessor struct {
-	ast.Location
+	*ExpressionBase
 	FieldName ast.Identifier
-}
-
-func (Accessor) _expression() {}
-
-func (e Accessor) GetLocation() ast.Location {
-	return e.Location
 }
 
 type BinOpItem struct {
@@ -183,72 +135,36 @@ type BinOpItem struct {
 }
 
 type BinOp struct {
-	ast.Location
+	*ExpressionBase
 	Items         []BinOpItem
 	InParentheses bool
 }
 
-func (BinOp) _expression() {}
-
-func (e BinOp) GetLocation() ast.Location {
-	return e.Location
-}
-
 type Negate struct {
-	ast.Location
+	*ExpressionBase
 	Nested Expression
 }
 
-func (Negate) _expression() {}
-
-func (e Negate) GetLocation() ast.Location {
-	return e.Location
-}
-
 type Var struct {
-	ast.Location
+	*ExpressionBase
 	Name ast.QualifiedIdentifier
 }
 
-func (Var) _expression() {}
-
-func (e Var) GetLocation() ast.Location {
-	return e.Location
-}
-
 type Constructor struct {
-	ast.Location
+	*ExpressionBase
 	ModuleName ast.QualifiedIdentifier
 	DataName   ast.Identifier
 	OptionName ast.Identifier
 	Args       []Expression
 }
 
-func (Constructor) _expression() {}
-
-func (e Constructor) GetLocation() ast.Location {
-	return e.Location
-}
-
 type InfixVar struct {
-	ast.Location
+	*ExpressionBase
 	Infix ast.InfixIdentifier
 }
 
-func (InfixVar) _expression() {}
-
-func (e InfixVar) GetLocation() ast.Location {
-	return e.Location
-}
-
 type NativeCall struct {
-	Location ast.Location
-	Name     ast.FullIdentifier
-	Args     []Expression
-}
-
-func (NativeCall) _expression() {}
-
-func (e NativeCall) GetLocation() ast.Location {
-	return e.Location
+	*ExpressionBase
+	Name ast.FullIdentifier
+	Args []Expression
 }

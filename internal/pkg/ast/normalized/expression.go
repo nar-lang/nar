@@ -2,46 +2,74 @@ package normalized
 
 import (
 	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast/typed"
 )
 
 type Expression interface {
 	_expression()
+	GetPredecessor() ExpressionWithSuccessor
+	SetPredecessor(expr ExpressionWithSuccessor)
+}
+
+type ExpressionWithSuccessor interface {
+	SetSuccessor(expr Expression) Expression
+}
+
+type ExpressionBase struct {
+	Location    ast.Location
+	predecessor ExpressionWithSuccessor
+	successor   typed.Expression
+}
+
+func (e *ExpressionBase) _expression() {}
+
+func (e *ExpressionBase) GetLocation() ast.Location {
+	return e.Location
+}
+
+func (e *ExpressionBase) GetPredecessor() ExpressionWithSuccessor {
+	return e.predecessor
+}
+
+func (e *ExpressionBase) SetPredecessor(expr ExpressionWithSuccessor) {
+	e.predecessor = expr
+}
+
+func (e *ExpressionBase) GetSuccessor() typed.Expression {
+	return e.successor
+}
+
+func (e *ExpressionBase) SetSuccessor(expr typed.Expression) typed.Expression {
+	e.successor = expr
+	return expr
 }
 
 type Access struct {
-	ast.Location
+	*ExpressionBase
 	Record    Expression
 	FieldName ast.Identifier
 }
 
-func (Access) _expression() {}
-
 type Apply struct {
-	ast.Location
+	*ExpressionBase
 	Func Expression
 	Args []Expression
 }
 
-func (Apply) _expression() {}
-
 type Const struct {
-	ast.Location
+	*ExpressionBase
 	Value ast.ConstValue
 }
 
-func (Const) _expression() {}
-
 type LetMatch struct {
-	ast.Location
+	*ExpressionBase
 	Pattern Pattern
 	Value   Expression
 	Nested  Expression
 }
 
-func (LetMatch) _expression() {}
-
 type LetDef struct {
-	ast.Location
+	*ExpressionBase
 	Name   ast.Identifier
 	Params []Pattern
 	Body   Expression
@@ -49,14 +77,10 @@ type LetDef struct {
 	Nested Expression
 }
 
-func (LetDef) _expression() {}
-
 type List struct {
-	ast.Location
+	*ExpressionBase
 	Items []Expression
 }
-
-func (List) _expression() {}
 
 type RecordField struct {
 	ast.Location
@@ -65,11 +89,9 @@ type RecordField struct {
 }
 
 type Record struct {
-	ast.Location
+	*ExpressionBase
 	Fields []RecordField
 }
-
-func (Record) _expression() {}
 
 type SelectCase struct {
 	ast.Location
@@ -78,74 +100,57 @@ type SelectCase struct {
 }
 
 type Select struct {
-	ast.Location
+	*ExpressionBase
 	Condition Expression
 	Cases     []SelectCase
 }
 
-func (Select) _expression() {}
-
 type Tuple struct {
-	ast.Location
+	*ExpressionBase
 	Items []Expression
 }
 
-func (Tuple) _expression() {}
-
 type UpdateLocal struct {
-	ast.Location
+	*ExpressionBase
 	RecordName ast.Identifier
 	Fields     []RecordField
 }
 
-func (UpdateLocal) _expression() {}
-
 type UpdateGlobal struct {
-	ast.Location
+	*ExpressionBase
 	ModuleName     ast.QualifiedIdentifier
 	DefinitionName ast.Identifier
 	Fields         []RecordField
 }
 
-func (UpdateGlobal) _expression() {}
-
 type Lambda struct {
-	ast.Location
+	*ExpressionBase
 	Params []Pattern
 	Body   Expression
 }
 
-func (Lambda) _expression() {}
-
 type Constructor struct {
-	ast.Location
+	*ExpressionBase
 	ModuleName ast.QualifiedIdentifier
 	DataName   ast.Identifier
 	OptionName ast.Identifier
 	Args       []Expression
 }
 
-func (Constructor) _expression() {}
-
 type NativeCall struct {
-	ast.Location
+	*ExpressionBase
 	Name ast.FullIdentifier
 	Args []Expression
 }
 
-func (NativeCall) _expression() {}
-
 type Local struct {
-	ast.Location
-	Name ast.Identifier
+	*ExpressionBase
+	Name   ast.Identifier
+	Target Pattern
 }
 
-func (Local) _expression() {}
-
 type Global struct {
-	ast.Location
+	*ExpressionBase
 	ModuleName     ast.QualifiedIdentifier
 	DefinitionName ast.Identifier
 }
-
-func (Global) _expression() {}

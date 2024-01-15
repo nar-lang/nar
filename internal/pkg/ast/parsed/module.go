@@ -68,7 +68,7 @@ type Module struct {
 	Imports     []Import
 	Aliases     []Alias
 	InfixFns    []Infix
-	Definitions []Definition
+	Definitions []*Definition
 	DataTypes   []DataType
 
 	PackageName        ast.PackageIdentifier

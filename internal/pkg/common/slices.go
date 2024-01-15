@@ -21,6 +21,15 @@ func Map[I, O any](p func(I) O, xs []I) []O {
 	return result
 }
 
+func ForError[I any](p func(I) error, xs []I) error {
+	for _, x := range xs {
+		if err := p(x); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func MapError[I, O any](p func(I) (O, error), xs []I) ([]O, error) {
 	result := make([]O, len(xs))
 	for i, x := range xs {
@@ -119,6 +128,14 @@ func Find[T any](p func(T) bool, xs []T) (T, bool) {
 
 func Join[T fmt.Stringer](xs []T, sep string) string {
 	return strings.Join(Map(func(x T) string { return x.String() }, xs), sep)
+}
+
+func Fold[T, A any](p func(T, A) A, acc A, xs []T) A {
+	result := acc
+	for _, x := range xs {
+		result = p(x, result)
+	}
+	return result
 }
 
 func Keys[K comparable, V any](m map[K]V) []K {

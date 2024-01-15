@@ -18,18 +18,18 @@ type PAlias struct {
 	Nested Pattern
 }
 
-func (PAlias) _pattern() {}
+func (*PAlias) _pattern() {}
 
-func (p PAlias) WithType(decl Type) Pattern {
+func (p *PAlias) WithType(decl Type) Pattern {
 	p.Type = decl
 	return p
 }
 
-func (p PAlias) GetLocation() ast.Location {
+func (p *PAlias) GetLocation() ast.Location {
 	return p.Location
 }
 
-func (p PAlias) GetType() Type {
+func (p *PAlias) GetType() Type {
 	return p.Type
 }
 
@@ -38,18 +38,18 @@ type PAny struct {
 	Type
 }
 
-func (PAny) _pattern() {}
+func (*PAny) _pattern() {}
 
-func (p PAny) WithType(decl Type) Pattern {
+func (p *PAny) WithType(decl Type) Pattern {
 	p.Type = decl
 	return p
 }
 
-func (p PAny) GetLocation() ast.Location {
+func (p *PAny) GetLocation() ast.Location {
 	return p.Location
 }
 
-func (p PAny) GetType() Type {
+func (p *PAny) GetType() Type {
 	return p.Type
 }
 
@@ -59,18 +59,18 @@ type PCons struct {
 	Head, Tail Pattern
 }
 
-func (PCons) _pattern() {}
+func (*PCons) _pattern() {}
 
-func (p PCons) WithType(decl Type) Pattern {
+func (p *PCons) WithType(decl Type) Pattern {
 	p.Type = decl
 	return p
 }
 
-func (p PCons) GetLocation() ast.Location {
+func (p *PCons) GetLocation() ast.Location {
 	return p.Location
 }
 
-func (p PCons) GetType() Type {
+func (p *PCons) GetType() Type {
 	return p.Type
 }
 
@@ -80,18 +80,18 @@ type PConst struct {
 	Value ast.ConstValue
 }
 
-func (PConst) _pattern() {}
+func (*PConst) _pattern() {}
 
-func (p PConst) WithType(decl Type) Pattern {
+func (p *PConst) WithType(decl Type) Pattern {
 	p.Type = decl
 	return p
 }
 
-func (p PConst) GetLocation() ast.Location {
+func (p *PConst) GetLocation() ast.Location {
 	return p.Location
 }
 
-func (p PConst) GetType() Type {
+func (p *PConst) GetType() Type {
 	return p.Type
 }
 
@@ -102,18 +102,18 @@ type PDataOption struct {
 	Values []Pattern
 }
 
-func (PDataOption) _pattern() {}
+func (*PDataOption) _pattern() {}
 
-func (p PDataOption) WithType(decl Type) Pattern {
+func (p *PDataOption) WithType(decl Type) Pattern {
 	p.Type = decl
 	return p
 }
 
-func (p PDataOption) GetLocation() ast.Location {
+func (p *PDataOption) GetLocation() ast.Location {
 	return p.Location
 }
 
-func (p PDataOption) GetType() Type {
+func (p *PDataOption) GetType() Type {
 	return p.Type
 }
 
@@ -123,18 +123,18 @@ type PList struct {
 	Items []Pattern
 }
 
-func (PList) _pattern() {}
+func (*PList) _pattern() {}
 
-func (p PList) WithType(decl Type) Pattern {
+func (p *PList) WithType(decl Type) Pattern {
 	p.Type = decl
 	return p
 }
 
-func (p PList) GetLocation() ast.Location {
+func (p *PList) GetLocation() ast.Location {
 	return p.Location
 }
 
-func (p PList) GetType() Type {
+func (p *PList) GetType() Type {
 	return p.Type
 }
 
@@ -144,18 +144,18 @@ type PNamed struct {
 	Name ast.Identifier
 }
 
-func (PNamed) _pattern() {}
+func (*PNamed) _pattern() {}
 
-func (p PNamed) WithType(decl Type) Pattern {
+func (p *PNamed) WithType(decl Type) Pattern {
 	p.Type = decl
 	return p
 }
 
-func (p PNamed) GetLocation() ast.Location {
+func (p *PNamed) GetLocation() ast.Location {
 	return p.Location
 }
 
-func (p PNamed) GetType() Type {
+func (p *PNamed) GetType() Type {
 	return p.Type
 }
 
@@ -170,18 +170,18 @@ type PRecord struct {
 	Fields []PRecordField
 }
 
-func (PRecord) _pattern() {}
+func (*PRecord) _pattern() {}
 
-func (p PRecord) WithType(decl Type) Pattern {
+func (p *PRecord) WithType(decl Type) Pattern {
 	p.Type = decl
 	return p
 }
 
-func (p PRecord) GetLocation() ast.Location {
+func (p *PRecord) GetLocation() ast.Location {
 	return p.Location
 }
 
-func (p PRecord) GetType() Type {
+func (p *PRecord) GetType() Type {
 	return p.Type
 }
 
@@ -191,17 +191,17 @@ type PTuple struct {
 	Items []Pattern
 }
 
-func (PTuple) _pattern() {}
+func (*PTuple) _pattern() {}
 
-func (p PTuple) WithType(decl Type) Pattern {
+func (p *PTuple) WithType(decl Type) Pattern {
 	p.Type = decl
 	return p
 }
 
-func (p PTuple) GetLocation() ast.Location {
+func (p *PTuple) GetLocation() ast.Location {
 	return p.Location
 }
 
-func (p PTuple) GetType() Type {
+func (p *PTuple) GetType() Type {
 	return p.Type
 }

@@ -15,7 +15,7 @@ import (
 
 var unboundIndex = uint64(0)
 var annotations []struct {
-	fmt.Stringer
+	Str interface{}
 	typed.Type
 }
 
@@ -34,12 +34,13 @@ type equation struct {
 }
 
 func (e equation) String(index int) string {
-	x := fmt.Stringer(e.expr)
-	if x == nil {
-		x = e.pattern
-	}
-	if x == nil {
-		x = e.def
+	var x string
+	if e.expr != nil {
+		x = e.expr.String()
+	} else if e.pattern != nil {
+		x = e.pattern.ToString(typed.UnboundMap{}, false, "")
+	} else if e.def != nil {
+		x = e.def.String()
 	}
 	return fmt.Sprintf("\n| %d | `%v` | `%v` | `%v` |", index, e.left, e.right, x)
 }
@@ -86,7 +87,7 @@ func Solve(
 
 		unboundIndex = 0
 		annotations = []struct {
-			fmt.Stringer
+			Str interface{}
 			typed.Type
 		}{}
 		localTyped := map[ast.QualifiedIdentifier]*typed.Module{}
@@ -103,7 +104,7 @@ func Solve(
 			sb.WriteString(fmt.Sprintf("\n\nDefinition\n---\n`%s`", td))
 			sb.WriteString("\n\nAnnotations\n---\n| Node | Type |\n|---|---|")
 			for _, t := range annotations {
-				sb.WriteString(fmt.Sprintf("\n| `%v` | `%v` |", t.Stringer, t.Type))
+				sb.WriteString(fmt.Sprintf("\n| `%v` | `%v` |", t.Str, t.Type))
 			}
 			_ = os.WriteFile(fp, []byte(sb.String()), 0666)
 		}
@@ -179,20 +180,29 @@ func annotateDefinition(
 	localTypeParams := typeParamsMap{}
 
 	var err error
+
+	if def.Type != nil {
+		o.DeclaredType, err = annotateType("", localTypeParams, def.Type, def.Location, true, placeholderMap{})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var index = 0
 	o.Params, err = common.MapError(
 		func(p normalized.Pattern) (typed.Pattern, error) {
-			return annotatePattern(localSymbols, localTypeParams, modules, typedModules, moduleName, p, true, stack)
+			var declaredType typed.Type
+			if dt, ok := o.DeclaredType.(*typed.TFunc); ok && len(dt.Params) > index {
+				declaredType = dt.Params[index]
+			}
+			index++
+
+			return annotatePattern(
+				localSymbols, localTypeParams, modules, typedModules, moduleName, p, declaredType, true, stack)
 		},
 		def.Params)
 	if err != nil {
 		return nil, err
-	}
-
-	if def.Type != nil {
-		o.DefinedType, err = annotateType("", localTypeParams, def.Type, def.Location, true, placeholderMap{})
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	for _, std := range stack {
@@ -217,6 +227,7 @@ func annotatePattern(symbols symbolsMap,
 	typedModules map[ast.QualifiedIdentifier]*typed.Module,
 	moduleName ast.QualifiedIdentifier,
 	pattern normalized.Pattern,
+	declaredType typed.Type,
 	typeMapSource bool,
 	stack []*typed.Definition,
 ) (typed.Pattern, error) {
@@ -224,46 +235,55 @@ func annotatePattern(symbols symbolsMap,
 		return nil, nil
 	}
 	annotate := func(p normalized.Pattern) (typed.Pattern, error) {
-		return annotatePattern(symbols, typeParams, modules, typedModules, moduleName, p, typeMapSource, stack)
+		return annotatePattern(symbols, typeParams, modules, typedModules, moduleName, p, nil, typeMapSource, stack)
 	}
+	type_ := declaredType
+	var err error
+
 	var p typed.Pattern
 	switch pattern.(type) {
-	case normalized.PAlias:
+	case *normalized.PAlias:
 		{
-			e := pattern.(normalized.PAlias)
+			e := pattern.(*normalized.PAlias)
 			nested, err := annotate(e.Nested)
 			if err != nil {
 				return nil, err
 			}
-			type_, err := annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{})
-			if err != nil {
-				return nil, err
+			if type_ == nil {
+				type_, err = annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{})
+				if err != nil {
+					return nil, err
+				}
 			}
 			p = &typed.PAlias{
-				Location: e.Location,
-				Type:     type_,
-				Alias:    e.Alias,
-				Nested:   nested,
+				Location:     e.Location,
+				Type:         type_,
+				Alias:        e.Alias,
+				Nested:       nested,
+				DeclaredType: type_,
 			}
 			symbols[e.Alias] = p.GetType()
 			break
 		}
-	case normalized.PAny:
+	case *normalized.PAny:
 		{
-			e := pattern.(normalized.PAny)
-			type_, err := annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{})
-			if err != nil {
-				return nil, err
+			e := pattern.(*normalized.PAny)
+			if type_ == nil {
+				type_, err = annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{})
+				if err != nil {
+					return nil, err
+				}
 			}
 			p = &typed.PAny{
-				Location: e.Location,
-				Type:     type_,
+				Location:     e.Location,
+				Type:         type_,
+				DeclaredType: type_,
 			}
 			break
 		}
-	case normalized.PCons:
+	case *normalized.PCons:
 		{
-			e := pattern.(normalized.PCons)
+			e := pattern.(*normalized.PCons)
 			head, err := annotate(e.Head)
 			if err != nil {
 				return nil, err
@@ -272,35 +292,41 @@ func annotatePattern(symbols symbolsMap,
 			if err != nil {
 				return nil, err
 			}
-			type_, err := annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{})
-			if err != nil {
-				return nil, err
+			if type_ == nil {
+				type_, err = annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{})
+				if err != nil {
+					return nil, err
+				}
 			}
 			p = &typed.PCons{
-				Location: e.Location,
-				Type:     type_,
-				Head:     head,
-				Tail:     tail,
+				Location:     e.Location,
+				Type:         type_,
+				Head:         head,
+				Tail:         tail,
+				DeclaredType: type_,
 			}
 			break
 		}
-	case normalized.PConst:
+	case *normalized.PConst:
 		{
-			e := pattern.(normalized.PConst)
-			type_, err := annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{})
-			if err != nil {
-				return nil, err
+			e := pattern.(*normalized.PConst)
+			if type_ == nil {
+				type_, err = annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{})
+				if err != nil {
+					return nil, err
+				}
 			}
 			p = &typed.PConst{
-				Location: e.Location,
-				Type:     type_,
-				Value:    e.Value,
+				Location:     e.Location,
+				Type:         type_,
+				Value:        e.Value,
+				DeclaredType: type_,
 			}
 			break
 		}
-	case normalized.PDataOption:
+	case *normalized.PDataOption:
 		{
-			e := pattern.(normalized.PDataOption)
+			e := pattern.(*normalized.PDataOption)
 			def, err := getAnnotatedGlobal(e.ModuleName, e.DefinitionName, modules, typedModules, stack, e.Location)
 			if err != nil {
 				return nil, err
@@ -312,60 +338,71 @@ func annotatePattern(symbols symbolsMap,
 				if err != nil {
 					return nil, err
 				}
-				type_, err := annotateType("", typeParams, nil, e.Location, typeMapSource, placeholderMap{})
-				if err != nil {
-					return nil, err
+				if type_ == nil {
+					type_, err = annotateType("", typeParams, nil, e.Location, typeMapSource, placeholderMap{})
+					if err != nil {
+						return nil, err
+					}
 				}
 				p = &typed.PDataOption{
-					Location:   e.Location,
-					Type:       type_,
-					DataName:   ctor.DataName,
-					OptionName: ctor.OptionName,
-					Args:       args,
-					Definition: def,
+					Location:     e.Location,
+					Type:         type_,
+					DataName:     ctor.DataName,
+					OptionName:   ctor.OptionName,
+					Args:         args,
+					Definition:   def,
+					DeclaredType: type_,
 				}
 			}
 			break
 		}
-	case normalized.PList:
+	case *normalized.PList:
 		{
-			e := pattern.(normalized.PList)
+			e := pattern.(*normalized.PList)
 			items, err := common.MapError(annotate, e.Items)
 			if err != nil {
 				return nil, err
 			}
-			type_, err := annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{})
-			if err != nil {
-				return nil, err
+			if type_ == nil {
+				type_, err = annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{})
+				if err != nil {
+					return nil, err
+				}
 			}
 			p = &typed.PList{
-				Location: e.Location,
-				Type:     type_,
-				Items:    items,
+				Location:     e.Location,
+				Type:         type_,
+				Items:        items,
+				DeclaredType: type_,
 			}
 			break
 		}
-	case normalized.PNamed:
+	case *normalized.PNamed:
 		{
-			e := pattern.(normalized.PNamed)
-			type_, err := annotateType("", typeParams, nil, e.Location, typeMapSource, placeholderMap{})
-			if err != nil {
-				return nil, err
+			e := pattern.(*normalized.PNamed)
+			if type_ == nil {
+				type_, err = annotateType("", typeParams, nil, e.Location, typeMapSource, placeholderMap{})
+				if err != nil {
+					return nil, err
+				}
 			}
 			p = &typed.PNamed{
-				Location: e.Location,
-				Type:     type_,
-				Name:     e.Name,
+				Location:     e.Location,
+				Type:         type_,
+				Name:         e.Name,
+				DeclaredType: type_,
 			}
 			symbols[e.Name] = p.GetType()
 			break
 		}
-	case normalized.PRecord:
+	case *normalized.PRecord:
 		{
-			e := pattern.(normalized.PRecord)
-			type_, err := annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{})
-			if err != nil {
-				return nil, err
+			e := pattern.(*normalized.PRecord)
+			if type_ == nil {
+				type_, err = annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{})
+				if err != nil {
+					return nil, err
+				}
 			}
 			fields, err := common.MapError(func(f normalized.PRecordField) (typed.PRecordField, error) {
 				type_, err := annotateType("", typeParams, nil, e.Location, typeMapSource, placeholderMap{})
@@ -383,27 +420,31 @@ func annotatePattern(symbols symbolsMap,
 				return nil, err
 			}
 			p = &typed.PRecord{
-				Location: e.Location,
-				Type:     type_,
-				Fields:   fields,
+				Location:     e.Location,
+				Type:         type_,
+				Fields:       fields,
+				DeclaredType: type_,
 			}
 			break
 		}
-	case normalized.PTuple:
+	case *normalized.PTuple:
 		{
-			e := pattern.(normalized.PTuple)
+			e := pattern.(*normalized.PTuple)
 			items, err := common.MapError(annotate, e.Items)
 			if err != nil {
 				return nil, err
 			}
-			type_, err := annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{})
-			if err != nil {
-				return nil, err
+			if type_ == nil {
+				type_, err = annotateType("", typeParams, e.Type, e.Location, typeMapSource, placeholderMap{})
+				if err != nil {
+					return nil, err
+				}
 			}
 			p = &typed.PTuple{
-				Location: e.Location,
-				Type:     type_,
-				Items:    items,
+				Location:     e.Location,
+				Type:         type_,
+				Items:        items,
+				DeclaredType: type_,
 			}
 			break
 		}
@@ -412,7 +453,7 @@ func annotatePattern(symbols symbolsMap,
 	}
 
 	annotations = append(annotations, struct {
-		fmt.Stringer
+		Str interface{}
 		typed.Type
 	}{p, p.GetType()})
 	return p, nil
@@ -500,7 +541,7 @@ func annotateExpression(
 			localTypeParams := maps.Clone(typeParams)
 
 			pattern, err := annotatePattern(
-				localSymbols, localTypeParams, modules, typedModules, moduleName, e.Pattern, true, stack)
+				localSymbols, localTypeParams, modules, typedModules, moduleName, e.Pattern, nil, true, stack)
 			if err != nil {
 				return nil, err
 			}
@@ -589,7 +630,7 @@ func annotateExpression(
 				localSymbols := maps.Clone(symbols)
 				localTypeParams := maps.Clone(typeParams)
 				pattern, err := annotatePattern(
-					localSymbols, localTypeParams, modules, typedModules, moduleName, c.Pattern, false, stack)
+					localSymbols, localTypeParams, modules, typedModules, moduleName, c.Pattern, nil, false, stack)
 				if err != nil {
 					return typed.SelectCase{}, err
 				}
@@ -724,7 +765,7 @@ func annotateExpression(
 			if err != nil {
 				return nil, err
 			}
-			t := def.DefinedType
+			t := def.DeclaredType
 			if len(def.Params) > 0 && t != nil {
 				t = t.(*typed.TFunc).Return
 			}
@@ -814,7 +855,7 @@ func annotateExpression(
 	}
 
 	annotations = append(annotations, struct {
-		fmt.Stringer
+		Str interface{}
 		typed.Type
 	}{o, o.GetType()})
 	return o, nil
@@ -862,12 +903,19 @@ func getAnnotatedGlobal(
 	return def, nil
 }
 
-func newAnnotatedType(loc ast.Location, constraint common.Constraint) typed.Type {
+func newAnnotatedType(loc ast.Location, name ast.Identifier) typed.Type {
 	unboundIndex++
+
+	constraint := common.ConstraintNone
+	if strings.HasPrefix(string(name), string(common.ConstraintNumber)) {
+		constraint = common.ConstraintNumber
+	}
+
 	return &typed.TUnbound{
 		Location:   loc,
 		Index:      unboundIndex,
 		Constraint: constraint,
+		GivenName:  name,
 	}
 }
 
@@ -879,17 +927,22 @@ func annotateType(
 ) (typed.Type, error) {
 	annotate := func(l ast.Location) func(x normalized.Type) (typed.Type, error) {
 		return func(x normalized.Type) (typed.Type, error) {
-			return annotateType("", typeParams, x, location, typeMapSource, placeholders)
+			t, err := annotateType("", typeParams, x, location, typeMapSource, placeholders)
+			if err != nil {
+				return nil, err
+			}
+			if t == nil {
+				return nil, common.Error{
+					Location: l, Message: "type annotation failed",
+				}
+			}
+			return t, nil
 		}
 	}
 
 	var r typed.Type
 	if t == nil {
-		constraint := common.ConstraintNone
-		if strings.HasPrefix(string(name), string(common.ConstraintNumber)) {
-			constraint = common.ConstraintNumber
-		}
-		r = newAnnotatedType(location, constraint)
+		r = newAnnotatedType(location, name)
 
 	} else {
 		switch t.(type) {
@@ -954,12 +1007,12 @@ func annotateType(
 					Location: e.Location,
 					Name:     e.Name,
 				}
-				placeholders[d.Name] = d
 				var err error
 				d.Args, err = common.MapError(annotate(e.Location), e.Args)
 				if err != nil {
 					return nil, err
 				}
+				placeholders[d.Name] = d
 				d.Options, err = common.MapError(
 					func(x normalized.DataOption) (typed.DataOption, error) {
 						values, err := common.MapError(annotate(e.Location), x.Values)
@@ -1006,7 +1059,7 @@ func annotateType(
 							return nil, err
 						}
 						annotations = append(annotations, struct {
-							fmt.Stringer
+							Str interface{}
 							typed.Type
 						}{e, r})
 						typeParams[e.Name] = r
@@ -1046,7 +1099,7 @@ func equatizeDefinition(
 	}
 	stack = append(stack, td)
 
-	if td.Expression != nil && td.DefinedType != nil {
+	if td.Expression != nil && td.DeclaredType != nil {
 		defType := td.Expression.GetType()
 
 		if len(td.Params) > 0 {
@@ -1059,7 +1112,7 @@ func equatizeDefinition(
 
 		eqs = append(eqs, equation{
 			loc:   loc,
-			left:  td.DefinedType,
+			left:  td.DeclaredType,
 			right: defType,
 			def:   td,
 		})
@@ -1256,12 +1309,26 @@ func equatizePattern(
 	case *typed.PTuple:
 		{
 			e := pattern.(*typed.PTuple)
+			items, err := common.MapError(func(e typed.Pattern) (typed.Type, error) {
+				t := e.GetType()
+				if t == nil {
+					return nil, common.Error{
+						Location: e.GetLocation(),
+						Message:  "type cannot be inferred",
+					}
+				}
+				return t, nil
+			}, e.Items)
+			if err != nil {
+				return nil, err
+			}
+
 			eqs = append(eqs, equation{
 				loc:  loc,
 				left: e.Type,
 				right: &typed.TTuple{
 					Location: e.Location,
-					Items:    common.Map(func(p typed.Pattern) typed.Type { return p.GetType() }, e.Items),
+					Items:    items,
 				},
 				pattern: pattern,
 			})
@@ -1493,12 +1560,25 @@ func equatizeExpression(
 	case *typed.Tuple:
 		{
 			e := expr.(*typed.Tuple)
+			items, err := common.MapError(func(e typed.Expression) (typed.Type, error) {
+				t := e.GetType()
+				if t == nil {
+					return nil, common.Error{
+						Location: e.GetLocation(),
+						Message:  "type cannot be inferred",
+					}
+				}
+				return t, nil
+			}, e.Items)
+			if err != nil {
+				return nil, err
+			}
 			eqs = append(eqs, equation{
 				loc:  loc,
 				left: e.Type,
 				right: &typed.TTuple{
 					Location: e.Location,
-					Items:    common.Map(func(e typed.Expression) typed.Type { return e.GetType() }, e.Items),
+					Items:    items,
 				},
 				expr: expr,
 			})
@@ -1659,7 +1739,7 @@ func getConstType(cv ast.ConstValue, location ast.Location) (typed.Type, error) 
 	case ast.CChar:
 		return &typed.TNative{Location: location, Name: common.NarCoreCharChar}, nil
 	case ast.CInt:
-		return newAnnotatedType(location, common.ConstraintNumber), nil
+		return newAnnotatedType(location, ast.Identifier(common.ConstraintNumber)), nil
 	case ast.CFloat:
 		return &typed.TNative{Location: location, Name: common.NarCoreMathFloat}, nil
 	case ast.CString:
@@ -1890,6 +1970,11 @@ func unify(x typed.Type, y typed.Type, loc []ast.Location, subst map[uint64]type
 						Message: "tuple sizes mismatch"}
 				}
 				for i, p := range ex.Items {
+					if ey == nil || ey.Items[i] == nil {
+						return common.Error{
+							Extra:   []ast.Location{ex.Location, ey.Location},
+							Message: "tuple type cannot be inferred"}
+					}
 					err := unify(p, ey.Items[i], append(loc, p.GetLocation(), ey.Items[i].GetLocation()), subst)
 					if err != nil {
 						return err
@@ -1956,9 +2041,6 @@ func unify(x typed.Type, y typed.Type, loc []ast.Location, subst map[uint64]type
 		}
 	default:
 		return common.NewCompilerError("impossible case")
-	}
-	if x == nil || y == nil {
-		print("todo")
 	}
 	return common.Error{
 		Extra:   append(loc, x.GetLocation(), y.GetLocation()),
@@ -2137,7 +2219,14 @@ func applyDefinition(td *typed.Definition, subst map[uint64]typed.Type) (*typed.
 
 func applyType(t typed.Type, subst map[uint64]typed.Type) (typed.Type, error) {
 	apply := func(x typed.Type) (typed.Type, error) {
-		return applyType(x, subst)
+		y, err := applyType(x, subst)
+		if y == nil {
+			return nil, common.Error{
+				Location: x.GetLocation(),
+				Message:  "type cannot be inferred",
+			}
+		}
+		return y, err
 	}
 
 	switch t.(type) {
@@ -2377,7 +2466,7 @@ func applyPattern(pattern typed.Pattern, subst map[uint64]typed.Type) (typed.Pat
 				return nil, err
 			}
 			pattern = &typed.PNamed{
-				Location: ast.Location{},
+				Location: e.Location,
 				Type:     type_,
 				Name:     e.Name,
 			}
