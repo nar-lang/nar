@@ -1849,9 +1849,9 @@ func normalizeType(
 	case *parsed.TNamed:
 		{
 			e := t.(*parsed.TNamed)
-			x, m, ids, err := findParsedType(modules, module, e.Name, e.Args)
+			x, m, ids, err := FindParsedType(modules, module, e.Name, e.Args)
 			if ids == nil && typeModule != nil {
-				x, m, ids, err = findParsedType(modules, typeModule, e.Name, e.Args)
+				x, m, ids, err = FindParsedType(modules, typeModule, e.Name, e.Args)
 				if err != nil {
 					return nil, err
 				}
@@ -2028,7 +2028,7 @@ func findParsedInfixFn(
 	return parsed.Infix{}, nil, nil
 }
 
-func findParsedType(
+func FindParsedType(
 	modules map[ast.QualifiedIdentifier]*parsed.Module,
 	module *parsed.Module,
 	name ast.QualifiedIdentifier,
@@ -2077,7 +2077,7 @@ func findParsedType(
 
 		for _, imp := range module.Imports {
 			if slices.Contains(imp.Exposing, string(name)) {
-				return findParsedType(nil, modules[imp.ModuleIdentifier], typeName, args)
+				return FindParsedType(nil, modules[imp.ModuleIdentifier], typeName, args)
 			}
 		}
 
@@ -2085,7 +2085,7 @@ func findParsedType(
 		if modName != "" {
 			if submodule, ok := modules[ast.QualifiedIdentifier(modName)]; ok {
 				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
-					return findParsedType(nil, submodule, typeName, args)
+					return FindParsedType(nil, submodule, typeName, args)
 				}
 			}
 
@@ -2094,7 +2094,7 @@ func findParsedType(
 			for modId, submodule := range modules {
 				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
 					if strings.HasSuffix(string(modId), modName) {
-						foundType, foundModule, foundId, err := findParsedType(nil, submodule, typeName, args)
+						foundType, foundModule, foundId, err := FindParsedType(nil, submodule, typeName, args)
 						if err != nil {
 							return nil, nil, nil, err
 						}
@@ -2117,7 +2117,7 @@ func findParsedType(
 			for modId, submodule := range modules {
 				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
 					if strings.HasSuffix(string(modId), modDotName) || modId == typeName {
-						foundType, foundModule, foundId, err := findParsedType(nil, submodule, typeName, args)
+						foundType, foundModule, foundId, err := FindParsedType(nil, submodule, typeName, args)
 						if err != nil {
 							return nil, nil, nil, err
 						}
@@ -2138,7 +2138,7 @@ func findParsedType(
 			//6. search all modules
 			for _, submodule := range modules {
 				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
-					foundType, foundModule, foundId, err := findParsedType(nil, submodule, typeName, args)
+					foundType, foundModule, foundId, err := FindParsedType(nil, submodule, typeName, args)
 					if err != nil {
 						return nil, nil, nil, err
 					}

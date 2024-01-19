@@ -165,6 +165,13 @@ func (s *server) TextDocument_hover(params *protocol.HoverParams) (*protocol.Hov
 				src.GetLocation().Text(),
 				pt.GetType().ToString(um, moduleName))
 		}
+	case typed.Type:
+		t := wl.(typed.Type)
+		text = fmt.Sprintf(
+			"defined in `%s`\n\n```nar\n%s\n```", moduleName,
+			t.ToString(typed.UnboundMap{}, moduleName))
+		break
+
 	}
 	if text != "" {
 		return &protocol.Hover{

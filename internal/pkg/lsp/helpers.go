@@ -7,6 +7,7 @@ import (
 	"nar-compiler/internal/pkg/ast/typed"
 	"nar-compiler/internal/pkg/common"
 	"nar-compiler/internal/pkg/lsp/protocol"
+	"nar-compiler/internal/pkg/processors"
 )
 
 func (s *server) findDefinition(docURI protocol.DocumentURI, line, char uint32) (source, result withLocation) {
@@ -34,6 +35,7 @@ func (s *server) findDefinition(docURI protocol.DocumentURI, line, char uint32) 
 									if ok {
 										source = at.stmt
 										result = td
+										return
 									}
 								}
 							}
@@ -51,36 +53,61 @@ func (s *server) findDefinition(docURI protocol.DocumentURI, line, char uint32) 
 									if tp, ok := at.stmt.(typed.Pattern); ok {
 										source = l
 										result = tp
+										return
 									}
 								}
 							}
 						}
 					}
 					break
+				case parsed.Type:
+					t := at.stmt.(parsed.Type)
+					switch t.(type) {
+					case *parsed.TNamed:
+						nt := t.(*parsed.TNamed)
+						x, _, _, _ := processors.FindParsedType(s.parsedModules, m, nt.Name, nt.Args)
+						if x != nil {
+							succ := typed.FoldModule(
+								findSuccessors[typed.Expression],
+								findSuccessors[typed.Type],
+								findSuccessors[typed.Pattern],
+								successors{loc: x.GetLocation()},
+								s.typedModules[m.Name])
+							for _, stmt := range succ.stmts {
+								switch stmt.(type) {
+								case typed.Type:
+									source = t
+									result = stmt
+									return
+								}
+							}
+						}
+					}
 				case parsed.Pattern:
-					p := at.stmt.(parsed.Pattern)
 					succ := typed.FoldModule(
 						findSuccessors[typed.Expression],
 						findSuccessors[typed.Type],
 						findSuccessors[typed.Pattern],
-						successors{loc: p.GetLocation()},
+						successors{loc: at.stmt.GetLocation()},
 						s.typedModules[m.Name])
 					for _, stmt := range succ.stmts {
-						if pt, ok := stmt.(typed.Pattern); ok {
+						switch stmt.(type) {
+						case typed.Pattern:
+							pt := stmt.(typed.Pattern)
 							switch pt.(type) {
 							case *typed.PDataOption:
 								e := pt.(*typed.PDataOption)
 								result = e.Definition
-								source = p
-								break
+								source = at.stmt
+								return
 							case *typed.PNamed:
 								result = pt
-								source = p
+								source = at.stmt
+								return
 							case *typed.PAlias:
 								result = pt
-								source = p
-							default:
-
+								source = at.stmt
+								return
 							}
 							break
 						}
