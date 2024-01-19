@@ -3,9 +3,11 @@ package lsp
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast/parsed"
 	"nar-compiler/internal/pkg/ast/typed"
 	"nar-compiler/internal/pkg/common"
 	"nar-compiler/internal/pkg/lsp/protocol"
+	"unicode"
 )
 
 func (s *server) Initialize(params *protocol.InitializeParams) (protocol.InitializeResult, error) {
@@ -21,14 +23,14 @@ func (s *server) Initialize(params *protocol.InitializeParams) (protocol.Initial
 				OpenClose: true,
 				Change:    protocol.Full,
 			},
-
-			CompletionProvider: nil,
 			HoverProvider: &protocol.Or_ServerCapabilities_hoverProvider{
 				Value: true,
 			},
-			SignatureHelpProvider: nil,
 			DefinitionProvider: &protocol.Or_ServerCapabilities_definitionProvider{
 				Value: protocol.DefinitionOptions{},
+			},
+			DocumentSymbolProvider: &protocol.Or_ServerCapabilities_documentSymbolProvider{
+				Value: protocol.DocumentSymbolOptions{},
 			},
 		},
 		ServerInfo: &protocol.PServerInfoMsg_initialize{
@@ -88,7 +90,9 @@ func (s *server) TextDocument_didClose(params *protocol.DidCloseTextDocumentPara
 	return nil
 }
 
-func (s *server) TextDocument_definition(params *protocol.DefinitionParams) (result *protocol.Location, err error) {
+func (s *server) TextDocument_definition(
+	params *protocol.DefinitionParams,
+) (result *protocol.Location, err error) {
 	_, wl := s.findDefinition(params.TextDocument.URI, params.Position.Line, params.Position.Character)
 	if wl != nil {
 		return locToLocation(wl.GetLocation()), nil
@@ -183,4 +187,106 @@ func (s *server) TextDocument_hover(params *protocol.HoverParams) (*protocol.Hov
 		}, nil
 	}
 	return nil, nil
+}
+
+func (s *server) TextDocument_documentSymbol(
+	params *protocol.DocumentSymbolParams,
+) (result []protocol.DocumentSymbol, err error) {
+	for _, mod := range s.parsedModules {
+		if mod.Location.FilePath() == uriToPath(params.TextDocument.URI) {
+			for _, inf := range mod.InfixFns {
+				result = append(result, protocol.DocumentSymbol{
+					Name:           string(inf.Name),
+					Kind:           protocol.Operator,
+					Range:          locToRange(inf.Location),
+					SelectionRange: locToRange(inf.Location),
+				})
+			}
+			for _, alias := range mod.Aliases {
+				if _, ok := common.Find(func(x parsed.DataType) bool { return alias.Name == x.Name }, mod.DataTypes); ok {
+					continue
+				}
+
+				kind := protocol.Class
+				var children []protocol.DocumentSymbol
+
+				if rec, ok := alias.Type.(*parsed.TRecord); ok {
+					kind = protocol.Struct
+					for name, f := range rec.Fields {
+						children = append(children, protocol.DocumentSymbol{
+							Name:           string(name),
+							Kind:           protocol.Field,
+							Range:          locToRange(f.GetLocation()),
+							SelectionRange: locToRange(f.GetLocation()),
+						})
+					}
+				} else {
+					succ := typed.FoldModule(
+						findSuccessors[typed.Expression],
+						findSuccessors[typed.Type],
+						findSuccessors[typed.Pattern],
+						successors{loc: alias.Location},
+						s.typedModules[mod.Name])
+
+					for _, s := range succ.stmts {
+						if t, ok := s.(typed.Type); ok {
+							switch t.(type) {
+							case *typed.TFunc:
+								kind = protocol.Function
+							case *typed.TTuple:
+								kind = protocol.Array
+							case *typed.TNative:
+								kind = protocol.Class
+							case *typed.TUnbound:
+								kind = protocol.Null
+							}
+						}
+					}
+				}
+
+				result = append(result, protocol.DocumentSymbol{
+					Name:           string(alias.Name),
+					Kind:           kind,
+					Range:          locToRange(alias.Location),
+					SelectionRange: locToRange(alias.Location),
+					Children:       children,
+				})
+			}
+			for _, dt := range mod.DataTypes {
+				result = append(result, protocol.DocumentSymbol{
+					Name:           string(dt.Name),
+					Kind:           protocol.Enum,
+					Range:          locToRange(dt.Location),
+					SelectionRange: locToRange(dt.Location),
+					Children: common.Map(func(o parsed.DataTypeOption) protocol.DocumentSymbol {
+						return protocol.DocumentSymbol{
+							Name:           string(o.Name),
+							Kind:           protocol.EnumMember,
+							Range:          locToRange(o.Location),
+							SelectionRange: locToRange(o.Location),
+						}
+					}, dt.Options),
+				})
+			}
+			for _, d := range mod.Definitions {
+				if unicode.IsLower([]rune(d.Name)[0]) {
+					kind := protocol.Function
+					if len(d.Params) == 0 {
+						kind = protocol.Constant
+					}
+					if _, ok := d.Expression.(*parsed.NativeCall); ok {
+						kind = protocol.Interface
+					}
+					result = append(result, protocol.DocumentSymbol{
+						Name:           string(d.Name),
+						Kind:           kind,
+						Range:          locToRange(d.Location),
+						SelectionRange: locToRange(d.Location),
+					})
+				}
+			}
+			break
+		}
+	}
+	return result, nil
 }
