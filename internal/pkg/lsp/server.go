@@ -16,6 +16,8 @@ import (
 	"strings"
 )
 
+const Version = "1.0"
+
 type server struct {
 	cacheDir string
 	log      *common.LogWriter

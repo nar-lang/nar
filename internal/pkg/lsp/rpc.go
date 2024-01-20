@@ -35,10 +35,13 @@ func (s *server) Initialize(params *protocol.InitializeParams) (protocol.Initial
 			ReferencesProvider: &protocol.Or_ServerCapabilities_referencesProvider{
 				Value: protocol.ReferenceOptions{},
 			},
+			TypeDefinitionProvider: &protocol.Or_ServerCapabilities_typeDefinitionProvider{
+				Value: protocol.TypeDefinitionOptions{},
+			},
 		},
 		ServerInfo: &protocol.PServerInfoMsg_initialize{
 			Name:    "Nar Language Server",
-			Version: "0.1.0",
+			Version: Version,
 		},
 	}, nil
 }

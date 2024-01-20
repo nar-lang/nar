@@ -10,6 +10,8 @@ import (
 	"slices"
 )
 
+const Version = "1.0"
+
 func Compile(
 	pkgNames []ast.PackageIdentifier,
 	loadedPackages map[ast.PackageIdentifier]*ast.LoadedPackage,

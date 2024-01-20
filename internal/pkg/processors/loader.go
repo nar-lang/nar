@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -111,6 +112,12 @@ func loadPackageWithPath(
 			fmt.Errorf("failed to parse package `%s` descriptor file: %w", url, err))
 	}
 
+	if !checkVersion(pkg.Version) {
+		return nil, common.NewSystemError(fmt.Errorf(
+			"package `%s` version %s is not supported by this compiler version %s",
+			url, pkg.Version, Version))
+	}
+
 	insert := false
 	var ok bool
 	if loaded, ok = loadedPackages[pkg.Name]; ok {
@@ -156,6 +163,17 @@ func loadPackageWithPath(
 	}
 
 	return loaded, nil
+}
+
+func checkVersion(target string) bool {
+	targetMajorStr := strings.Split(target, ".")[0]
+	compilerMajorStr := strings.Split(Version, ".")[0]
+	targetMajor, err1 := strconv.Atoi(targetMajorStr)
+	compilerMajor, err2 := strconv.Atoi(compilerMajorStr)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return targetMajor <= compilerMajor
 }
 
 func readDir(path, ext string, files []string) ([]string, error) {

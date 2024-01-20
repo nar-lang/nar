@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"nar-compiler/internal/pkg/common"
+	"nar-compiler/internal/pkg/lsp"
+	"nar-compiler/internal/pkg/processors"
 	narc "nar-compiler/pkg"
 	"os"
 	"os/exec"
@@ -23,14 +25,20 @@ func main() {
 	pack := flag.String("pack", "", "command to pack resulted executable.\n"+
 		"  examples\n"+"  js: `webpack-cli --entry build/index.source.js -o ./build`")
 	noClean := flag.Bool("no-clean", false, "don't clean up intermediate artifacts after packing")
-	lsp := flag.String("lsp", "", "start language server with given transport (stdio/tcp)")
+	runLsp := flag.String("lsp", "", "start language server with given transport (stdio/tcp)")
 	lspPort := flag.Int("lsp-port", 0, "port for tcp transport")
+	showVersion := flag.Bool("version", false, "show version")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("nar compiler version: %s\nlanguage server protocol version: %s\n", processors.Version, lsp.Version)
+		return
+	}
 
 	log := &common.LogWriter{}
 
-	if *lsp != "" {
-		err := narc.LanguageServer(*lsp, *lspPort, *cacheDir)
+	if *runLsp != "" {
+		err := narc.LanguageServer(*runLsp, *lspPort, *cacheDir)
 		if err != nil {
 			log.Err(err)
 		}
