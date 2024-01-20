@@ -10,9 +10,9 @@ type Type interface {
 }
 
 type TFunc struct {
-	ast.Location
-	Params []Type
-	Return Type
+	Location ast.Location
+	Params   []Type
+	Return   Type
 }
 
 func (*TFunc) _type() {}
@@ -22,8 +22,8 @@ func (t *TFunc) GetLocation() ast.Location {
 }
 
 type TRecord struct {
-	ast.Location
-	Fields map[ast.Identifier]Type
+	Location ast.Location
+	Fields   map[ast.Identifier]Type
 }
 
 func (*TRecord) _type() {}
@@ -33,8 +33,8 @@ func (t *TRecord) GetLocation() ast.Location {
 }
 
 type TTuple struct {
-	ast.Location
-	Items []Type
+	Location ast.Location
+	Items    []Type
 }
 
 func (*TTuple) _type() {}
@@ -44,7 +44,7 @@ func (t *TTuple) GetLocation() ast.Location {
 }
 
 type TUnit struct {
-	ast.Location
+	Location ast.Location
 }
 
 func (*TUnit) _type() {}
@@ -54,9 +54,9 @@ func (t *TUnit) GetLocation() ast.Location {
 }
 
 type TNamed struct {
-	ast.Location
-	Name ast.QualifiedIdentifier
-	Args []Type
+	Location ast.Location
+	Name     ast.QualifiedIdentifier
+	Args     []Type
 }
 
 func (*TNamed) _type() {}
@@ -72,10 +72,10 @@ type DataOption struct {
 }
 
 type TData struct {
-	ast.Location
-	Name    ast.FullIdentifier
-	Args    []Type
-	Options []DataOption
+	Location ast.Location
+	Name     ast.FullIdentifier
+	Args     []Type
+	Options  []DataOption
 }
 
 func (*TData) _type() {}
@@ -85,9 +85,9 @@ func (t *TData) GetLocation() ast.Location {
 }
 
 type TNative struct {
-	ast.Location
-	Name ast.FullIdentifier
-	Args []Type
+	Location ast.Location
+	Name     ast.FullIdentifier
+	Args     []Type
 }
 
 func (*TNative) _type() {}
@@ -97,8 +97,8 @@ func (t *TNative) GetLocation() ast.Location {
 }
 
 type TTypeParameter struct {
-	ast.Location
-	Name ast.Identifier
+	Location ast.Location
+	Name     ast.Identifier
 }
 
 func (*TTypeParameter) _type() {}

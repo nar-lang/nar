@@ -16,9 +16,9 @@ type Type interface {
 }
 
 type TFunc struct {
-	ast.Location
-	Params []Type
-	Return Type
+	Location ast.Location
+	Params   []Type
+	Return   Type
 }
 
 func (*TFunc) _type() {}
@@ -40,7 +40,7 @@ func (t *TFunc) ToString(m UnboundMap, currentModule ast.QualifiedIdentifier) st
 }
 
 type TRecord struct {
-	ast.Location
+	Location          ast.Location
 	Fields            map[ast.Identifier]Type
 	MayHaveMoreFields bool
 }
@@ -67,8 +67,8 @@ func (t *TRecord) ToString(m UnboundMap, currentModule ast.QualifiedIdentifier) 
 }
 
 type TTuple struct {
-	ast.Location
-	Items []Type
+	Location ast.Location
+	Items    []Type
 }
 
 func (*TTuple) _type() {}
@@ -87,9 +87,9 @@ func (t *TTuple) ToString(m UnboundMap, currentModule ast.QualifiedIdentifier) s
 }
 
 type TNative struct {
-	ast.Location
-	Name ast.FullIdentifier
-	Args []Type
+	Location ast.Location
+	Name     ast.FullIdentifier
+	Args     []Type
 }
 
 func (*TNative) _type() {}
@@ -125,10 +125,10 @@ func (d DataOption) String() string {
 }
 
 type TData struct {
-	ast.Location
-	Name    ast.FullIdentifier
-	Options []DataOption
-	Args    []Type
+	Location ast.Location
+	Name     ast.FullIdentifier
+	Options  []DataOption
+	Args     []Type
 }
 
 func (*TData) _type() {}
@@ -155,7 +155,7 @@ func (t *TData) ToString(m UnboundMap, currentModule ast.QualifiedIdentifier) st
 }
 
 type TUnbound struct {
-	ast.Location
+	Location   ast.Location
 	Index      uint64
 	Constraint common.Constraint
 	GivenName  ast.Identifier

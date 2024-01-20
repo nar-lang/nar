@@ -187,7 +187,6 @@ func FoldType[T any](ft func(Type, T) T, acc T, t Type) T {
 			e := t.(*TFunc)
 			for _, arg := range e.Params {
 				acc = FoldType(ft, acc, arg)
-
 			}
 			acc = FoldType(ft, acc, e.Return)
 		}

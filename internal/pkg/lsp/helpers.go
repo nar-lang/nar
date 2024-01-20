@@ -65,7 +65,7 @@ func (s *server) findDefinition(docURI protocol.DocumentURI, line, char uint32) 
 					switch t.(type) {
 					case *parsed.TNamed:
 						nt := t.(*parsed.TNamed)
-						x, _, _, _ := processors.FindParsedType(s.parsedModules, m, nt.Name, nt.Args)
+						x, _, _, _ := processors.FindParsedType(s.parsedModules, m, nt.Name, nt.Args, nt.Location)
 						if x != nil {
 							succ := typed.FoldModule(
 								findSuccessors[typed.Expression],
@@ -113,7 +113,21 @@ func (s *server) findDefinition(docURI protocol.DocumentURI, line, char uint32) 
 						}
 					}
 					break
+				case nil:
+					for _, pDef := range m.Definitions {
+						if pDef.Location.Contains(loc) {
+							for _, tDef := range s.typedModules[m.Name].Definitions {
+								if tDef.Name == pDef.Name {
+									result = tDef
+									source = pDef
+									return
+								}
+							}
+						}
+					}
+					break
 				}
+				break
 			}
 		}
 	}

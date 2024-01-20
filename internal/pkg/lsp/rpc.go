@@ -32,6 +32,9 @@ func (s *server) Initialize(params *protocol.InitializeParams) (protocol.Initial
 			DocumentSymbolProvider: &protocol.Or_ServerCapabilities_documentSymbolProvider{
 				Value: protocol.DocumentSymbolOptions{},
 			},
+			ReferencesProvider: &protocol.Or_ServerCapabilities_referencesProvider{
+				Value: protocol.ReferenceOptions{},
+			},
 		},
 		ServerInfo: &protocol.PServerInfoMsg_initialize{
 			Name:    "Nar Language Server",
@@ -288,5 +291,134 @@ func (s *server) TextDocument_documentSymbol(
 			break
 		}
 	}
-	return result, nil
+	return
+}
+
+func (s *server) TextDocument_references(
+	params *protocol.ReferenceParams,
+) (result []protocol.Location, err error) {
+	src, found := s.findDefinition(params.TextDocument.URI, params.Position.Line, params.Position.Character)
+	switch found.(type) {
+	case *typed.Definition:
+		def := found.(*typed.Definition)
+		result = append(result, *locToLocation(def.GetLocation()))
+		var moduleName ast.QualifiedIdentifier
+		for _, m := range s.parsedModules {
+			if m.Location.FilePath() == def.GetLocation().FilePath() {
+				moduleName = m.Name
+				break
+			}
+		}
+		for _, m := range s.typedModules {
+			result = typed.FoldModule(
+				func(e typed.Expression, acc []protocol.Location) []protocol.Location {
+					if g, ok := e.(*typed.Global); ok {
+						if g.Definition.Name == def.Name && g.ModuleName == moduleName {
+							return append(acc, *locToLocation(e.GetLocation()))
+						}
+					}
+					return acc
+				},
+				func(t typed.Type, acc []protocol.Location) []protocol.Location { return acc },
+				func(p typed.Pattern, acc []protocol.Location) []protocol.Location { return acc },
+				result, m)
+		}
+		break
+	case typed.Type:
+		tNative, isNative := found.(*typed.TNative)
+		tData, isData := found.(*typed.TData)
+		if isNative || isData {
+			for _, m := range s.typedModules {
+				result = typed.FoldModule(
+					func(e typed.Expression, acc []protocol.Location) []protocol.Location {
+						return acc
+					},
+					func(t typed.Type, acc []protocol.Location) []protocol.Location {
+						xNative, xIsNative := t.(*typed.TNative)
+						xData, xIsData := t.(*typed.TData)
+						if xIsNative && isNative && xNative.Name == tNative.Name {
+							return append(acc, *locToLocation(t.GetLocation()))
+						}
+						if xIsData && isData && xData.Name == tData.Name {
+							return append(acc, *locToLocation(t.GetLocation()))
+						}
+						return acc
+					},
+					func(p typed.Pattern, acc []protocol.Location) []protocol.Location {
+						return acc
+					},
+					result, m)
+			}
+		}
+
+		break
+	case typed.Pattern:
+		loc := ast.NewLocationSrc(
+			src.GetLocation().FilePath(),
+			src.GetLocation().FileContent(),
+			params.Position.Line,
+			params.Position.Character,
+		)
+
+		//TODO: it does not take scope into account
+
+		pt := found.(typed.Pattern)
+		var name ast.Identifier
+		switch pt.(type) {
+		case *typed.PNamed:
+			name = pt.(*typed.PNamed).Name
+			break
+		case *typed.PAlias:
+			name = pt.(*typed.PAlias).Alias
+			break
+		case *typed.PRecord:
+			rec := pt.(*typed.PRecord)
+			for _, f := range rec.Fields {
+				if f.Location.Contains(loc) {
+					name = f.Name
+					break
+				}
+			}
+			break
+		}
+		if name != "" {
+			for _, m := range s.typedModules {
+				if m.Location.FilePath() == src.GetLocation().FilePath() {
+					for _, d := range m.Definitions {
+						if d.Location.Contains(loc) {
+							result = typed.FoldDefinition(
+								func(e typed.Expression, acc []protocol.Location) []protocol.Location {
+									if loc, ok := e.(*typed.Local); ok {
+										if loc.Name == name {
+											return append(acc, *locToLocation(e.GetLocation()))
+										}
+									}
+									return acc
+								},
+								func(e typed.Type, acc []protocol.Location) []protocol.Location {
+									return acc
+								},
+								func(e typed.Pattern, acc []protocol.Location) []protocol.Location {
+									if n, ok := e.(*typed.PNamed); ok {
+										if n.Name == name {
+											return append(acc, *locToLocation(e.GetLocation()))
+										}
+									}
+									if n, ok := e.(*typed.PAlias); ok {
+										if n.Alias == name {
+											return append(acc, *locToLocation(e.GetLocation()))
+										}
+									}
+									return acc
+								},
+								result, d)
+						}
+					}
+				}
+			}
+		}
+		break
+	}
+
+	return
 }

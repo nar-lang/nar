@@ -47,6 +47,10 @@ type Definition struct {
 	Type       Type
 }
 
+func (d *Definition) GetLocation() ast.Location {
+	return d.Location
+}
+
 type DataTypeOption struct {
 	Location ast.Location
 	Hidden   bool

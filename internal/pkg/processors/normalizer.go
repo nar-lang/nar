@@ -1105,7 +1105,7 @@ func normalizeExpression(
 		{
 			e := expr.(*parsed.If)
 			boolType := &normalized.TData{
-				Location: e.Location,
+				Location: e.Condition.GetLocation(),
 				Name:     common.NarCoreBasicsBool,
 				Options: []normalized.DataOption{
 					{Name: common.NarCoreBasicsTrueName},
@@ -1849,9 +1849,9 @@ func normalizeType(
 	case *parsed.TNamed:
 		{
 			e := t.(*parsed.TNamed)
-			x, m, ids, err := FindParsedType(modules, module, e.Name, e.Args)
-			if ids == nil && typeModule != nil {
-				x, m, ids, err = FindParsedType(modules, typeModule, e.Name, e.Args)
+			x, m, ids, err := FindParsedType(modules, module, e.Name, e.Args, e.Location)
+			if ids == nil && typeModule != nil { //TODO: redundant case, remove it
+				x, m, ids, err = FindParsedType(modules, typeModule, e.Name, e.Args, e.Location)
 				if err != nil {
 					return nil, err
 				}
@@ -2033,6 +2033,7 @@ func FindParsedType(
 	module *parsed.Module,
 	name ast.QualifiedIdentifier,
 	args []parsed.Type,
+	loc ast.Location,
 ) (parsed.Type, *parsed.Module, []ast.FullIdentifier, error) {
 	var aliasNameEq = func(x parsed.Alias) bool {
 		return ast.QualifiedIdentifier(x.Name) == name
@@ -2043,7 +2044,7 @@ func FindParsedType(
 		id := common.MakeFullIdentifier(module.Name, alias.Name)
 		if alias.Type == nil {
 			return &parsed.TNative{
-				Location: alias.Location,
+				Location: loc,
 				Name:     id,
 				Args:     args,
 			}, module, []ast.FullIdentifier{id}, nil
@@ -2055,7 +2056,7 @@ func FindParsedType(
 		for i, x := range alias.Params {
 			typeMap[x] = args[i]
 		}
-		withAppliedArgs, err := applyTypeArgs(alias.Type, typeMap)
+		withAppliedArgs, err := applyTypeArgs(alias.Type, typeMap, loc)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -2077,7 +2078,7 @@ func FindParsedType(
 
 		for _, imp := range module.Imports {
 			if slices.Contains(imp.Exposing, string(name)) {
-				return FindParsedType(nil, modules[imp.ModuleIdentifier], typeName, args)
+				return FindParsedType(nil, modules[imp.ModuleIdentifier], typeName, args, loc)
 			}
 		}
 
@@ -2085,7 +2086,7 @@ func FindParsedType(
 		if modName != "" {
 			if submodule, ok := modules[ast.QualifiedIdentifier(modName)]; ok {
 				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
-					return FindParsedType(nil, submodule, typeName, args)
+					return FindParsedType(nil, submodule, typeName, args, loc)
 				}
 			}
 
@@ -2094,7 +2095,7 @@ func FindParsedType(
 			for modId, submodule := range modules {
 				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
 					if strings.HasSuffix(string(modId), modName) {
-						foundType, foundModule, foundId, err := FindParsedType(nil, submodule, typeName, args)
+						foundType, foundModule, foundId, err := FindParsedType(nil, submodule, typeName, args, loc)
 						if err != nil {
 							return nil, nil, nil, err
 						}
@@ -2117,7 +2118,7 @@ func FindParsedType(
 			for modId, submodule := range modules {
 				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
 					if strings.HasSuffix(string(modId), modDotName) || modId == typeName {
-						foundType, foundModule, foundId, err := FindParsedType(nil, submodule, typeName, args)
+						foundType, foundModule, foundId, err := FindParsedType(nil, submodule, typeName, args, loc)
 						if err != nil {
 							return nil, nil, nil, err
 						}
@@ -2138,7 +2139,7 @@ func FindParsedType(
 			//6. search all modules
 			for _, submodule := range modules {
 				if _, referenced := module.ReferencedPackages[submodule.PackageName]; referenced {
-					foundType, foundModule, foundId, err := FindParsedType(nil, submodule, typeName, args)
+					foundType, foundModule, foundId, err := FindParsedType(nil, submodule, typeName, args, loc)
 					if err != nil {
 						return nil, nil, nil, err
 					}
@@ -2158,15 +2159,15 @@ func FindParsedType(
 	return nil, nil, nil, nil
 }
 
-func applyTypeArgs(t parsed.Type, params map[ast.Identifier]parsed.Type) (parsed.Type, error) {
-	doMap := func(x parsed.Type) (parsed.Type, error) { return applyTypeArgs(x, params) }
+func applyTypeArgs(t parsed.Type, params map[ast.Identifier]parsed.Type, loc ast.Location) (parsed.Type, error) {
+	doMap := func(x parsed.Type) (parsed.Type, error) { return applyTypeArgs(x, params, loc) }
 	var err error
 	switch t.(type) {
 	case *parsed.TFunc:
 		{
 			p := t.(*parsed.TFunc)
 			e := &parsed.TFunc{
-				Location: p.Location,
+				Location: loc,
 				Params:   nil,
 				Return:   nil,
 			}
@@ -2174,7 +2175,7 @@ func applyTypeArgs(t parsed.Type, params map[ast.Identifier]parsed.Type) (parsed
 			if err != nil {
 				return nil, err
 			}
-			e.Return, err = applyTypeArgs(p.Return, params)
+			e.Return, err = applyTypeArgs(p.Return, params, loc)
 			if err != nil {
 				return nil, err
 			}
@@ -2184,11 +2185,11 @@ func applyTypeArgs(t parsed.Type, params map[ast.Identifier]parsed.Type) (parsed
 		{
 			p := t.(*parsed.TRecord)
 			e := &parsed.TRecord{
-				Location: p.Location,
+				Location: loc,
 				Fields:   map[ast.Identifier]parsed.Type{},
 			}
 			for name, f := range p.Fields {
-				e.Fields[name], err = applyTypeArgs(f, params)
+				e.Fields[name], err = applyTypeArgs(f, params, loc)
 				if err != nil {
 					return nil, err
 				}
@@ -2199,7 +2200,7 @@ func applyTypeArgs(t parsed.Type, params map[ast.Identifier]parsed.Type) (parsed
 		{
 			p := t.(*parsed.TTuple)
 			e := &parsed.TTuple{
-				Location: p.Location,
+				Location: loc,
 				Items:    nil,
 			}
 			e.Items, err = common.MapError(doMap, p.Items)
@@ -2214,10 +2215,9 @@ func applyTypeArgs(t parsed.Type, params map[ast.Identifier]parsed.Type) (parsed
 		{
 			p := t.(*parsed.TData)
 			e := &parsed.TData{
-				Location: p.Location,
+				Location: loc,
 				Name:     p.Name,
 				Options:  p.Options,
-				Args:     nil,
 			}
 			e.Args, err = common.MapError(doMap, p.Args)
 			if err != nil {
@@ -2229,7 +2229,7 @@ func applyTypeArgs(t parsed.Type, params map[ast.Identifier]parsed.Type) (parsed
 		{
 			p := t.(*parsed.TNamed)
 			e := &parsed.TNamed{
-				Location: p.Location,
+				Location: loc,
 				Name:     p.Name,
 				Args:     nil,
 			}
@@ -2243,7 +2243,7 @@ func applyTypeArgs(t parsed.Type, params map[ast.Identifier]parsed.Type) (parsed
 		{
 			p := t.(*parsed.TNative)
 			e := &parsed.TNative{
-				Location: p.Location,
+				Location: loc,
 				Name:     p.Name,
 				Args:     nil,
 			}

@@ -104,3 +104,7 @@ func (loc Location) End() uint32 {
 func (loc Location) Size() uint32 {
 	return loc.end - loc.start
 }
+
+func (loc Location) FileContent() []rune {
+	return loc.fileContent
+}
