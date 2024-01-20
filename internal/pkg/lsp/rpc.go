@@ -3,11 +3,9 @@ package lsp
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/parsed"
 	"nar-compiler/internal/pkg/ast/typed"
 	"nar-compiler/internal/pkg/common"
 	"nar-compiler/internal/pkg/lsp/protocol"
-	"unicode"
 )
 
 func (s *server) Initialize(params *protocol.InitializeParams) (protocol.InitializeResult, error) {
@@ -79,7 +77,7 @@ func (s *server) TextDocument_didClose(params *protocol.DidCloseTextDocumentPara
 		if pid, ok := s.packageRootToName[pr]; ok {
 			if p, ok := s.loadedPackages[pid]; ok {
 				for id, mod := range s.parsedModules {
-					if mod.PackageName == p.Package.Name {
+					if mod.PackageName() == p.Package.Name {
 						delete(s.parsedModules, id)
 						delete(s.normalizedModules, id)
 						delete(s.typedModules, id)
@@ -99,11 +97,22 @@ func (s *server) TextDocument_didClose(params *protocol.DidCloseTextDocumentPara
 func (s *server) TextDocument_definition(
 	params *protocol.DefinitionParams,
 ) (result *protocol.Location, err error) {
-	_, wl := s.findDefinition(params.TextDocument.URI, params.Position.Line, params.Position.Character)
-	if wl != nil {
+	sl, wl := s.findDefinition(params.TextDocument.URI, params.Position.Line, params.Position.Character)
+	if wl != nil && sl != nil {
 		return locToLocation(wl.GetLocation()), nil
 	}
 	return nil, nil
+}
+
+func (s *server) TextDocument_typeDefinition(
+	params *protocol.TypeDefinitionParams,
+) (result *protocol.Location, err error) {
+	_, wl := s.findDefinition(params.TextDocument.URI, params.Position.Line, params.Position.Character)
+	if _, ok := wl.(typed.Pattern); ok {
+		_, l := s.findStatementDefinition(wl, s.getModuleOfStatement(wl))
+		result = locToLocation(l.GetLocation())
+	}
+	return
 }
 
 func (s *server) TextDocument_hover(params *protocol.HoverParams) (*protocol.Hover, error) {
@@ -113,8 +122,8 @@ func (s *server) TextDocument_hover(params *protocol.HoverParams) (*protocol.Hov
 	var moduleName ast.QualifiedIdentifier
 	if wl != nil {
 		for _, m := range s.parsedModules {
-			if m.Location.FilePath() == wl.GetLocation().FilePath() {
-				moduleName = m.Name
+			if m.GetLocation().FilePath() == wl.GetLocation().FilePath() {
+				moduleName = m.Name()
 				break
 			}
 		}
@@ -198,102 +207,103 @@ func (s *server) TextDocument_hover(params *protocol.HoverParams) (*protocol.Hov
 func (s *server) TextDocument_documentSymbol(
 	params *protocol.DocumentSymbolParams,
 ) (result []protocol.DocumentSymbol, err error) {
-	for _, mod := range s.parsedModules {
-		if mod.Location.FilePath() == uriToPath(params.TextDocument.URI) {
-			for _, inf := range mod.InfixFns {
-				result = append(result, protocol.DocumentSymbol{
-					Name:           string(inf.Name),
-					Kind:           protocol.Operator,
-					Range:          locToRange(inf.Location),
-					SelectionRange: locToRange(inf.Location),
-				})
-			}
-			for _, alias := range mod.Aliases {
-				if _, ok := common.Find(func(x parsed.DataType) bool { return alias.Name == x.Name }, mod.DataTypes); ok {
-					continue
-				}
-
-				kind := protocol.Class
-				var children []protocol.DocumentSymbol
-
-				if rec, ok := alias.Type.(*parsed.TRecord); ok {
-					kind = protocol.Struct
-					for name, f := range rec.Fields {
-						children = append(children, protocol.DocumentSymbol{
-							Name:           string(name),
-							Kind:           protocol.Field,
-							Range:          locToRange(f.GetLocation()),
-							SelectionRange: locToRange(f.GetLocation()),
-						})
-					}
-				} else {
-					succ := typed.FoldModule(
-						findSuccessors[typed.Expression],
-						findSuccessors[typed.Type],
-						findSuccessors[typed.Pattern],
-						successors{loc: alias.Location},
-						s.typedModules[mod.Name])
-
-					for _, s := range succ.stmts {
-						if t, ok := s.(typed.Type); ok {
-							switch t.(type) {
-							case *typed.TFunc:
-								kind = protocol.Function
-							case *typed.TTuple:
-								kind = protocol.Array
-							case *typed.TNative:
-								kind = protocol.Class
-							case *typed.TUnbound:
-								kind = protocol.Null
-							}
-						}
-					}
-				}
-
-				result = append(result, protocol.DocumentSymbol{
-					Name:           string(alias.Name),
-					Kind:           kind,
-					Range:          locToRange(alias.Location),
-					SelectionRange: locToRange(alias.Location),
-					Children:       children,
-				})
-			}
-			for _, dt := range mod.DataTypes {
-				result = append(result, protocol.DocumentSymbol{
-					Name:           string(dt.Name),
-					Kind:           protocol.Enum,
-					Range:          locToRange(dt.Location),
-					SelectionRange: locToRange(dt.Location),
-					Children: common.Map(func(o parsed.DataTypeOption) protocol.DocumentSymbol {
-						return protocol.DocumentSymbol{
-							Name:           string(o.Name),
-							Kind:           protocol.EnumMember,
-							Range:          locToRange(o.Location),
-							SelectionRange: locToRange(o.Location),
-						}
-					}, dt.Options),
-				})
-			}
-			for _, d := range mod.Definitions {
-				if unicode.IsLower([]rune(d.Name)[0]) {
-					kind := protocol.Function
-					if len(d.Params) == 0 {
-						kind = protocol.Constant
-					}
-					if _, ok := d.Expression.(*parsed.NativeCall); ok {
-						kind = protocol.Interface
-					}
-					result = append(result, protocol.DocumentSymbol{
-						Name:           string(d.Name),
-						Kind:           kind,
-						Range:          locToRange(d.Location),
-						SelectionRange: locToRange(d.Location),
-					})
-				}
-			}
-			break
-		}
-	}
+	//for _, mod := range s.parsedModules {
+	//	if mod.Location.FilePath() == uriToPath(params.TextDocument.URI) {
+	//		for _, inf := range mod.InfixFns {
+	//			result = append(result, protocol.DocumentSymbol{
+	//				Name:           string(inf.Name),
+	//				Kind:           protocol.Operator,
+	//				Range:          locToRange(inf.Location),
+	//				SelectionRange: locToRange(inf.Location),
+	//			})
+	//		}
+	//		for _, alias := range mod.Aliases {
+	//			findDT := func(x *parsed.DataType) bool { return alias.name == x.Name }
+	//			if _, ok := common.Find(findDT, mod.DataTypes); ok {
+	//				continue
+	//			}
+	//
+	//			kind := protocol.Class
+	//			var children []protocol.DocumentSymbol
+	//
+	//			if rec, ok := alias.type_.(*parsed.TRecord); ok {
+	//				kind = protocol.Struct
+	//				for name, f := range rec.Fields() {
+	//					children = append(children, protocol.DocumentSymbol{
+	//						Name:           string(name),
+	//						Kind:           protocol.Field,
+	//						Range:          locToRange(f.GetLocation()),
+	//						SelectionRange: locToRange(f.GetLocation()),
+	//					})
+	//				}
+	//			} else {
+	//				succ := typed.FoldModule(
+	//					findSuccessors[typed.Expression],
+	//					findSuccessors[typed.Type],
+	//					findSuccessors[typed.Pattern],
+	//					successors{loc: alias.location},
+	//					s.typedModules[mod.Name])
+	//
+	//				for _, s := range succ.stmts {
+	//					if t, ok := s.(typed.Type); ok {
+	//						switch t.(type) {
+	//						case *typed.TFunc:
+	//							kind = protocol.Function
+	//						case *typed.TTuple:
+	//							kind = protocol.Array
+	//						case *typed.TNative:
+	//							kind = protocol.Class
+	//						case *typed.TUnbound:
+	//							kind = protocol.Null
+	//						}
+	//					}
+	//				}
+	//			}
+	//
+	//			result = append(result, protocol.DocumentSymbol{
+	//				Name:           string(alias.name),
+	//				Kind:           kind,
+	//				Range:          locToRange(alias.location),
+	//				SelectionRange: locToRange(alias.location),
+	//				Children:       children,
+	//			})
+	//		}
+	//		for _, dt := range mod.DataTypes {
+	//			result = append(result, protocol.DocumentSymbol{
+	//				Name:           string(dt.Name),
+	//				Kind:           protocol.Enum,
+	//				Range:          locToRange(dt.Location),
+	//				SelectionRange: locToRange(dt.Location),
+	//				Children: common.Map(func(o parsed.DataTypeOption) protocol.DocumentSymbol {
+	//					return protocol.DocumentSymbol{
+	//						Name:           string(o.Name),
+	//						Kind:           protocol.EnumMember,
+	//						Range:          locToRange(o.Location),
+	//						SelectionRange: locToRange(o.Location),
+	//					}
+	//				}, dt.Options),
+	//			})
+	//		}
+	//		for _, d := range mod.Definitions {
+	//			if unicode.IsLower([]rune(d.Name)[0]) {
+	//				kind := protocol.Function
+	//				if len(d.Params) == 0 {
+	//					kind = protocol.Constant
+	//				}
+	//				if _, ok := d.Expression.(*parsed.NativeCall); ok {
+	//					kind = protocol.Interface
+	//				}
+	//				result = append(result, protocol.DocumentSymbol{
+	//					Name:           string(d.Name),
+	//					Kind:           kind,
+	//					Range:          locToRange(d.Location),
+	//					SelectionRange: locToRange(d.Location),
+	//				})
+	//			}
+	//		}
+	//		break
+	//	}
+	//}
 	return
 }
 
@@ -307,8 +317,8 @@ func (s *server) TextDocument_references(
 		result = append(result, *locToLocation(def.GetLocation()))
 		var moduleName ast.QualifiedIdentifier
 		for _, m := range s.parsedModules {
-			if m.Location.FilePath() == def.GetLocation().FilePath() {
-				moduleName = m.Name
+			if m.GetLocation().FilePath() == def.GetLocation().FilePath() {
+				moduleName = m.Name()
 				break
 			}
 		}

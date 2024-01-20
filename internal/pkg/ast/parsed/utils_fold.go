@@ -11,18 +11,18 @@ func FoldModule[T any](
 		return acc
 	}
 
-	for _, def := range module.Definitions {
+	for _, def := range module.definitions {
 		acc = FoldDefinition(fe, ft, fp, acc, def)
 	}
-	for _, alias := range module.Aliases {
-		acc = FoldType(ft, acc, alias.Type)
+	for _, alias := range module.aliases {
+		acc = FoldType(ft, acc, alias.type_)
 	}
-	for _, infix := range module.InfixFns {
+	for _, infix := range module.infixFns {
 		acc = FoldExpression(fe, ft, fp, acc, &Var{
 			ExpressionBase: &ExpressionBase{
-				Location: infix.AliasLocation,
+				Location: infix.aliasLocation,
 			},
-			Name: ast.QualifiedIdentifier(infix.Alias),
+			Name: ast.QualifiedIdentifier(infix.alias),
 		})
 	}
 	return acc
@@ -56,56 +56,56 @@ func FoldPattern[T any](
 	case *PAlias:
 		{
 			p := pattern.(*PAlias)
-			acc = FoldPattern(ft, fp, acc, p.Nested)
-			acc = FoldType(ft, acc, p.Type)
+			acc = FoldPattern(ft, fp, acc, p.nested)
+			acc = FoldType(ft, acc, p.type_)
 		}
 	case *PAny:
 		{
 			p := pattern.(*PAny)
-			acc = FoldType(ft, acc, p.Type)
+			acc = FoldType(ft, acc, p.type_)
 		}
 	case *PCons:
 		{
 			p := pattern.(*PCons)
-			acc = FoldPattern(ft, fp, acc, p.Head)
-			acc = FoldPattern(ft, fp, acc, p.Tail)
-			acc = FoldType(ft, acc, p.Type)
+			acc = FoldPattern(ft, fp, acc, p.head)
+			acc = FoldPattern(ft, fp, acc, p.tail)
+			acc = FoldType(ft, acc, p.type_)
 		}
 	case *PConst:
 		{
 			p := pattern.(*PConst)
-			acc = FoldType(ft, acc, p.Type)
+			acc = FoldType(ft, acc, p.type_)
 		}
 	case *PDataOption:
 		{
 			p := pattern.(*PDataOption)
-			for _, a := range p.Values {
+			for _, a := range p.values {
 				acc = FoldPattern(ft, fp, acc, a)
 			}
-			acc = FoldType(ft, acc, p.Type)
+			acc = FoldType(ft, acc, p.type_)
 		}
 	case *PList:
 		{
 			p := pattern.(*PList)
-			for _, a := range p.Items {
+			for _, a := range p.items {
 				acc = FoldPattern(ft, fp, acc, a)
 			}
-			acc = FoldType(ft, acc, p.Type)
+			acc = FoldType(ft, acc, p.type_)
 		}
 	case *PNamed:
 		{
 			p := pattern.(*PNamed)
-			acc = FoldType(ft, acc, p.Type)
+			acc = FoldType(ft, acc, p.type_)
 		}
 	case *PRecord:
 		{
 			p := pattern.(*PRecord)
-			acc = FoldType(ft, acc, p.Type)
+			acc = FoldType(ft, acc, p.type_)
 		}
 	case *PTuple:
 		{
 			p := pattern.(*PTuple)
-			for _, f := range p.Items {
+			for _, f := range p.items {
 				acc = FoldPattern(ft, fp, acc, f)
 			}
 		}
@@ -129,22 +129,22 @@ func FoldType[T any](
 	case *TFunc:
 		{
 			t := type_.(*TFunc)
-			for _, f := range t.Params {
+			for _, f := range t.params {
 				acc = FoldType(ft, acc, f)
 			}
-			acc = FoldType(ft, acc, t.Return)
+			acc = FoldType(ft, acc, t.return_)
 		}
 	case *TRecord:
 		{
 			t := type_.(*TRecord)
-			for _, f := range t.Fields {
+			for _, f := range t.fields {
 				acc = FoldType(ft, acc, f)
 			}
 		}
 	case *TTuple:
 		{
 			t := type_.(*TTuple)
-			for _, f := range t.Items {
+			for _, f := range t.items {
 				acc = FoldType(ft, acc, f)
 			}
 		}
@@ -155,15 +155,15 @@ func FoldType[T any](
 	case *TNamed:
 		{
 			t := type_.(*TNamed)
-			for _, f := range t.Args {
+			for _, f := range t.args {
 				acc = FoldType(ft, acc, f)
 			}
 		}
 	case *TData:
 		{
 			t := type_.(*TData)
-			for _, f := range t.Options {
-				for _, v := range f.Values {
+			for _, f := range t.options {
+				for _, v := range f.values {
 					acc = FoldType(ft, acc, v)
 				}
 			}
@@ -171,11 +171,11 @@ func FoldType[T any](
 	case *TNative:
 		{
 			t := type_.(*TNative)
-			for _, f := range t.Args {
+			for _, f := range t.args {
 				acc = FoldType(ft, acc, f)
 			}
 		}
-	case *TTypeParameter:
+	case *TParameter:
 		{
 
 		}

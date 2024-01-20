@@ -6,9 +6,15 @@ import (
 )
 
 type Expression interface {
-	_expression()
-	GetLocation() ast.Location
+	Statement
 	GetSuccessor() normalized.Expression
+	normalize(
+		locals map[ast.Identifier]normalized.Pattern,
+		modules map[ast.QualifiedIdentifier]*Module,
+		module *Module,
+		normalizedModule *normalized.Module,
+	) (normalized.Expression, error)
+	setSuccessor(expr normalized.Expression)
 }
 
 type ExpressionBase struct {
@@ -16,7 +22,7 @@ type ExpressionBase struct {
 	successor normalized.Expression
 }
 
-func (*ExpressionBase) _expression() {}
+func (*ExpressionBase) _parsed() {}
 
 func (e *ExpressionBase) GetLocation() ast.Location {
 	return e.Location
@@ -26,22 +32,14 @@ func (e *ExpressionBase) GetSuccessor() normalized.Expression {
 	return e.successor
 }
 
-func (e *ExpressionBase) SetSuccessor(expr normalized.Expression) normalized.Expression {
+func (e *ExpressionBase) setSuccessor(expr normalized.Expression) {
 	e.successor = expr
-	expr.SetPredecessor(e)
-	return expr
 }
 
 type Access struct {
 	*ExpressionBase
 	Record    Expression
 	FieldName ast.Identifier
-}
-
-func (*Access) _expression() {}
-
-func (e *Access) GetLocation() ast.Location {
-	return e.Location
 }
 
 type Apply struct {
@@ -131,7 +129,7 @@ type Accessor struct {
 type BinOpItem struct {
 	Expression Expression
 	Infix      ast.InfixIdentifier
-	Fn         Infix
+	Fn         *Infix
 }
 
 type BinOp struct {

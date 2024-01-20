@@ -2,107 +2,167 @@ package parsed
 
 import (
 	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast/normalized"
 )
 
 type Type interface {
-	_type()
-	GetLocation() ast.Location
+	Statement
+	normalize(
+		modules map[ast.QualifiedIdentifier]*Module, module *Module, typeModule *Module, namedTypes namedTypeMap,
+	) (normalized.Type, error)
+	GetSuccessor() normalized.Type
+	setSuccessor(p normalized.Type)
+}
+
+type typeBase struct {
+	location  ast.Location
+	successor normalized.Type
+}
+
+func newTypeBase(loc ast.Location) *typeBase {
+	return &typeBase{
+		location: loc,
+	}
+}
+
+func (t *typeBase) GetLocation() ast.Location {
+	return t.location
+}
+
+func (*typeBase) _parsed() {}
+
+func (t *typeBase) GetSuccessor() normalized.Type {
+	return t.successor
+}
+
+func (t *typeBase) setSuccessor(p normalized.Type) {
+	t.successor = p
 }
 
 type TFunc struct {
-	Location ast.Location
-	Params   []Type
-	Return   Type
+	*typeBase
+	params  []Type
+	return_ Type
 }
 
-func (*TFunc) _type() {}
-
-func (t *TFunc) GetLocation() ast.Location {
-	return t.Location
+func NewTFunc(loc ast.Location, params []Type, ret Type) Type {
+	return &TFunc{
+		typeBase: newTypeBase(loc),
+		params:   params,
+		return_:  ret,
+	}
 }
 
 type TRecord struct {
-	Location ast.Location
-	Fields   map[ast.Identifier]Type
+	*typeBase
+	fields map[ast.Identifier]Type
 }
 
-func (*TRecord) _type() {}
+func (t *TRecord) Fields() map[ast.Identifier]Type {
+	return t.fields
+}
 
-func (t *TRecord) GetLocation() ast.Location {
-	return t.Location
+func NewTRecord(loc ast.Location, fields map[ast.Identifier]Type) Type {
+	return &TRecord{
+		typeBase: newTypeBase(loc),
+		fields:   fields,
+	}
 }
 
 type TTuple struct {
-	Location ast.Location
-	Items    []Type
+	*typeBase
+	items []Type
 }
 
-func (*TTuple) _type() {}
-
-func (t *TTuple) GetLocation() ast.Location {
-	return t.Location
+func NewTTuple(loc ast.Location, items []Type) Type {
+	return &TTuple{
+		typeBase: newTypeBase(loc),
+		items:    items,
+	}
 }
 
 type TUnit struct {
-	Location ast.Location
+	*typeBase
 }
 
-func (*TUnit) _type() {}
-
-func (t *TUnit) GetLocation() ast.Location {
-	return t.Location
+func NewTUnit(loc ast.Location) Type {
+	return &TUnit{
+		typeBase: newTypeBase(loc),
+	}
 }
 
 type TNamed struct {
-	Location ast.Location
-	Name     ast.QualifiedIdentifier
-	Args     []Type
+	*typeBase
+	name ast.QualifiedIdentifier
+	args []Type
 }
 
-func (*TNamed) _type() {}
+func NewTNamed(loc ast.Location, name ast.QualifiedIdentifier, args []Type) Type {
+	return &TNamed{
+		typeBase: newTypeBase(loc),
+		name:     name,
+		args:     args,
+	}
+}
 
-func (t *TNamed) GetLocation() ast.Location {
-	return t.Location
+func (t *TNamed) Find(
+	modules map[ast.QualifiedIdentifier]*Module, module *Module,
+) (Type, *Module, []ast.FullIdentifier, error) {
+	return findType(modules, module, t.name, t.args, t.location)
 }
 
 type DataOption struct {
-	Name   ast.Identifier
-	Hidden bool
-	Values []Type
+	name   ast.Identifier
+	hidden bool
+	values []Type
+}
+
+func NewDataOption(name ast.Identifier, hidden bool, values []Type) DataOption {
+	return DataOption{
+		name:   name,
+		hidden: hidden,
+		values: values,
+	}
 }
 
 type TData struct {
-	Location ast.Location
-	Name     ast.FullIdentifier
-	Args     []Type
-	Options  []DataOption
+	*typeBase
+	name    ast.FullIdentifier
+	args    []Type
+	options []DataOption
 }
 
-func (*TData) _type() {}
-
-func (t *TData) GetLocation() ast.Location {
-	return t.Location
+func NewTData(loc ast.Location, name ast.FullIdentifier, args []Type, options []DataOption) Type {
+	return &TData{
+		typeBase: newTypeBase(loc),
+		name:     name,
+		args:     args,
+		options:  options,
+	}
 }
 
 type TNative struct {
-	Location ast.Location
-	Name     ast.FullIdentifier
-	Args     []Type
+	*typeBase
+	name ast.FullIdentifier
+	args []Type
 }
 
-func (*TNative) _type() {}
-
-func (t *TNative) GetLocation() ast.Location {
-	return t.Location
+func NewTNative(loc ast.Location, name ast.FullIdentifier, args []Type) Type {
+	return &TNative{
+		typeBase: newTypeBase(loc),
+		name:     name,
+		args:     args,
+	}
 }
 
-type TTypeParameter struct {
-	Location ast.Location
-	Name     ast.Identifier
+type TParameter struct {
+	*typeBase
+	name ast.Identifier
 }
 
-func (*TTypeParameter) _type() {}
-
-func (t *TTypeParameter) GetLocation() ast.Location {
-	return t.Location
+func NewTParameter(loc ast.Location, name ast.Identifier) Type {
+	return &TParameter{
+		typeBase: newTypeBase(loc),
+		name:     name,
+	}
 }

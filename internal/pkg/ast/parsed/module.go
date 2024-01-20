@@ -4,20 +4,47 @@ import (
 	"nar-compiler/internal/pkg/ast"
 )
 
+type Statement interface {
+	GetLocation() ast.Location
+	_parsed()
+}
+
 type Import struct {
-	Location         ast.Location
-	ModuleIdentifier ast.QualifiedIdentifier
-	Alias            *ast.Identifier
-	ExposingAll      bool
-	Exposing         []string
+	location         ast.Location
+	moduleIdentifier ast.QualifiedIdentifier
+	alias            *ast.Identifier
+	exposingAll      bool
+	exposing         []string
+}
+
+func NewImport(
+	loc ast.Location, module ast.QualifiedIdentifier, alias *ast.Identifier, exposingAll bool, exposing []string,
+) *Import {
+	return &Import{
+		location:         loc,
+		moduleIdentifier: module,
+		alias:            alias,
+		exposingAll:      exposingAll,
+		exposing:         exposing,
+	}
 }
 
 type Alias struct {
-	Location ast.Location
-	Hidden   bool
-	Name     ast.Identifier
-	Params   []ast.Identifier
-	Type     Type
+	location ast.Location
+	hidden   bool
+	name     ast.Identifier
+	params   []ast.Identifier
+	type_    Type
+}
+
+func NewAlias(loc ast.Location, hidden bool, name ast.Identifier, params []ast.Identifier, type_ Type) *Alias {
+	return &Alias{
+		location: loc,
+		hidden:   hidden,
+		name:     name,
+		params:   params,
+		type_:    type_,
+	}
 }
 
 type Associativity int
@@ -29,52 +56,111 @@ const (
 )
 
 type Infix struct {
-	Location      ast.Location
-	Hidden        bool
-	Name          ast.InfixIdentifier
-	Associativity Associativity
-	Precedence    int
-	AliasLocation ast.Location
-	Alias         ast.Identifier
+	location      ast.Location
+	hidden        bool
+	name          ast.InfixIdentifier
+	associativity Associativity
+	precedence    int
+	aliasLocation ast.Location
+	alias         ast.Identifier
 }
 
-type Definition struct {
-	Location   ast.Location
-	Hidden     bool
-	Name       ast.Identifier
-	Params     []Pattern
-	Expression Expression
-	Type       Type
-}
-
-func (d *Definition) GetLocation() ast.Location {
-	return d.Location
+func NewInfix(
+	loc ast.Location, hidden bool, name ast.InfixIdentifier, associativity Associativity,
+	precedence int, aliasLoc ast.Location, alias ast.Identifier,
+) *Infix {
+	return &Infix{
+		location:      loc,
+		hidden:        hidden,
+		name:          name,
+		associativity: associativity,
+		precedence:    precedence,
+		aliasLocation: aliasLoc,
+		alias:         alias,
+	}
 }
 
 type DataTypeOption struct {
-	Location ast.Location
-	Hidden   bool
-	Name     ast.Identifier
-	Values   []Type
+	location ast.Location
+	hidden   bool
+	name     ast.Identifier
+	values   []Type
+}
+
+func NewDataTypeOption(loc ast.Location, hidden bool, name ast.Identifier, values []Type) *DataTypeOption {
+	return &DataTypeOption{
+		location: loc,
+		hidden:   hidden,
+		name:     name,
+		values:   values,
+	}
 }
 
 type DataType struct {
-	Location ast.Location
-	Hidden   bool
-	Name     ast.Identifier
-	Params   []ast.Identifier
-	Options  []DataTypeOption
+	location ast.Location
+	hidden   bool
+	name     ast.Identifier
+	params   []ast.Identifier
+	options  []*DataTypeOption
+}
+
+func NewDataType(
+	loc ast.Location, hidden bool, name ast.Identifier, params []ast.Identifier, options []*DataTypeOption,
+) *DataType {
+	return &DataType{
+		location: loc,
+		hidden:   hidden,
+		name:     name,
+		params:   params,
+		options:  options,
+	}
 }
 
 type Module struct {
-	Name        ast.QualifiedIdentifier
-	Location    ast.Location
-	Imports     []Import
-	Aliases     []Alias
-	InfixFns    []Infix
-	Definitions []*Definition
-	DataTypes   []DataType
+	name        ast.QualifiedIdentifier
+	location    ast.Location
+	imports     []*Import
+	aliases     []*Alias
+	infixFns    []*Infix
+	definitions []*Definition
+	dataTypes   []*DataType
 
-	PackageName        ast.PackageIdentifier
-	ReferencedPackages map[ast.PackageIdentifier]struct{}
+	packageName        ast.PackageIdentifier
+	referencedPackages map[ast.PackageIdentifier]struct{}
+}
+
+func NewModule(
+	name ast.QualifiedIdentifier, loc ast.Location,
+	imports []*Import, aliases []*Alias, infixFns []*Infix, definitions []*Definition, dataTypes []*DataType,
+) *Module {
+	return &Module{
+		name:               name,
+		location:           loc,
+		imports:            imports,
+		aliases:            aliases,
+		infixFns:           infixFns,
+		definitions:        definitions,
+		dataTypes:          dataTypes,
+		referencedPackages: map[ast.PackageIdentifier]struct{}{},
+	}
+}
+
+func (module *Module) Name() ast.QualifiedIdentifier {
+	return module.name
+}
+
+func (module *Module) GetLocation() ast.Location {
+	return module.location
+}
+
+func (module *Module) PackageName() ast.PackageIdentifier {
+	return module.packageName
+}
+
+func (module *Module) SetPackageName(packageName ast.PackageIdentifier) {
+	module.packageName = packageName
+}
+
+func (module *Module) SetReferencedPackages(referencedPackages map[ast.PackageIdentifier]struct{}) {
+	module.referencedPackages = referencedPackages
 }

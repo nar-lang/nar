@@ -53,7 +53,7 @@ func Compile(
 		for _, modulePath := range pkg.Sources {
 			var parsedModule *parsed.Module
 			for _, m := range parsedModules { //todo: can use hashmap
-				if m.Location.FilePath() == modulePath {
+				if m.GetLocation().FilePath() == modulePath {
 					parsedModule = m
 				}
 			}
@@ -72,19 +72,19 @@ func Compile(
 					continue
 				}
 
-				parsedModule.PackageName = pkg.Package.Name
-				parsedModule.ReferencedPackages = referencedPackages
-				if existedModule, ok := parsedModules[parsedModule.Name]; ok {
+				parsedModule.SetPackageName(pkg.Package.Name)
+				parsedModule.SetReferencedPackages(referencedPackages)
+				if existedModule, ok := parsedModules[parsedModule.Name()]; ok {
 					log.Err(common.Error{
-						Location: parsedModule.Location,
-						Extra:    []ast.Location{existedModule.Location},
-						Message:  fmt.Sprintf("module name collision: `%s`", existedModule.Name),
+						Location: parsedModule.GetLocation(),
+						Extra:    []ast.Location{existedModule.GetLocation()},
+						Message:  fmt.Sprintf("module name collision: `%s`", existedModule.Name()),
 					})
 				}
-				parsedModules[parsedModule.Name] = parsedModule
+				parsedModules[parsedModule.Name()] = parsedModule
 			}
 			if parsedModule != nil {
-				affectedModules[parsedModule.Name] = struct{}{}
+				affectedModules[parsedModule.Name()] = struct{}{}
 			}
 		}
 	}
@@ -94,7 +94,7 @@ func Compile(
 
 	for _, name := range affectedModuleNames {
 		m := parsedModules[name]
-		if err := PreNormalize(m.Name, parsedModules); err != nil {
+		if err := m.PreNormalize(parsedModules); err != nil {
 			for _, e := range err {
 				log.Err(e)
 			}
@@ -103,13 +103,13 @@ func Compile(
 
 	for _, name := range affectedModuleNames {
 		m := parsedModules[name]
-		if err := Normalize(m.Name, parsedModules, normalizedModules); err != nil {
+		if err := m.Normalize(parsedModules, normalizedModules); err != nil {
 			for _, e := range err {
 				log.Err(e)
 			}
 		}
-		if _, ok := typedModules[m.Name]; !ok {
-			if err := Solve(m.Name, normalizedModules, typedModules); err != nil {
+		if _, ok := typedModules[m.Name()]; !ok {
+			if err := Solve(m.Name(), normalizedModules, typedModules); err != nil {
 				for _, e := range err {
 					log.Err(e)
 				}

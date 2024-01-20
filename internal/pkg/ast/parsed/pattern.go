@@ -2,206 +2,180 @@ package parsed
 
 import (
 	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast/normalized"
 )
 
 type Pattern interface {
-	_pattern()
-	WithType(decl Type) Pattern
-	GetLocation() ast.Location
+	Statement
+	SetType(decl Type)
 	GetType() Type
+	normalize(
+		locals map[ast.Identifier]normalized.Pattern,
+		modules map[ast.QualifiedIdentifier]*Module,
+		module *Module,
+		normalizedModule *normalized.Module,
+	) (normalized.Pattern, error)
+	GetSuccessor() normalized.Pattern
+	setSuccessor(n normalized.Pattern)
+}
+
+type patternBase struct {
+	location  ast.Location
+	type_     Type
+	successor normalized.Pattern
+}
+
+func newPatternBase(loc ast.Location) *patternBase {
+	return &patternBase{
+		location: loc,
+	}
+}
+
+func (p *patternBase) GetLocation() ast.Location {
+	return p.location
+}
+
+func (*patternBase) _parsed() {}
+
+func (p *patternBase) SetType(t Type) {
+	p.type_ = t
+}
+
+func (p *patternBase) GetType() Type {
+	return p.type_
+}
+
+func (p *patternBase) GetSuccessor() normalized.Pattern {
+	return p.successor
+}
+
+func (p *patternBase) setSuccessor(n normalized.Pattern) {
+	p.successor = n
 }
 
 type PAlias struct {
-	ast.Location
-	Type
-	Alias  ast.Identifier
-	Nested Pattern
+	*patternBase
+	alias  ast.Identifier
+	nested Pattern
 }
 
-func (*PAlias) _pattern() {}
-
-func (p *PAlias) WithType(decl Type) Pattern {
-	p.Type = decl
-	return p
-}
-
-func (p *PAlias) GetLocation() ast.Location {
-	return p.Location
-}
-
-func (p *PAlias) GetType() Type {
-	return p.Type
+func NewPAlias(loc ast.Location, alias ast.Identifier, nested Pattern) Pattern {
+	return &PAlias{
+		patternBase: newPatternBase(loc),
+		alias:       alias,
+		nested:      nested,
+	}
 }
 
 type PAny struct {
-	ast.Location
-	Type
+	*patternBase
 }
 
-func (*PAny) _pattern() {}
-
-func (p *PAny) WithType(decl Type) Pattern {
-	p.Type = decl
-	return p
-}
-
-func (p *PAny) GetLocation() ast.Location {
-	return p.Location
-}
-
-func (p *PAny) GetType() Type {
-	return p.Type
+func NewPAny(loc ast.Location) Pattern {
+	return &PAny{
+		patternBase: newPatternBase(loc),
+	}
 }
 
 type PCons struct {
-	ast.Location
-	Type
-	Head, Tail Pattern
+	*patternBase
+	head, tail Pattern
 }
 
-func (*PCons) _pattern() {}
-
-func (p *PCons) WithType(decl Type) Pattern {
-	p.Type = decl
-	return p
-}
-
-func (p *PCons) GetLocation() ast.Location {
-	return p.Location
-}
-
-func (p *PCons) GetType() Type {
-	return p.Type
+func NewPCons(loc ast.Location, head, tail Pattern) Pattern {
+	return &PCons{
+		patternBase: newPatternBase(loc),
+		head:        head,
+		tail:        tail,
+	}
 }
 
 type PConst struct {
-	ast.Location
-	Type
-	Value ast.ConstValue
+	*patternBase
+	value ast.ConstValue
 }
 
-func (*PConst) _pattern() {}
-
-func (p *PConst) WithType(decl Type) Pattern {
-	p.Type = decl
-	return p
-}
-
-func (p *PConst) GetLocation() ast.Location {
-	return p.Location
-}
-
-func (p *PConst) GetType() Type {
-	return p.Type
+func NewPConst(loc ast.Location, value ast.ConstValue) Pattern {
+	return &PConst{
+		patternBase: newPatternBase(loc),
+		value:       value,
+	}
 }
 
 type PDataOption struct {
-	ast.Location
-	Type
-	Name   ast.QualifiedIdentifier
-	Values []Pattern
+	*patternBase
+	name   ast.QualifiedIdentifier
+	values []Pattern
 }
 
-func (*PDataOption) _pattern() {}
-
-func (p *PDataOption) WithType(decl Type) Pattern {
-	p.Type = decl
-	return p
-}
-
-func (p *PDataOption) GetLocation() ast.Location {
-	return p.Location
-}
-
-func (p *PDataOption) GetType() Type {
-	return p.Type
+func NewPDataOption(loc ast.Location, name ast.QualifiedIdentifier, values []Pattern) Pattern {
+	return &PDataOption{
+		patternBase: newPatternBase(loc),
+		name:        name,
+		values:      values,
+	}
 }
 
 type PList struct {
-	ast.Location
-	Type
-	Items []Pattern
+	*patternBase
+	items []Pattern
 }
 
-func (*PList) _pattern() {}
-
-func (p *PList) WithType(decl Type) Pattern {
-	p.Type = decl
-	return p
-}
-
-func (p *PList) GetLocation() ast.Location {
-	return p.Location
-}
-
-func (p *PList) GetType() Type {
-	return p.Type
+func NewPList(loc ast.Location, items []Pattern) Pattern {
+	return &PList{
+		patternBase: newPatternBase(loc),
+		items:       items,
+	}
 }
 
 type PNamed struct {
-	ast.Location
-	Type
-	Name ast.Identifier
+	*patternBase
+	name ast.Identifier
 }
 
-func (*PNamed) _pattern() {}
-
-func (p *PNamed) WithType(decl Type) Pattern {
-	p.Type = decl
-	return p
+func NewPNamed(loc ast.Location, name ast.Identifier) Pattern {
+	return &PNamed{
+		patternBase: newPatternBase(loc),
+		name:        name,
+	}
 }
 
-func (p *PNamed) GetLocation() ast.Location {
-	return p.Location
-}
-
-func (p *PNamed) GetType() Type {
-	return p.Type
+func (p *PNamed) Name() ast.Identifier {
+	return p.name
 }
 
 type PRecordField struct {
-	ast.Location
-	Name ast.Identifier
+	location ast.Location
+	name     ast.Identifier
+}
+
+func NewPRecordField(loc ast.Location, name ast.Identifier) PRecordField {
+	return PRecordField{
+		location: loc,
+		name:     name,
+	}
 }
 
 type PRecord struct {
-	ast.Location
-	Type
-	Fields []PRecordField
+	*patternBase
+	fields []PRecordField
 }
 
-func (*PRecord) _pattern() {}
-
-func (p *PRecord) WithType(decl Type) Pattern {
-	p.Type = decl
-	return p
-}
-
-func (p *PRecord) GetLocation() ast.Location {
-	return p.Location
-}
-
-func (p *PRecord) GetType() Type {
-	return p.Type
+func NewPRecord(loc ast.Location, fields []PRecordField) Pattern {
+	return &PRecord{
+		patternBase: newPatternBase(loc),
+		fields:      fields,
+	}
 }
 
 type PTuple struct {
-	ast.Location
-	Type
-	Items []Pattern
+	*patternBase
+	items []Pattern
 }
 
-func (*PTuple) _pattern() {}
-
-func (p *PTuple) WithType(decl Type) Pattern {
-	p.Type = decl
-	return p
-}
-
-func (p *PTuple) GetLocation() ast.Location {
-	return p.Location
-}
-
-func (p *PTuple) GetType() Type {
-	return p.Type
+func NewPTuple(loc ast.Location, items []Pattern) Pattern {
+	return &PTuple{
+		patternBase: newPatternBase(loc),
+		items:       items,
+	}
 }

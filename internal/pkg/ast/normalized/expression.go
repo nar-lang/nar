@@ -2,46 +2,20 @@ package normalized
 
 import (
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/typed"
 )
 
 type Expression interface {
 	_expression()
-	GetPredecessor() ExpressionWithSuccessor
-	SetPredecessor(expr ExpressionWithSuccessor)
-}
-
-type ExpressionWithSuccessor interface {
-	SetSuccessor(expr Expression) Expression
 }
 
 type ExpressionBase struct {
-	Location    ast.Location
-	predecessor ExpressionWithSuccessor
-	successor   typed.Expression
+	Location ast.Location
 }
 
 func (e *ExpressionBase) _expression() {}
 
 func (e *ExpressionBase) GetLocation() ast.Location {
 	return e.Location
-}
-
-func (e *ExpressionBase) GetPredecessor() ExpressionWithSuccessor {
-	return e.predecessor
-}
-
-func (e *ExpressionBase) SetPredecessor(expr ExpressionWithSuccessor) {
-	e.predecessor = expr
-}
-
-func (e *ExpressionBase) GetSuccessor() typed.Expression {
-	return e.successor
-}
-
-func (e *ExpressionBase) SetSuccessor(expr typed.Expression) typed.Expression {
-	e.successor = expr
-	return expr
 }
 
 type Access struct {

@@ -102,7 +102,7 @@ func Solve(
 		if dumpDebugOutput {
 			_ = os.MkdirAll(filepath.Dir(fp), os.ModePerm)
 			sb.WriteString(fmt.Sprintf("\n\nDefinition\n---\n`%s`", td))
-			sb.WriteString("\n\nAnnotations\n---\n| Node | Type |\n|---|---|")
+			sb.WriteString("\n\nAnnotations\n---\n| Node | type_ |\n|---|---|")
 			for _, t := range annotations {
 				sb.WriteString(fmt.Sprintf("\n| `%v` | `%v` |", t.Str, t.Type))
 			}
