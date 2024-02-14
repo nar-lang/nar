@@ -35,7 +35,8 @@ func (e *POption) extractLocals(locals map[ast.Identifier]Pattern) {
 }
 
 func (e *POption) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, modules map[ast.QualifiedIdentifier]*Module, typedModules map[ast.QualifiedIdentifier]*typed.Module, moduleName ast.QualifiedIdentifier, typeMapSource bool, stack []*typed.Definition) (typed.Pattern, error) {
-	def, err := getAnnotatedGlobal(ctx, e.moduleName, e.definitionName, modules, typedModules, stack, e.location)
+	def, err := getAnnotatedGlobal(
+		e.moduleName, e.definitionName, modules, typedModules, stack, e.location)
 	if err != nil {
 		return nil, err
 	}

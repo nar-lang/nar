@@ -33,7 +33,7 @@ func FoldDefinition[T any](
 	for _, p := range def.params {
 		acc = FoldPattern(ft, fp, acc, p)
 	}
-	acc = FoldType(ft, acc, def.type_)
+	acc = FoldType(ft, acc, def.declaredType)
 	acc = FoldExpression(fe, ft, fp, acc, def.expression)
 	return acc
 }
@@ -52,32 +52,32 @@ func FoldPattern[T any](
 		{
 			p := pattern.(*PAlias)
 			acc = FoldPattern(ft, fp, acc, p.nested)
-			acc = FoldType(ft, acc, p.type_)
+			acc = FoldType(ft, acc, p.declaredType)
 		}
 	case *PAny:
 		{
 			p := pattern.(*PAny)
-			acc = FoldType(ft, acc, p.type_)
+			acc = FoldType(ft, acc, p.declaredType)
 		}
 	case *PCons:
 		{
 			p := pattern.(*PCons)
 			acc = FoldPattern(ft, fp, acc, p.head)
 			acc = FoldPattern(ft, fp, acc, p.tail)
-			acc = FoldType(ft, acc, p.type_)
+			acc = FoldType(ft, acc, p.declaredType)
 		}
 	case *PConst:
 		{
 			p := pattern.(*PConst)
-			acc = FoldType(ft, acc, p.type_)
+			acc = FoldType(ft, acc, p.declaredType)
 		}
-	case *PDataOption:
+	case *POption:
 		{
-			p := pattern.(*PDataOption)
+			p := pattern.(*POption)
 			for _, a := range p.values {
 				acc = FoldPattern(ft, fp, acc, a)
 			}
-			acc = FoldType(ft, acc, p.type_)
+			acc = FoldType(ft, acc, p.declaredType)
 		}
 	case *PList:
 		{
@@ -85,17 +85,17 @@ func FoldPattern[T any](
 			for _, a := range p.items {
 				acc = FoldPattern(ft, fp, acc, a)
 			}
-			acc = FoldType(ft, acc, p.type_)
+			acc = FoldType(ft, acc, p.declaredType)
 		}
 	case *PNamed:
 		{
 			p := pattern.(*PNamed)
-			acc = FoldType(ft, acc, p.type_)
+			acc = FoldType(ft, acc, p.declaredType)
 		}
 	case *PRecord:
 		{
 			p := pattern.(*PRecord)
-			acc = FoldType(ft, acc, p.type_)
+			acc = FoldType(ft, acc, p.declaredType)
 		}
 	case *PTuple:
 		{
@@ -215,21 +215,21 @@ func FoldExpression[T any](
 			acc = FoldExpression(fe, ft, fp, acc, e.positive)
 			acc = FoldExpression(fe, ft, fp, acc, e.negative)
 		}
-	case *LetMatch:
+	case *Let:
 		{
-			e := expr.(*LetMatch)
+			e := expr.(*Let)
 			acc = FoldExpression(fe, ft, fp, acc, e.value)
 			acc = FoldExpression(fe, ft, fp, acc, e.nested)
 			acc = FoldPattern(ft, fp, acc, e.pattern)
 		}
-	case *LetDef:
+	case *Function:
 		{
-			e := expr.(*LetDef)
+			e := expr.(*Function)
 			for _, p := range e.params {
 				acc = FoldPattern(ft, fp, acc, p)
 			}
 			acc = FoldExpression(fe, ft, fp, acc, e.body)
-			acc = FoldType(ft, acc, e.fnType)
+			acc = FoldType(ft, acc, e.declaredType)
 			acc = FoldExpression(fe, ft, fp, acc, e.nested)
 		}
 	case *List:
@@ -243,7 +243,7 @@ func FoldExpression[T any](
 		{
 			e := expr.(*Record)
 			for _, a := range e.fields {
-				acc = FoldExpression(fe, ft, fp, acc, a.Value)
+				acc = FoldExpression(fe, ft, fp, acc, a.value)
 			}
 		}
 	case *Select:
@@ -251,8 +251,8 @@ func FoldExpression[T any](
 			e := expr.(*Select)
 			acc = FoldExpression(fe, ft, fp, acc, e.condition)
 			for _, cs := range e.cases {
-				acc = FoldExpression(fe, ft, fp, acc, cs.Expression)
-				acc = FoldPattern(ft, fp, acc, cs.Pattern)
+				acc = FoldExpression(fe, ft, fp, acc, cs.body)
+				acc = FoldPattern(ft, fp, acc, cs.pattern)
 			}
 		}
 	case *Tuple:
@@ -266,7 +266,7 @@ func FoldExpression[T any](
 		{
 			e := expr.(*Update)
 			for _, f := range e.fields {
-				acc = FoldExpression(fe, ft, fp, acc, f.Value)
+				acc = FoldExpression(fe, ft, fp, acc, f.value)
 			}
 		}
 	case *Lambda:
@@ -286,7 +286,7 @@ func FoldExpression[T any](
 		{
 			e := expr.(*BinOp)
 			for _, i := range e.items {
-				acc = FoldExpression(fe, ft, fp, acc, i.Expression)
+				acc = FoldExpression(fe, ft, fp, acc, i.operand)
 			}
 		}
 	case *Negate:
@@ -304,9 +304,9 @@ func FoldExpression[T any](
 	case *InfixVar:
 		{
 		}
-	case *NativeCall:
+	case *Call:
 		{
-			e := expr.(*NativeCall)
+			e := expr.(*Call)
 			for _, i := range e.args {
 				acc = FoldExpression(fe, ft, fp, acc, i)
 			}

@@ -36,7 +36,7 @@ func (e *Global) extractUsedLocalsSet(definedLocals map[ast.Identifier]Pattern, 
 
 func (e *Global) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, modules map[ast.QualifiedIdentifier]*Module, typedModules map[ast.QualifiedIdentifier]*typed.Module, moduleName ast.QualifiedIdentifier, stack []*typed.Definition) (typed.Expression, error) {
 	targetDef, err := getAnnotatedGlobal(
-		ctx, e.moduleName, e.definitionName, modules, typedModules, stack, e.location)
+		e.moduleName, e.definitionName, modules, typedModules, stack, e.location)
 	if err != nil {
 		return nil, err
 	}

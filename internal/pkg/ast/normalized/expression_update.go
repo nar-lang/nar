@@ -72,7 +72,7 @@ func (e *Update) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, m
 
 	if e.moduleName != "" {
 		targetDef, err := getAnnotatedGlobal(
-			ctx, e.moduleName, e.recordName, modules, typedModules, stack, e.location)
+			e.moduleName, e.recordName, modules, typedModules, stack, e.location)
 		if err != nil {
 			return nil, err
 		}

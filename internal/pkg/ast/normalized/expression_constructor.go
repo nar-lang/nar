@@ -51,7 +51,7 @@ func (e *Constructor) extractUsedLocalsSet(definedLocals map[ast.Identifier]Patt
 }
 
 func (e *Constructor) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, modules map[ast.QualifiedIdentifier]*Module, typedModules map[ast.QualifiedIdentifier]*typed.Module, moduleName ast.QualifiedIdentifier, stack []*typed.Definition) (typed.Expression, error) {
-	ctorDef, err := getAnnotatedGlobal(ctx, e.moduleName, e.optionName, modules, typedModules, stack, e.location)
+	ctorDef, err := getAnnotatedGlobal(e.moduleName, e.optionName, modules, typedModules, stack, e.location)
 	if err != nil {
 		return nil, err
 	}

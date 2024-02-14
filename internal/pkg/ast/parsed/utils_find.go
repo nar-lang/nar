@@ -9,7 +9,7 @@ import (
 	"unicode"
 )
 
-func findType(
+func findParsedType(
 	modules map[ast.QualifiedIdentifier]*Module,
 	module *Module,
 	name ast.QualifiedIdentifier,
@@ -55,7 +55,7 @@ func findType(
 
 		for _, imp := range module.imports {
 			if slices.Contains(imp.exposing, string(name)) {
-				return findType(nil, modules[imp.moduleIdentifier], typeName, args, loc)
+				return findParsedType(nil, modules[imp.moduleIdentifier], typeName, args, loc)
 			}
 		}
 
@@ -63,7 +63,7 @@ func findType(
 		if modName != "" {
 			if submodule, ok := modules[ast.QualifiedIdentifier(modName)]; ok {
 				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
-					return findType(nil, submodule, typeName, args, loc)
+					return findParsedType(nil, submodule, typeName, args, loc)
 				}
 			}
 
@@ -72,7 +72,7 @@ func findType(
 			for modId, submodule := range modules {
 				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
 					if strings.HasSuffix(string(modId), modName) {
-						foundType, foundModule, foundId, err := findType(nil, submodule, typeName, args, loc)
+						foundType, foundModule, foundId, err := findParsedType(nil, submodule, typeName, args, loc)
 						if err != nil {
 							return nil, nil, nil, err
 						}
@@ -95,7 +95,7 @@ func findType(
 			for modId, submodule := range modules {
 				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
 					if strings.HasSuffix(string(modId), modDotName) || modId == typeName {
-						foundType, foundModule, foundId, err := findType(nil, submodule, typeName, args, loc)
+						foundType, foundModule, foundId, err := findParsedType(nil, submodule, typeName, args, loc)
 						if err != nil {
 							return nil, nil, nil, err
 						}
@@ -116,7 +116,7 @@ func findType(
 			//6. search all modules
 			for _, submodule := range modules {
 				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
-					foundType, foundModule, foundId, err := findType(nil, submodule, typeName, args, loc)
+					foundType, foundModule, foundId, err := findParsedType(nil, submodule, typeName, args, loc)
 					if err != nil {
 						return nil, nil, nil, err
 					}
@@ -136,6 +136,7 @@ func findType(
 	return nil, nil, nil, nil
 }
 
+// TODO: rewrite
 func applyTypeArgs(t Type, params map[ast.Identifier]Type, loc ast.Location) (Type, error) {
 	doMap := func(x Type) (Type, error) { return applyTypeArgs(x, params, loc) }
 	var err error

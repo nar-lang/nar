@@ -4,7 +4,7 @@ meta:
   endian: le
 seq:
   - id: format_version
-    contents: [ 0x01, 0x0, 0x00, 0x00 ]
+    contents: [ 100, 0x0, 0x00, 0x00 ]
   - id: compiler_version
     type: u4
   - id: debug

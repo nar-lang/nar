@@ -8,7 +8,6 @@ import (
 )
 
 func getAnnotatedGlobal(
-	ctx *typed.SolvingContext,
 	moduleName ast.QualifiedIdentifier,
 	definitionName ast.Identifier,
 	modules map[ast.QualifiedIdentifier]*Module,

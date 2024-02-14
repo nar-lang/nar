@@ -8,9 +8,10 @@ import (
 	"nar-compiler/internal/pkg/ast/typed"
 	"nar-compiler/internal/pkg/common"
 	"slices"
+	"strconv"
 )
 
-const Version = "1.0"
+var Version = strconv.Itoa(int(common.CompilerVersion)/100) + "." + strconv.Itoa(int(common.CompilerVersion)%100)
 
 func Compile(
 	pkgNames []ast.PackageIdentifier,

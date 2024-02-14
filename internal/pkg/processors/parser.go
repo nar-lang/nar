@@ -839,7 +839,7 @@ func parsePattern(src *source) (parsed.Pattern, error) {
 				return nil, newError(*src, "expected `,` or `)` here")
 			}
 		}
-		return finishParsePattern(src, parsed.NewPDataOption(loc(src, cursor), *name, items))
+		return finishParsePattern(src, parsed.NewPOption(loc(src, cursor), *name, items))
 	} else {
 		src.cursor = cursor
 	}
@@ -878,7 +878,7 @@ func finishParsePattern(src *source, pattern parsed.Pattern) (parsed.Pattern, er
 		if nil == type_ {
 			return nil, newError(*src, "expected type here")
 		}
-		pattern.SetType(type_)
+		pattern.SetDeclaredType(type_)
 		return finishParsePattern(src, pattern)
 	}
 
@@ -1112,11 +1112,11 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 		}
 		if isDef {
 			return finishParseExpression(src,
-				parsed.NewLetDef(loc(src, cursor), ast.Identifier(*name), nameLoc, params, value, fnType, nested),
+				parsed.NewFunction(loc(src, cursor), ast.Identifier(*name), nameLoc, params, value, fnType, nested),
 				negate)
 		} else {
 			return finishParseExpression(src,
-				parsed.NewLetMatch(loc(src, cursor), pattern, value, nested),
+				parsed.NewLet(loc(src, cursor), pattern, value, nested),
 				negate)
 		}
 	}
@@ -1131,7 +1131,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 			return nil, newError(*src, "expected select condition expression here")
 		}
 
-		var cases []parsed.SelectCase
+		var cases []*parsed.SelectCase
 
 		for {
 			caseCursor := src.cursor
@@ -1158,7 +1158,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 			if nil == expr {
 				return nil, newError(*src, "expected case expression here")
 			}
-			cases = append(cases, parsed.SelectCase{Location: loc(src, caseCursor), Pattern: pattern, Expression: expr})
+			cases = append(cases, parsed.NewSelectCase(loc(src, caseCursor), pattern, expr))
 		}
 
 		if 0 == len(cases) {
@@ -1190,7 +1190,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 			name = nil
 		}
 
-		var fields []parsed.RecordField
+		var fields []*parsed.RecordField
 		for {
 			fieldCursor := src.cursor
 
@@ -1209,11 +1209,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 			if nil == expr {
 				return nil, newError(*src, "expected record field value expression here")
 			}
-			fields = append(fields, parsed.RecordField{
-				Location: loc(src, fieldCursor),
-				Name:     ast.Identifier(*fieldName),
-				Value:    expr,
-			})
+			fields = append(fields, parsed.NewRecordField(loc(src, fieldCursor), ast.Identifier(*fieldName), expr))
 
 			if readExact(src, SeqComma) {
 				continue
@@ -1294,12 +1290,15 @@ func finishParseExpression(src *source, expr parsed.Expression, negate bool) (pa
 			expr = parsed.NewNegate(loc(src, cursor), expr)
 		}
 
-		items := []parsed.BinOpItem{{Expression: expr}, {Infix: *infixOp}}
+		items := []*parsed.BinOpItem{
+			parsed.NewBinOpOperand(expr),
+			parsed.NewBinOpFunc(*infixOp),
+		}
 
 		if bop, ok := final.(*parsed.BinOp); ok && !bop.InParentheses() {
 			items = append(items, bop.Items()...)
 		} else {
-			items = append(items, parsed.BinOpItem{Expression: final})
+			items = append(items, parsed.NewBinOpOperand(final))
 		}
 
 		return parsed.NewBinOp(loc(src, expr.GetLocation().Start()), items, false), nil
@@ -1629,7 +1628,7 @@ func parseDefinition(src *source, modName ast.QualifiedIdentifier) (*parsed.Defi
 			}
 			if err == nil {
 				if native {
-					body = parsed.NewNativeCall(
+					body = parsed.NewCall(
 						loc(src, typeCursor),
 						common.MakeFullIdentifier(modName, ast.Identifier(*name)),
 						nil)
@@ -1658,7 +1657,7 @@ func parseDefinition(src *source, modName ast.QualifiedIdentifier) (*parsed.Defi
 					}
 				}
 				if err == nil {
-					body = parsed.NewNativeCall(
+					body = parsed.NewCall(
 						loc(src, typeCursor),
 						common.MakeFullIdentifier(modName, ast.Identifier(*name)),
 						args)

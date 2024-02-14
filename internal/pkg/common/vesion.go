@@ -1,6 +1,6 @@
 package common
 
 const (
-	CompilerVersion     uint32 = 1
-	BinaryFormatVersion uint32 = 1
+	CompilerVersion     uint32 = 100
+	BinaryFormatVersion uint32 = 100
 )
