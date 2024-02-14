@@ -21,6 +21,14 @@ func Map[I, O any](p func(I) O, xs []I) []O {
 	return result
 }
 
+func FlatMap[I, O any](p func(I) []O, xs []I) []O {
+	result := make([]O, 0, len(xs))
+	for _, x := range xs {
+		result = append(result, p(x)...)
+	}
+	return result
+}
+
 func ForError[I any](p func(I) error, xs []I) error {
 	for _, x := range xs {
 		if err := p(x); err != nil {
@@ -144,4 +152,31 @@ func Keys[K comparable, V any](m map[K]V) []K {
 		result = append(result, k)
 	}
 	return result
+}
+
+func Values[K comparable, V any](m map[K]V) []V {
+	result := make([]V, 0, len(m))
+	for _, v := range m {
+		result = append(result, v)
+	}
+	return result
+}
+
+func Filter[T any](p func(T) bool, xs []T) []T {
+	result := make([]T, 0, len(xs))
+	for _, x := range xs {
+		if p(x) {
+			result = append(result, x)
+		}
+	}
+	return result
+}
+
+func MergeErrors(errors ...error) error {
+	nonNil := Filter(func(e error) bool { return e != nil }, errors)
+	if len(nonNil) == 0 {
+		return nil
+	}
+	s := Map(func(e error) string { return e.Error() }, nonNil)
+	return fmt.Errorf(strings.Join(s, "\n"))
 }

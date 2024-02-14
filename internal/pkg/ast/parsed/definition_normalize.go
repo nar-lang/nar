@@ -22,28 +22,17 @@ func normalizeDefinition(
 func (def *Definition) normalize(
 	modules map[ast.QualifiedIdentifier]*Module, module *Module,
 	normalizedModule *normalized.Module,
-) (o *normalized.Definition, params map[ast.Identifier]normalized.Pattern, err error) {
+) (*normalized.Definition, map[ast.Identifier]normalized.Pattern, error) {
+	normalized.LastDefinitionId++
 
-	lastDefinitionId++
-	o = &normalized.Definition{
-		Id:       lastDefinitionId,
-		Name:     def.Name,
-		Location: def.Location,
-		Hidden:   def.Hidden,
-	}
-	params = map[ast.Identifier]normalized.Pattern{}
-	o.Params, err = common.MapError(normalizePattern(params, modules, module, normalizedModule), def.Params)
-	if err != nil {
-		return
-	}
+	params := map[ast.Identifier]normalized.Pattern{}
+
+	defParams, err1 := common.MapError(normalizePattern(params, modules, module, normalizedModule), def.params)
 	locals := maps.Clone(params)
-	o.Expression, err = normalizeExpression(locals, modules, module, normalizedModule)(def.Expression)
-	if err != nil {
-		return
-	}
-	o.Type, err = normalizeType(modules, module, nil, nil)(def.Type)
-	if err != nil {
-		return
-	}
-	return
+	body, err2 := normalizeExpression(locals, modules, module, normalizedModule)(def.expression)
+	type_, err3 := normalizeType(modules, module, nil, nil)(def.type_)
+
+	nDef := normalized.NewDefinition(
+		def.location, normalized.LastDefinitionId, def.hidden, def.name, defParams, body, type_)
+	return nDef, params, common.MergeErrors(err1, err2, err3)
 }

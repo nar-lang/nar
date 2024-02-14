@@ -67,15 +67,11 @@ func (e *Access) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	normalize := normalizeExpression(locals, modules, module, normalizedModule)
-	record, err := normalize(e.Record)
+	record, err := normalize(e.record)
 	if err != nil {
 		return nil, err
 	}
-	return normalized.Access{
-		ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-		Record:         record,
-		FieldName:      e.FieldName,
-	}, nil
+	return normalized.NewAccess(e.location, record, e.fieldName), nil
 }
 
 func (e *Apply) normalize(
@@ -85,19 +81,15 @@ func (e *Apply) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	normalize := normalizeExpression(locals, modules, module, normalizedModule)
-	fn, err := normalize(e.Func)
+	fn, err := normalize(e.func_)
 	if err != nil {
 		return nil, err
 	}
-	args, err := common.MapError(normalize, e.Args)
+	args, err := common.MapError(normalize, e.args)
 	if err != nil {
 		return nil, err
 	}
-	return normalized.Apply{
-		ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-		Func:           fn,
-		Args:           args,
-	}, nil
+	return normalized.NewApply(e.location, fn, args), nil
 }
 
 func (e *Const) normalize(
@@ -106,10 +98,7 @@ func (e *Const) normalize(
 	module *Module,
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
-	return normalized.Const{
-		ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-		Value:          e.Value,
-	}, nil
+	return normalized.NewConst(e.location, e.value), nil
 }
 
 func (e *Constructor) normalize(
@@ -119,17 +108,11 @@ func (e *Constructor) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	normalize := normalizeExpression(locals, modules, module, normalizedModule)
-	args, err := common.MapError(normalize, e.Args)
+	args, err := common.MapError(normalize, e.args)
 	if err != nil {
 		return nil, err
 	}
-	return normalized.Constructor{
-		ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-		ModuleName:     e.ModuleName,
-		DataName:       e.DataName,
-		OptionName:     e.OptionName,
-		Args:           args,
-	}, nil
+	return normalized.NewConstructor(e.location, e.moduleName, e.dataName, e.optionName, args), nil
 }
 
 func (e *If) normalize(
@@ -139,52 +122,42 @@ func (e *If) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	normalize := normalizeExpression(locals, modules, module, normalizedModule)
-	boolType := &normalized.TData{
-		Location: e.Condition.GetLocation(),
-		Name:     common.NarCoreBasicsBool,
-		Options: []normalized.DataOption{
-			{Name: common.NarCoreBasicsTrueName},
-			{Name: common.NarCoreBasicsFalseName},
+	boolType := normalized.NewTData(
+		e.condition.GetLocation(),
+		common.NarBaseBasicsBool,
+		nil,
+		[]*normalized.DataOption{
+			normalized.NewDataOption(common.NarBaseBasicsTrueName, false, nil),
+			normalized.NewDataOption(common.NarBaseBasicsFalseName, false, nil),
 		},
-	}
-	condition, err := normalize(e.Condition)
+	)
+	condition, err := normalize(e.condition)
 	if err != nil {
 		return nil, err
 	}
-	positive, err := normalize(e.Positive)
+	positive, err := normalize(e.positive)
 	if err != nil {
 		return nil, err
 	}
-	negative, err := normalize(e.Negative)
+	negative, err := normalize(e.negative)
 	if err != nil {
 		return nil, err
 	}
-	return normalized.Select{
-		ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-		Condition:      condition,
-		Cases: []normalized.SelectCase{
-			{
-				Location: e.Positive.GetLocation(),
-				Pattern: &normalized.PDataOption{
-					PatternBase:    &normalized.PatternBase{Location: e.Positive.GetLocation()},
-					Type:           boolType,
-					ModuleName:     common.NarCoreBasicsName,
-					DefinitionName: common.NarCoreBasicsTrueName,
-				},
-				Expression: positive,
-			},
-			{
-				Location: e.Negative.GetLocation(),
-				Pattern: &normalized.PDataOption{
-					PatternBase:    &normalized.PatternBase{Location: e.Negative.GetLocation()},
-					Type:           boolType,
-					ModuleName:     common.NarCoreBasicsName,
-					DefinitionName: common.NarCoreBasicsFalseName,
-				},
-				Expression: negative,
-			},
-		},
-	}, nil
+	return normalized.NewSelect(
+		e.location,
+		condition,
+		[]*normalized.SelectCase{
+			normalized.NewSelectCase(
+				e.positive.GetLocation(),
+				normalized.NewPOption(
+					e.positive.GetLocation(), boolType, common.NarBaseBasicsName, common.NarBaseBasicsTrueName, nil),
+				positive),
+			normalized.NewSelectCase(
+				e.negative.GetLocation(),
+				normalized.NewPOption(
+					e.negative.GetLocation(), boolType, common.NarBaseBasicsName, common.NarBaseBasicsFalseName, nil),
+				negative),
+		}), nil
 }
 
 func (e *LetMatch) normalize(
@@ -194,24 +167,19 @@ func (e *LetMatch) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	innerLocals := maps.Clone(locals)
-	pattern, err := normalizePattern(innerLocals, modules, module, normalizedModule)(e.Pattern)
+	pattern, err := normalizePattern(innerLocals, modules, module, normalizedModule)(e.pattern)
 	if err != nil {
 		return nil, err
 	}
-	value, err := normalizeExpression(innerLocals, modules, module, normalizedModule)(e.Value)
+	value, err := normalizeExpression(innerLocals, modules, module, normalizedModule)(e.value)
 	if err != nil {
 		return nil, err
 	}
-	nested, err := normalizeExpression(innerLocals, modules, module, normalizedModule)(e.Nested)
+	nested, err := normalizeExpression(innerLocals, modules, module, normalizedModule)(e.nested)
 	if err != nil {
 		return nil, err
 	}
-	return normalized.LetMatch{
-		ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-		Pattern:        pattern,
-		Value:          value,
-		Nested:         nested,
-	}, nil
+	return normalized.NewLet(e.location, pattern, value, nested), nil
 }
 
 func (e *LetDef) normalize(
@@ -221,34 +189,24 @@ func (e *LetDef) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	innerLocals := maps.Clone(locals)
-	innerLocals[e.Name] = &normalized.PNamed{
-		PatternBase: &normalized.PatternBase{Location: e.NameLocation},
-		Name:        e.Name,
-	}
-	params, err := common.MapError(normalizePattern(innerLocals, modules, module, normalizedModule), e.Params)
+	innerLocals[e.name] = normalized.NewPNamed(e.nameLocation, nil, e.name)
+	params, err := common.MapError(normalizePattern(innerLocals, modules, module, normalizedModule), e.params)
 	if err != nil {
 		return nil, err
 	}
-	body, err := normalizeExpression(innerLocals, modules, module, normalizedModule)(e.Body)
+	body, err := normalizeExpression(innerLocals, modules, module, normalizedModule)(e.body)
 	if err != nil {
 		return nil, err
 	}
-	nested, err := normalizeExpression(innerLocals, modules, module, normalizedModule)(e.Nested)
+	nested, err := normalizeExpression(innerLocals, modules, module, normalizedModule)(e.nested)
 	if err != nil {
 		return nil, err
 	}
-	type_, err := normalizeType(modules, module, nil, nil)(e.FnType)
+	type_, err := normalizeType(modules, module, nil, nil)(e.fnType)
 	if err != nil {
 		return nil, err
 	}
-	return normalized.LetDef{
-		ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-		Name:           e.Name,
-		Params:         params,
-		FnType:         type_,
-		Body:           body,
-		Nested:         nested,
-	}, nil
+	return normalized.NewFunction(e.location, e.name, params, body, type_, nested), nil
 }
 
 func (e *List) normalize(
@@ -258,14 +216,11 @@ func (e *List) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	normalize := normalizeExpression(locals, modules, module, normalizedModule)
-	items, err := common.MapError(normalize, e.Items)
+	items, err := common.MapError(normalize, e.items)
 	if err != nil {
 		return nil, err
 	}
-	return normalized.List{
-		ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-		Items:          items,
-	}, nil
+	return normalized.NewList(e.location, items), nil
 }
 
 func (e *NativeCall) normalize(
@@ -275,15 +230,11 @@ func (e *NativeCall) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	normalize := normalizeExpression(locals, modules, module, normalizedModule)
-	args, err := common.MapError(normalize, e.Args)
+	args, err := common.MapError(normalize, e.args)
 	if err != nil {
 		return nil, err
 	}
-	return normalized.NativeCall{
-		ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-		Name:           e.Name,
-		Args:           args,
-	}, nil
+	return normalized.NewNativeCall(e.location, e.name, args), nil
 }
 
 func (e *Record) normalize(
@@ -293,24 +244,17 @@ func (e *Record) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	normalize := normalizeExpression(locals, modules, module, normalizedModule)
-	fields, err := common.MapError(func(i RecordField) (normalized.RecordField, error) {
+	fields, err := common.MapError(func(i RecordField) (*normalized.RecordField, error) {
 		value, err := normalize(i.Value)
 		if err != nil {
-			return normalized.RecordField{}, err
+			return nil, err
 		}
-		return normalized.RecordField{
-			Location: i.Location,
-			Name:     i.Name,
-			Value:    value,
-		}, nil
-	}, e.Fields)
+		return normalized.NewRecordField(i.Location, i.Name, value), nil
+	}, e.fields)
 	if err != nil {
 		return nil, err
 	}
-	return normalized.Record{
-		ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-		Fields:         fields,
-	}, nil
+	return normalized.NewRecord(e.location, fields), nil
 }
 
 func (e *Select) normalize(
@@ -320,34 +264,26 @@ func (e *Select) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	normalize := normalizeExpression(locals, modules, module, normalizedModule)
-	condition, err := normalize(e.Condition)
+	condition, err := normalize(e.condition)
 	if err != nil {
 		return nil, err
 	}
-	cases, err := common.MapError(func(i SelectCase) (normalized.SelectCase, error) {
+	cases, err := common.MapError(func(i SelectCase) (*normalized.SelectCase, error) {
 		innerLocals := maps.Clone(locals)
 		pattern, err := normalizePattern(innerLocals, modules, module, normalizedModule)(i.Pattern)
 		if err != nil {
-			return normalized.SelectCase{}, err
+			return nil, err
 		}
 		expression, err := normalizeExpression(innerLocals, modules, module, normalizedModule)(i.Expression)
 		if err != nil {
-			return normalized.SelectCase{}, err
+			return nil, err
 		}
-		return normalized.SelectCase{
-			Location:   e.Location,
-			Pattern:    pattern,
-			Expression: expression,
-		}, nil
-	}, e.Cases)
+		return normalized.NewSelectCase(i.Location, pattern, expression), nil
+	}, e.cases)
 	if err != nil {
 		return nil, err
 	}
-	return normalized.Select{
-		ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-		Condition:      condition,
-		Cases:          cases,
-	}, nil
+	return normalized.NewSelect(e.location, condition, cases), nil
 }
 
 func (e *Tuple) normalize(
@@ -357,14 +293,11 @@ func (e *Tuple) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	normalize := normalizeExpression(locals, modules, module, normalizedModule)
-	items, err := common.MapError(normalize, e.Items)
+	items, err := common.MapError(normalize, e.items)
 	if err != nil {
 		return nil, err
 	}
-	return normalized.Tuple{
-		ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-		Items:          items,
-	}, nil
+	return normalized.NewTuple(e.location, items), nil
 }
 
 func (e *Update) normalize(
@@ -374,39 +307,32 @@ func (e *Update) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	normalize := normalizeExpression(locals, modules, module, normalizedModule)
-	d, m, ids := findParsedDefinition(modules, module, e.RecordName, normalizedModule)
-	fields, err := common.MapError(func(i RecordField) (normalized.RecordField, error) {
+	d, m, ids := findParsedDefinition(modules, module, e.recordName, normalizedModule)
+	fields, err := common.MapError(func(i RecordField) (*normalized.RecordField, error) {
 		value, err := normalize(i.Value)
 		if err != nil {
-			return normalized.RecordField{}, err
+			return nil, err
 		}
-		return normalized.RecordField{
-			Location: i.Location,
-			Name:     i.Name,
-			Value:    value,
-		}, nil
-	}, e.Fields)
+		return normalized.NewRecordField(i.Location, i.Name, value), nil
+	}, e.fields)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(ids) == 1 {
-
-		return normalized.UpdateGlobal{
-			ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-			ModuleName:     m.name,
-			DefinitionName: d.Name,
-			Fields:         fields,
-		}, nil
+		return normalized.NewUpdateGlobal(e.location, m.name, d.name, fields), nil
 	} else if len(ids) > 1 {
-		return nil, newAmbiguousDefinitionError(ids, e.RecordName, e.Location)
+		return nil, newAmbiguousDefinitionError(ids, e.recordName, e.location)
 	}
 
-	return normalized.UpdateLocal{
-		ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-		RecordName:     ast.Identifier(e.RecordName),
-		Fields:         fields,
-	}, nil
+	if lc, ok := locals[ast.Identifier(e.recordName)]; ok {
+		return normalized.NewUpdateLocal(e.location, ast.Identifier(e.recordName), lc, fields), nil
+	} else {
+		return nil, common.Error{
+			Location: e.location,
+			Message:  fmt.Sprintf("identifier `%s` not found", e.location.Text()),
+		}
+	}
 }
 
 func (e *Lambda) normalize(
@@ -416,19 +342,15 @@ func (e *Lambda) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	normalize := normalizeExpression(locals, modules, module, normalizedModule)
-	params, err := common.MapError(normalizePattern(locals, modules, module, normalizedModule), e.Params)
+	params, err := common.MapError(normalizePattern(locals, modules, module, normalizedModule), e.params)
 	if err != nil {
 		return nil, err
 	}
-	body, err := normalize(e.Body)
+	body, err := normalize(e.body)
 	if err != nil {
 		return nil, err
 	}
-	return normalized.Lambda{
-		ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-		Params:         params,
-		Body:           body,
-	}, nil
+	return normalized.NewLambda(e.location, params, body), nil
 }
 
 func (e *Accessor) normalize(
@@ -438,21 +360,10 @@ func (e *Accessor) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	normalize := normalizeExpression(locals, modules, module, normalizedModule)
-	return normalize(&Lambda{
-		Params: []Pattern{NewPNamed(e.Location, "x")},
-		Body: &Access{
-			ExpressionBase: &ExpressionBase{
-				Location: e.Location,
-			},
-			Record: &Var{
-				ExpressionBase: &ExpressionBase{
-					Location: e.Location,
-				},
-				Name: "x",
-			},
-			FieldName: e.FieldName,
-		},
-	})
+	return normalize(NewLambda(e.location,
+		[]Pattern{NewPNamed(e.location, "x")},
+		nil,
+		NewAccess(e.location, NewVar(e.location, "x"), e.fieldName)))
 }
 
 func (e *BinOp) normalize(
@@ -464,12 +375,12 @@ func (e *BinOp) normalize(
 	normalize := normalizeExpression(locals, modules, module, normalizedModule)
 	var output []BinOpItem
 	var operators []BinOpItem
-	for _, o1 := range e.Items {
+	for _, o1 := range e.items {
 		if o1.Expression != nil {
 			output = append(output, o1)
 		} else {
 			if infixFn, _, ids := findParsedInfixFn(modules, module, o1.Infix); len(ids) != 1 {
-				return nil, newAmbiguousInfixError(ids, o1.Infix, e.Location)
+				return nil, newAmbiguousInfixError(ids, o1.Infix, e.location)
 			} else {
 				o1.Fn = infixFn
 			}
@@ -497,7 +408,7 @@ func (e *BinOp) normalize(
 		output = output[:len(output)-1]
 
 		if infixA, m, ids := findParsedInfixFn(modules, module, op); len(ids) != 1 {
-			return nil, newAmbiguousInfixError(ids, op, e.Location)
+			return nil, newAmbiguousInfixError(ids, op, e.location)
 		} else {
 			var left, right normalized.Expression
 			var err error
@@ -529,15 +440,11 @@ func (e *BinOp) normalize(
 				}
 			}
 
-			return normalized.Apply{
-				ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-				Func: normalized.Global{
-					ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-					ModuleName:     m.name,
-					DefinitionName: infixA.alias,
-				},
-				Args: []normalized.Expression{left, right},
-			}, nil
+			return normalized.NewApply(
+				e.location,
+				normalized.NewGlobal(e.location, m.name, infixA.alias),
+				[]normalized.Expression{left, right},
+			), nil
 		}
 	}
 
@@ -551,19 +458,15 @@ func (e *Negate) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	normalize := normalizeExpression(locals, modules, module, normalizedModule)
-	nested, err := normalize(e.Nested)
+	nested, err := normalize(e.nested)
 	if err != nil {
 		return nil, err
 	}
-	return normalized.Apply{
-		ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-		Func: normalized.Global{
-			ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-			ModuleName:     common.NarCoreMath,
-			DefinitionName: common.NarCoreMathNeg,
-		},
-		Args: []normalized.Expression{nested},
-	}, nil
+	return normalized.NewApply(
+		e.location,
+		normalized.NewGlobal(e.location, common.NarBaseMathName, common.NarBaseMathNegName),
+		[]normalized.Expression{nested},
+	), nil
 }
 
 func (e *Var) normalize(
@@ -573,48 +476,29 @@ func (e *Var) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	normalize := normalizeExpression(locals, modules, module, normalizedModule)
-	if lc, ok := locals[ast.Identifier(e.Name)]; ok {
-		return normalized.Local{
-			ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-			Name:           ast.Identifier(e.Name),
-			Target:         lc,
-		}, nil
+	if lc, ok := locals[ast.Identifier(e.name)]; ok {
+		return normalized.NewLocal(e.location, ast.Identifier(e.name), lc), nil
 	}
 
-	d, m, ids := findParsedDefinition(modules, module, e.Name, normalizedModule)
+	d, m, ids := findParsedDefinition(modules, module, e.name, normalizedModule)
 	if len(ids) == 1 {
-		return normalized.Global{
-			ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-			ModuleName:     m.name,
-			DefinitionName: d.Name,
-		}, nil
+		return normalized.NewGlobal(e.location, m.name, d.name), nil
 	} else if len(ids) > 1 {
-		return nil, newAmbiguousDefinitionError(ids, e.Name, e.Location)
+		return nil, newAmbiguousDefinitionError(ids, e.name, e.location)
 	}
 
-	parts := strings.Split(string(e.Name), ".")
+	parts := strings.Split(string(e.name), ".")
 	if len(parts) > 1 {
-		varAccess := Expression(&Var{
-			ExpressionBase: &ExpressionBase{
-				Location: e.Location,
-			},
-			Name: ast.QualifiedIdentifier(parts[0]),
-		})
+		varAccess := NewVar(e.location, ast.QualifiedIdentifier(parts[0]))
 		for i := 1; i < len(parts); i++ {
-			varAccess = &Access{
-				ExpressionBase: &ExpressionBase{
-					Location: e.Location,
-				},
-				Record:    varAccess,
-				FieldName: ast.Identifier(parts[i]),
-			}
+			varAccess = NewAccess(e.location, varAccess, ast.Identifier(parts[i]))
 		}
 		return normalize(varAccess)
 	}
 
 	return nil, common.Error{
-		Location: e.Location,
-		Message:  fmt.Sprintf("identifier `%s` not found", e.Location.Text()),
+		Location: e.location,
+		Message:  fmt.Sprintf("identifier `%s` not found", e.location.Text()),
 	}
 }
 
@@ -624,15 +508,11 @@ func (e *InfixVar) normalize(
 	module *Module,
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
-	if i, m, ids := findParsedInfixFn(modules, module, e.Infix); len(ids) != 1 {
-		return nil, newAmbiguousInfixError(ids, e.Infix, e.Location)
+	if i, m, ids := findParsedInfixFn(modules, module, e.infix); len(ids) != 1 {
+		return nil, newAmbiguousInfixError(ids, e.infix, e.location)
 	} else if d, _, ids := findParsedDefinition(nil, m, ast.QualifiedIdentifier(i.alias), normalizedModule); len(ids) != 1 {
-		return nil, newAmbiguousDefinitionError(ids, ast.QualifiedIdentifier(i.alias), e.Location)
+		return nil, newAmbiguousDefinitionError(ids, ast.QualifiedIdentifier(i.alias), e.location)
 	} else {
-		return normalized.Global{
-			ExpressionBase: &normalized.ExpressionBase{Location: e.Location},
-			ModuleName:     m.name,
-			DefinitionName: d.Name,
-		}, nil
+		return normalized.NewGlobal(e.location, m.name, d.name), nil
 	}
 }

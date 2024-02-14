@@ -14,6 +14,10 @@ type Error struct {
 	Message  string
 }
 
+func NewError(loc ast.Location, msg string, params ...any) error {
+	return Error{Location: loc, Message: fmt.Sprintf(msg, params...)}
+}
+
 func (e Error) Error() string {
 	sb := strings.Builder{}
 	cursorString := e.Location.CursorString()
@@ -49,7 +53,7 @@ type systemError struct {
 }
 
 func (e systemError) Error() string {
-	return fmt.Sprintf("system error: %v", e.inner)
+	return fmt.Sprintf("system error: %s", e.inner.Error())
 }
 
 func NewCompilerError(message string) error {

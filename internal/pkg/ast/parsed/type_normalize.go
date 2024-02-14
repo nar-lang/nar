@@ -5,6 +5,7 @@ import (
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/ast/normalized"
 	"nar-compiler/internal/pkg/common"
+	"strings"
 )
 
 type namedTypeMap map[ast.FullIdentifier]*normalized.TPlaceholder
@@ -17,12 +18,12 @@ func normalizeType(
 		if t == nil {
 			return nil, nil
 		}
-		p, err := t.normalize(modules, module, typeModule, namedTypes)
+		normalizedType, err := t.normalize(modules, module, typeModule, namedTypes)
 		if err != nil {
 			return nil, err
 		}
-		t.setSuccessor(p)
-		return p, nil
+		t.setSuccessor(normalizedType)
+		return normalizedType, nil
 	}
 }
 
@@ -37,11 +38,7 @@ func (t *TFunc) normalize(
 	if err != nil {
 		return nil, err
 	}
-	return normalized.Type(&normalized.TFunc{
-		Location: t.location,
-		Params:   params,
-		Return:   ret,
-	}), nil
+	return normalized.NewTFunc(t.location, params, ret), nil
 }
 
 func (t *TRecord) normalize(
@@ -55,10 +52,7 @@ func (t *TRecord) normalize(
 			return nil, err
 		}
 	}
-	return normalized.Type(&normalized.TRecord{
-		Location: t.location,
-		Fields:   fields,
-	}), nil
+	return normalized.NewTRecord(t.location, fields), nil
 }
 
 func (t *TTuple) normalize(
@@ -68,18 +62,13 @@ func (t *TTuple) normalize(
 	if err != nil {
 		return nil, err
 	}
-	return normalized.Type(&normalized.TTuple{
-		Location: t.location,
-		Items:    items,
-	}), nil
+	return normalized.NewTTuple(t.location, items), nil
 }
 
 func (t *TUnit) normalize(
 	modules map[ast.QualifiedIdentifier]*Module, module *Module, typeModule *Module, namedTypes namedTypeMap,
 ) (normalized.Type, error) {
-	return normalized.Type(&normalized.TUnit{
-		Location: t.location,
-	}), nil
+	return normalized.NewTUnit(t.location), nil
 }
 
 func (t *TData) normalize(
@@ -91,15 +80,13 @@ func (t *TData) normalize(
 	if placeholder, cached := namedTypes[t.name]; cached {
 		return placeholder, nil
 	}
-	namedTypes[t.name] = &normalized.TPlaceholder{
-		Name: t.name,
-	}
+	namedTypes[t.name] = normalized.NewTPlaceholder(t.name).(*normalized.TPlaceholder)
 
 	args, err := common.MapError(normalizeType(modules, module, typeModule, namedTypes), t.args)
 	if err != nil {
 		return nil, err
 	}
-	options, err := common.MapError(func(x DataOption) (normalized.DataOption, error) {
+	options, err := common.MapError(func(x DataOption) (*normalized.DataOption, error) {
 		values, err := common.MapError(func(x Type) (normalized.Type, error) {
 			if typeModule != nil { //TODO: redundant?
 				return normalizeType(modules, typeModule, nil, namedTypes)(x)
@@ -108,21 +95,12 @@ func (t *TData) normalize(
 			}
 		}, x.values)
 		if err != nil {
-			return normalized.DataOption{}, err
+			return nil, err
 		}
-		return normalized.DataOption{
-			Name:   x.name,
-			Hidden: x.hidden,
-			Values: values,
-		}, nil
+		return normalized.NewDataOption(x.name, x.hidden, values), nil
 	}, t.options)
 
-	return &normalized.TData{
-		Location: t.location,
-		Name:     t.name,
-		Args:     args,
-		Options:  options,
-	}, nil
+	return normalized.NewTData(t.location, t.name, args, options), nil
 }
 
 func (t *TNative) normalize(
@@ -132,20 +110,13 @@ func (t *TNative) normalize(
 	if err != nil {
 		return nil, err
 	}
-	return &normalized.TNative{
-		Location: t.location,
-		Name:     t.name,
-		Args:     args,
-	}, nil
+	return normalized.NewTNative(t.location, t.name, args), nil
 }
 
 func (t *TParameter) normalize(
 	modules map[ast.QualifiedIdentifier]*Module, module *Module, typeModule *Module, namedTypes namedTypeMap,
 ) (normalized.Type, error) {
-	return &normalized.TTypeParameter{
-		Location: t.location,
-		Name:     t.name,
-	}, nil
+	return normalized.NewTParameter(t.location, t.name), nil
 }
 
 func (t *TNamed) normalize(
@@ -156,7 +127,11 @@ func (t *TNamed) normalize(
 		return nil, err
 	}
 	if ids == nil {
-		return nil, common.Error{Location: t.location, Message: fmt.Sprintf("type `%s` not found", t.name)}
+		args := ""
+		if len(t.args) > 0 {
+			args = fmt.Sprintf("[%s]", strings.Join(common.Repeat("_", len(t.args)), ", "))
+		}
+		return nil, common.Error{Location: t.location, Message: fmt.Sprintf("type `%s%s` not found", t.name, args)}
 	}
 	if len(ids) > 1 {
 		return nil, common.Error{

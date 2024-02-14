@@ -7,15 +7,15 @@ import (
 
 type Pattern interface {
 	Statement
-	SetType(decl Type)
-	GetType() Type
 	normalize(
 		locals map[ast.Identifier]normalized.Pattern,
 		modules map[ast.QualifiedIdentifier]*Module,
 		module *Module,
 		normalizedModule *normalized.Module,
 	) (normalized.Pattern, error)
-	GetSuccessor() normalized.Pattern
+	Type() Type
+	SetType(decl Type)
+	Successor() normalized.Pattern
 	setSuccessor(n normalized.Pattern)
 }
 
@@ -41,11 +41,11 @@ func (p *patternBase) SetType(t Type) {
 	p.type_ = t
 }
 
-func (p *patternBase) GetType() Type {
+func (p *patternBase) Type() Type {
 	return p.type_
 }
 
-func (p *patternBase) GetSuccessor() normalized.Pattern {
+func (p *patternBase) Successor() normalized.Pattern {
 	return p.successor
 }
 

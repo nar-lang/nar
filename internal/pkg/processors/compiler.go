@@ -89,36 +89,53 @@ func Compile(
 		}
 	}
 
+	if log.Err() {
+		return nil
+	}
+
 	affectedModuleNames = common.Keys(affectedModules)
 	slices.Sort(affectedModuleNames)
 
 	for _, name := range affectedModuleNames {
 		m := parsedModules[name]
-		if err := m.PreNormalize(parsedModules); err != nil {
-			for _, e := range err {
-				log.Err(e)
-			}
-		}
+		err := m.PreNormalize(parsedModules)
+		log.Err(err...)
+	}
+
+	if log.Err() {
+		return nil
 	}
 
 	for _, name := range affectedModuleNames {
-		m := parsedModules[name]
-		if err := m.Normalize(parsedModules, normalizedModules); err != nil {
-			for _, e := range err {
-				log.Err(e)
+		parsedModule := parsedModules[name]
+		if err := parsedModule.Normalize(parsedModules, normalizedModules); len(err) > 0 {
+			if log.Err(err...) {
+				return
 			}
+			continue
 		}
-		if _, ok := typedModules[m.Name()]; !ok {
-			if err := Solve(m.Name(), normalizedModules, typedModules); err != nil {
-				for _, e := range err {
-					log.Err(e)
-				}
+
+		normalizedModule := normalizedModules[name]
+		if err := normalizedModule.Annotate(normalizedModules, typedModules); len(err) > 0 {
+			if log.Err(err...) {
+				return
 			}
-			if err := CheckPatterns(typedModules); err != nil {
-				for _, e := range err {
-					log.Err(e)
-				}
+			continue
+		}
+
+		typedModule := typedModules[name]
+		if err := typedModule.CheckTypes(); len(err) > 0 {
+			if log.Err(err...) {
+				return
 			}
+			continue
+		}
+
+		if err := typedModule.CheckPatterns(); len(err) > 0 {
+			if log.Err(err...) {
+				return
+			}
+			continue
 		}
 	}
 

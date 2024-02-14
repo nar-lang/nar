@@ -102,9 +102,6 @@ func loc(src *source, start uint32) ast.Location {
 	end++
 	return ast.NewLocation(src.filePath, src.text, start, end)
 }
-func eb(src *source, start uint32) *parsed.ExpressionBase {
-	return &parsed.ExpressionBase{Location: loc(src, start)}
-}
 
 func newError(src source, msg string) error {
 	return common.Error{
@@ -957,7 +954,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 		return nil, err
 	}
 	if nil != const_ {
-		return finishParseExpression(src, &parsed.Const{ExpressionBase: eb(src, cursor), Value: const_}, negate)
+		return finishParseExpression(src, parsed.NewConst(loc(src, cursor), const_), negate)
 	}
 
 	//list
@@ -983,7 +980,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 				return nil, newError(*src, "expected `,` or `]` here")
 			}
 		}
-		return finishParseExpression(src, &parsed.List{ExpressionBase: eb(src, cursor), Items: items}, negate)
+		return finishParseExpression(src, parsed.NewList(loc(src, cursor), items), negate)
 	}
 
 	//negate
@@ -994,7 +991,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 	//infix value
 	infix := parseInfixIdentifier(src, true)
 	if nil != infix {
-		return finishParseExpression(src, &parsed.InfixVar{ExpressionBase: eb(src, cursor), Infix: *infix}, negate)
+		return finishParseExpression(src, parsed.NewInfixVar(loc(src, cursor), *infix), negate)
 	}
 
 	//lambda
@@ -1021,7 +1018,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 			return nil, newError(*src, "expected lambda expression body here")
 		}
 		return finishParseExpression(src,
-			&parsed.Lambda{ExpressionBase: eb(src, cursor), Params: patterns, Body: body, Return: ret}, negate)
+			parsed.NewLambda(loc(src, cursor), patterns, ret, body), negate)
 	}
 
 	//if
@@ -1047,9 +1044,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 		if nil == negative {
 			return nil, newError(*src, "expected negative branch expression here")
 		}
-		return finishParseExpression(src,
-			&parsed.If{ExpressionBase: eb(src, cursor), Condition: condition, Positive: positive, Negative: negative},
-			negate)
+		return finishParseExpression(src, parsed.NewIf(loc(src, cursor), condition, positive, negative), negate)
 	}
 
 	//let
@@ -1081,7 +1076,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 			pattern = parsed.NewPNamed(loc(src, defCursor), ast.Identifier(*name))
 			fnType = parsed.NewTFunc(
 				loc(src, typeCursor),
-				common.Map(func(x parsed.Pattern) parsed.Type { return x.GetType() }, params),
+				common.Map(func(x parsed.Pattern) parsed.Type { return x.Type() }, params),
 				ret)
 		} else {
 			src.cursor = defCursor
@@ -1116,22 +1111,13 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 			return nil, newError(*src, "expected expression here")
 		}
 		if isDef {
-			return finishParseExpression(src, &parsed.LetDef{
-				ExpressionBase: eb(src, cursor),
-				Name:           ast.Identifier(*name),
-				NameLocation:   nameLoc,
-				Params:         params,
-				Body:           value,
-				FnType:         fnType,
-				Nested:         nested,
-			}, negate)
+			return finishParseExpression(src,
+				parsed.NewLetDef(loc(src, cursor), ast.Identifier(*name), nameLoc, params, value, fnType, nested),
+				negate)
 		} else {
-			return finishParseExpression(src, &parsed.LetMatch{
-				ExpressionBase: eb(src, cursor),
-				Pattern:        pattern,
-				Value:          value,
-				Nested:         nested,
-			}, negate)
+			return finishParseExpression(src,
+				parsed.NewLetMatch(loc(src, cursor), pattern, value, nested),
+				negate)
 		}
 	}
 
@@ -1178,7 +1164,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 		if 0 == len(cases) {
 			return nil, newError(*src, "expected case expression here")
 		}
-		return finishParseExpression(src, &parsed.Select{ExpressionBase: eb(src, cursor), Condition: condition, Cases: cases}, negate)
+		return finishParseExpression(src, parsed.NewSelect(loc(src, cursor), condition, cases), negate)
 	}
 
 	//accessor
@@ -1187,13 +1173,13 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 		if nil == name {
 			return nil, newError(*src, "expected accessor name here")
 		}
-		return finishParseExpression(src, &parsed.Accessor{ExpressionBase: eb(src, cursor), FieldName: ast.Identifier(*name)}, negate)
+		return finishParseExpression(src, parsed.NewAccessor(loc(src, cursor), ast.Identifier(*name)), negate)
 	}
 
 	//record / update
 	if readExact(src, SeqBracesOpen) {
 		if readExact(src, SeqBracesClose) {
-			return finishParseExpression(src, &parsed.Record{ExpressionBase: eb(src, cursor)}, negate)
+			return finishParseExpression(src, parsed.NewRecord(loc(src, cursor), nil), negate)
 		}
 
 		recCursor := src.cursor
@@ -1239,17 +1225,16 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 		}
 
 		if nil == name {
-			return finishParseExpression(src, &parsed.Record{ExpressionBase: eb(src, cursor), Fields: fields}, negate)
+			return finishParseExpression(src, parsed.NewRecord(loc(src, cursor), fields), negate)
 		} else {
-			return finishParseExpression(src,
-				&parsed.Update{ExpressionBase: eb(src, cursor), RecordName: *name, Fields: fields}, negate)
+			return finishParseExpression(src, parsed.NewUpdate(loc(src, cursor), *name, fields), negate)
 		}
 	}
 
 	//tuple / void / precedence
 	if readExact(src, SeqParenthesisOpen) {
 		if readExact(src, SeqParenthesisClose) {
-			return finishParseExpression(src, &parsed.Const{ExpressionBase: eb(src, cursor), Value: ast.CUnit{}}, negate)
+			return finishParseExpression(src, parsed.NewConst(loc(src, cursor), ast.CUnit{}), negate)
 		}
 
 		var items []parsed.Expression
@@ -1275,18 +1260,18 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 		if 1 == len(items) {
 			expr := items[0]
 			if bop, ok := expr.(*parsed.BinOp); ok {
-				bop.InParentheses = true
+				bop.SetInParentheses(true)
 				expr = bop
 			}
 			return finishParseExpression(src, expr, negate)
 		} else {
-			return finishParseExpression(src, &parsed.Tuple{ExpressionBase: eb(src, cursor), Items: items}, negate)
+			return finishParseExpression(src, parsed.NewTuple(loc(src, cursor), items), negate)
 		}
 	}
 
 	name := readIdentifier(src, true)
 	if nil != name {
-		return finishParseExpression(src, &parsed.Var{ExpressionBase: eb(src, cursor), Name: *name}, negate)
+		return finishParseExpression(src, parsed.NewVar(loc(src, cursor), *name), negate)
 	}
 
 	return nil, nil
@@ -1306,18 +1291,18 @@ func finishParseExpression(src *source, expr parsed.Expression, negate bool) (pa
 		}
 
 		if negate {
-			expr = &parsed.Negate{ExpressionBase: eb(src, cursor), Nested: expr}
+			expr = parsed.NewNegate(loc(src, cursor), expr)
 		}
 
 		items := []parsed.BinOpItem{{Expression: expr}, {Infix: *infixOp}}
 
-		if bop, ok := final.(*parsed.BinOp); ok && !bop.InParentheses {
-			items = append(items, bop.Items...)
+		if bop, ok := final.(*parsed.BinOp); ok && !bop.InParentheses() {
+			items = append(items, bop.Items()...)
 		} else {
 			items = append(items, parsed.BinOpItem{Expression: final})
 		}
 
-		return &parsed.BinOp{ExpressionBase: eb(src, expr.GetLocation().Start()), Items: items}, nil
+		return parsed.NewBinOp(loc(src, expr.GetLocation().Start()), items, false), nil
 	}
 
 	if readExact(src, SeqParenthesisOpen) {
@@ -1340,8 +1325,7 @@ func finishParseExpression(src *source, expr parsed.Expression, negate bool) (pa
 			}
 			return nil, newError(*src, "expected `,` or `)` here")
 		}
-		return finishParseExpression(src,
-			&parsed.Apply{ExpressionBase: eb(src, expr.GetLocation().Start()), Func: expr, Args: items}, negate)
+		return finishParseExpression(src, parsed.NewApply(loc(src, expr.GetLocation().Start()), expr, items), negate)
 	}
 
 	if readExact(src, SeqDot) {
@@ -1349,14 +1333,10 @@ func finishParseExpression(src *source, expr parsed.Expression, negate bool) (pa
 		if nil == name {
 			return nil, newError(*src, "expected field name here")
 		}
-		return finishParseExpression(src, &parsed.Access{
-			ExpressionBase: eb(src, cursor),
-			Record:         expr,
-			FieldName:      ast.Identifier(*name),
-		}, negate)
+		return finishParseExpression(src, parsed.NewAccess(loc(src, cursor), expr, ast.Identifier(*name)), negate)
 	}
 	if negate {
-		expr = &parsed.Negate{ExpressionBase: eb(src, expr.GetLocation().Start()), Nested: expr}
+		expr = parsed.NewNegate(loc(src, expr.GetLocation().Start()), expr)
 	}
 	return expr, nil
 }
@@ -1621,106 +1601,91 @@ func parseDataType(src *source) (*parsed.DataType, error) {
 	return parsed.NewDataType(loc(src, cursor), hidden, name, params, options), err
 }
 
-func parseDefinition(src *source, modName ast.QualifiedIdentifier) (def *parsed.Definition, err error) {
+func parseDefinition(src *source, modName ast.QualifiedIdentifier) (*parsed.Definition, error) {
 	cursor := src.cursor
 
 	if !readExact(src, KwDef) {
-		return
+		return nil, nil
 	}
 	hidden := readExact(src, KwHidden)
 	native := readExact(src, KwNative)
 	name := readIdentifier(src, false)
+	var type_ parsed.Type
+	var body parsed.Expression
 
 	if nil == name {
-		err = newError(*src, "expected data name here")
-		return
-	}
-
-	def = &parsed.Definition{
-		Location: loc(src, cursor),
-		Hidden:   hidden,
-		Name:     ast.Identifier(*name),
+		return nil, newError(*src, "expected data name here")
 	}
 
 	typeCursor := src.cursor
-	params, ret, typeErr := parseSignature(src)
-	if err != nil {
-		err = typeErr
-		return
-	}
-	if nil == params {
-		if readExact(src, SeqColon) {
-			def.Type, err = parseType(src)
-			if err != nil {
-				return
-			}
-			if nil == def.Type {
-				err = newError(*src, "expected definedReturn here")
-				return
-			}
-		}
-		if native {
-			def.Expression = &parsed.NativeCall{
-				ExpressionBase: eb(src, typeCursor),
-				Name:           common.MakeFullIdentifier(modName, ast.Identifier(*name)),
-			}
-		} else {
-			if !readExact(src, SeqEqual) {
-				err = newError(*src, "expected `=` here")
-				return
-			}
-			def.Expression, err = parseExpression(src, false)
-			if err != nil {
-				return
-			}
-			if nil == def.Expression {
-				err = newError(*src, "expected expression here")
-				return
-			}
-		}
-	} else {
-		if native {
-			var args []parsed.Expression
-			for _, x := range params {
-				if named, ok := x.(*parsed.PNamed); ok {
-					args = append(args, &parsed.Var{
-						ExpressionBase: &parsed.ExpressionBase{Location: x.GetLocation()},
-						Name:           ast.QualifiedIdentifier(named.Name()),
-					})
-				} else {
-					err = newError(*src,
-						"native function should start with lowercase letter and cannot be a pattern match")
-					return
+	params, ret, err := parseSignature(src)
+	if err == nil {
+		if nil == params {
+			if readExact(src, SeqColon) {
+				type_, err = parseType(src)
+				if err == nil && nil == type_ {
+					err = newError(*src, "expected definedReturn here")
 				}
 			}
-			def.Expression = &parsed.NativeCall{
-				ExpressionBase: eb(src, typeCursor),
-				Name:           common.MakeFullIdentifier(modName, ast.Identifier(*name)),
-				Args:           args,
+			if err == nil {
+				if native {
+					body = parsed.NewNativeCall(
+						loc(src, typeCursor),
+						common.MakeFullIdentifier(modName, ast.Identifier(*name)),
+						nil)
+				} else {
+					if !readExact(src, SeqEqual) {
+						err = newError(*src, "expected `=` here")
+					}
+					if err == nil {
+						body, err = parseExpression(src, false)
+					}
+					if err == nil && body == nil {
+						err = newError(*src, "expected expression here")
+					}
+				}
 			}
 		} else {
-			if !readExact(src, SeqEqual) {
-				err = newError(*src, "expected `=` here")
-				return
+			if native {
+				var args []parsed.Expression
+				for _, x := range params {
+					if named, ok := x.(*parsed.PNamed); ok {
+						args = append(args, parsed.NewVar(x.GetLocation(), ast.QualifiedIdentifier(named.Name())))
+					} else {
+						err = newError(*src,
+							"native function should start with lowercase letter and cannot be a pattern match")
+						break
+					}
+				}
+				if err == nil {
+					body = parsed.NewNativeCall(
+						loc(src, typeCursor),
+						common.MakeFullIdentifier(modName, ast.Identifier(*name)),
+						args)
+				}
+			} else {
+				if !readExact(src, SeqEqual) {
+					err = newError(*src, "expected `=` here")
+				}
+				if err == nil {
+					body, err = parseExpression(src, false)
+				}
+				if err == nil && body == nil {
+					err = newError(*src, "expected expression here")
+				}
 			}
-			def.Expression, err = parseExpression(src, false)
-			if err != nil {
-				return
-			}
-			if nil == def.Expression {
-				err = newError(*src, "expected expression here")
-				return
+
+			if err == nil {
+				if ret != nil || common.Any(func(x parsed.Pattern) bool { return x.Type() != nil }, params) {
+					type_ = parsed.NewTFunc(
+						loc(src, typeCursor),
+						common.Map(func(x parsed.Pattern) parsed.Type { return x.Type() }, params),
+						ret)
+				}
 			}
 		}
-
-		def.Type = parsed.NewTFunc(
-			loc(src, typeCursor),
-			common.Map(func(x parsed.Pattern) parsed.Type { return x.GetType() }, params),
-			ret)
-		def.Params = params
 	}
-	def.Location = loc(src, cursor)
-	return
+	return parsed.NewDefinition(loc(src, cursor), hidden, ast.Identifier(*name), params, body, type_), err
 }
 
 func parseModule(src *source) (module *parsed.Module, errors []error) {

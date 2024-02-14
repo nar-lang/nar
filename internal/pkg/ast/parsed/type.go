@@ -10,7 +10,7 @@ type Type interface {
 	normalize(
 		modules map[ast.QualifiedIdentifier]*Module, module *Module, typeModule *Module, namedTypes namedTypeMap,
 	) (normalized.Type, error)
-	GetSuccessor() normalized.Type
+	Successor() normalized.Type
 	setSuccessor(p normalized.Type)
 }
 
@@ -31,7 +31,7 @@ func (t *typeBase) GetLocation() ast.Location {
 
 func (*typeBase) _parsed() {}
 
-func (t *typeBase) GetSuccessor() normalized.Type {
+func (t *typeBase) Successor() normalized.Type {
 	return t.successor
 }
 
@@ -109,20 +109,6 @@ func (t *TNamed) Find(
 	modules map[ast.QualifiedIdentifier]*Module, module *Module,
 ) (Type, *Module, []ast.FullIdentifier, error) {
 	return findType(modules, module, t.name, t.args, t.location)
-}
-
-type DataOption struct {
-	name   ast.Identifier
-	hidden bool
-	values []Type
-}
-
-func NewDataOption(name ast.Identifier, hidden bool, values []Type) DataOption {
-	return DataOption{
-		name:   name,
-		hidden: hidden,
-		values: values,
-	}
 }
 
 type TData struct {

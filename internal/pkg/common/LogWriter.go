@@ -10,10 +10,12 @@ type LogWriter struct {
 	warns     []error
 	msgs      []string
 	OutStream io.Writer
+	FailOnErr bool
 }
 
-func (l *LogWriter) Err(err error) {
-	l.errors = append(l.errors, err)
+func (l *LogWriter) Err(err ...error) bool {
+	l.errors = append(l.errors, err...)
+	return l.FailOnErr && len(l.errors) > 0
 }
 
 func (l *LogWriter) Warn(err error) {
@@ -26,10 +28,6 @@ func (l *LogWriter) Info(msg string) {
 
 func (l *LogWriter) IsEmpty() bool {
 	return len(l.errors) == 0 && len(l.warns) == 0 && len(l.msgs) == 0
-}
-
-func (l *LogWriter) HasErrors() bool {
-	return len(l.errors) > 0
 }
 
 func (l *LogWriter) Trace(s string) {

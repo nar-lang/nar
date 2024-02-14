@@ -18,12 +18,7 @@ func FoldModule[T any](
 		acc = FoldType(ft, acc, alias.type_)
 	}
 	for _, infix := range module.infixFns {
-		acc = FoldExpression(fe, ft, fp, acc, &Var{
-			ExpressionBase: &ExpressionBase{
-				Location: infix.aliasLocation,
-			},
-			Name: ast.QualifiedIdentifier(infix.alias),
-		})
+		acc = FoldExpression(fe, ft, fp, acc, NewVar(infix.aliasLocation, ast.QualifiedIdentifier(infix.alias)))
 	}
 	return acc
 }
@@ -35,11 +30,11 @@ func FoldDefinition[T any](
 		return acc
 	}
 
-	for _, p := range def.Params {
+	for _, p := range def.params {
 		acc = FoldPattern(ft, fp, acc, p)
 	}
-	acc = FoldType(ft, acc, def.Type)
-	acc = FoldExpression(fe, ft, fp, acc, def.Expression)
+	acc = FoldType(ft, acc, def.type_)
+	acc = FoldExpression(fe, ft, fp, acc, def.expression)
 	return acc
 }
 
@@ -199,13 +194,13 @@ func FoldExpression[T any](
 	case *Access:
 		{
 			e := expr.(*Access)
-			acc = FoldExpression(fe, ft, fp, acc, e.Record)
+			acc = FoldExpression(fe, ft, fp, acc, e.record)
 		}
 	case *Apply:
 		{
 			e := expr.(*Apply)
-			acc = FoldExpression(fe, ft, fp, acc, e.Func)
-			for _, a := range e.Args {
+			acc = FoldExpression(fe, ft, fp, acc, e.func_)
+			for _, a := range e.args {
 				acc = FoldExpression(fe, ft, fp, acc, a)
 			}
 		}
@@ -216,46 +211,46 @@ func FoldExpression[T any](
 	case *If:
 		{
 			e := expr.(*If)
-			acc = FoldExpression(fe, ft, fp, acc, e.Condition)
-			acc = FoldExpression(fe, ft, fp, acc, e.Positive)
-			acc = FoldExpression(fe, ft, fp, acc, e.Negative)
+			acc = FoldExpression(fe, ft, fp, acc, e.condition)
+			acc = FoldExpression(fe, ft, fp, acc, e.positive)
+			acc = FoldExpression(fe, ft, fp, acc, e.negative)
 		}
 	case *LetMatch:
 		{
 			e := expr.(*LetMatch)
-			acc = FoldExpression(fe, ft, fp, acc, e.Value)
-			acc = FoldExpression(fe, ft, fp, acc, e.Nested)
-			acc = FoldPattern(ft, fp, acc, e.Pattern)
+			acc = FoldExpression(fe, ft, fp, acc, e.value)
+			acc = FoldExpression(fe, ft, fp, acc, e.nested)
+			acc = FoldPattern(ft, fp, acc, e.pattern)
 		}
 	case *LetDef:
 		{
 			e := expr.(*LetDef)
-			for _, p := range e.Params {
+			for _, p := range e.params {
 				acc = FoldPattern(ft, fp, acc, p)
 			}
-			acc = FoldExpression(fe, ft, fp, acc, e.Body)
-			acc = FoldType(ft, acc, e.FnType)
-			acc = FoldExpression(fe, ft, fp, acc, e.Nested)
+			acc = FoldExpression(fe, ft, fp, acc, e.body)
+			acc = FoldType(ft, acc, e.fnType)
+			acc = FoldExpression(fe, ft, fp, acc, e.nested)
 		}
 	case *List:
 		{
 			e := expr.(*List)
-			for _, a := range e.Items {
+			for _, a := range e.items {
 				acc = FoldExpression(fe, ft, fp, acc, a)
 			}
 		}
 	case *Record:
 		{
 			e := expr.(*Record)
-			for _, a := range e.Fields {
+			for _, a := range e.fields {
 				acc = FoldExpression(fe, ft, fp, acc, a.Value)
 			}
 		}
 	case *Select:
 		{
 			e := expr.(*Select)
-			acc = FoldExpression(fe, ft, fp, acc, e.Condition)
-			for _, cs := range e.Cases {
+			acc = FoldExpression(fe, ft, fp, acc, e.condition)
+			for _, cs := range e.cases {
 				acc = FoldExpression(fe, ft, fp, acc, cs.Expression)
 				acc = FoldPattern(ft, fp, acc, cs.Pattern)
 			}
@@ -263,25 +258,25 @@ func FoldExpression[T any](
 	case *Tuple:
 		{
 			e := expr.(*Tuple)
-			for _, a := range e.Items {
+			for _, a := range e.items {
 				acc = FoldExpression(fe, ft, fp, acc, a)
 			}
 		}
 	case *Update:
 		{
 			e := expr.(*Update)
-			for _, f := range e.Fields {
+			for _, f := range e.fields {
 				acc = FoldExpression(fe, ft, fp, acc, f.Value)
 			}
 		}
 	case *Lambda:
 		{
 			e := expr.(*Lambda)
-			for _, p := range e.Params {
+			for _, p := range e.params {
 				acc = FoldPattern(ft, fp, acc, p)
 			}
-			acc = FoldExpression(fe, ft, fp, acc, e.Body)
-			acc = FoldType(ft, acc, e.Return)
+			acc = FoldExpression(fe, ft, fp, acc, e.body)
+			acc = FoldType(ft, acc, e.return_)
 		}
 	case *Accessor:
 		{
@@ -290,19 +285,19 @@ func FoldExpression[T any](
 	case *BinOp:
 		{
 			e := expr.(*BinOp)
-			for _, i := range e.Items {
+			for _, i := range e.items {
 				acc = FoldExpression(fe, ft, fp, acc, i.Expression)
 			}
 		}
 	case *Negate:
 		{
 			e := expr.(*Negate)
-			acc = FoldExpression(fe, ft, fp, acc, e.Nested)
+			acc = FoldExpression(fe, ft, fp, acc, e.nested)
 		}
 	case *Constructor:
 		{
 			e := expr.(*Constructor)
-			for _, i := range e.Args {
+			for _, i := range e.args {
 				acc = FoldExpression(fe, ft, fp, acc, i)
 			}
 		}
@@ -312,7 +307,7 @@ func FoldExpression[T any](
 	case *NativeCall:
 		{
 			e := expr.(*NativeCall)
-			for _, i := range e.Args {
+			for _, i := range e.args {
 				acc = FoldExpression(fe, ft, fp, acc, i)
 			}
 		}

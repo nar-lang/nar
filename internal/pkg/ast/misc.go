@@ -23,3 +23,7 @@ func (f FullIdentifier) Module() QualifiedIdentifier {
 }
 
 type DataOptionIdentifier string
+
+type Coder interface {
+	Code(currentModule QualifiedIdentifier) string
+}

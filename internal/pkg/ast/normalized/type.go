@@ -2,109 +2,42 @@ package normalized
 
 import (
 	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast/typed"
 )
 
 type Type interface {
+	Statement
 	_type()
-	GetLocation() ast.Location
+	annotate(ctx *typed.SolvingContext, params typeParamsMap, source bool, placeholders placeholderMap) (typed.Type, error)
+	Successor() typed.Type
+	SetSuccessor(typedType typed.Type) typed.Type
 }
 
-type TFunc struct {
-	Location ast.Location
-	Params   []Type
-	Return   Type
+type typeBase struct {
+	location  ast.Location
+	successor typed.Type
 }
 
-func (*TFunc) _type() {}
-
-func (t *TFunc) GetLocation() ast.Location {
-	return t.Location
+func newTypeBase(loc ast.Location) *typeBase {
+	return &typeBase{location: loc}
 }
 
-type TRecord struct {
-	Location ast.Location
-	Fields   map[ast.Identifier]Type
+func (t *typeBase) _type() {}
+
+func (t *typeBase) Location() ast.Location {
+	return t.location
 }
 
-func (*TRecord) _type() {}
-
-func (t *TRecord) GetLocation() ast.Location {
-	return t.Location
+func (t *typeBase) Successor() typed.Type {
+	return t.successor
 }
 
-type TTuple struct {
-	Location ast.Location
-	Items    []Type
+func (t *typeBase) setSuccessor(typedType typed.Type) (typed.Type, error) {
+	t.successor = typedType
+	return typedType, nil
 }
 
-func (*TTuple) _type() {}
-
-func (t *TTuple) GetLocation() ast.Location {
-	return t.Location
-}
-
-type TUnit struct {
-	Location ast.Location
-}
-
-func (*TUnit) _type() {}
-
-func (t *TUnit) GetLocation() ast.Location {
-	return t.Location
-}
-
-type DataOption struct {
-	Name   ast.Identifier
-	Hidden bool
-	Values []Type
-}
-
-type TData struct {
-	Location ast.Location
-	Name     ast.FullIdentifier
-	Args     []Type
-	Options  []DataOption
-}
-
-func (*TData) _type() {}
-
-func (t *TData) GetLocation() ast.Location {
-	return t.Location
-}
-
-type TNative struct {
-	Location ast.Location
-	Name     ast.FullIdentifier
-	Args     []Type
-}
-
-func (*TNative) _type() {}
-
-func (t *TNative) GetLocation() ast.Location {
-	return t.Location
-}
-
-type TTypeParameter struct {
-	Location ast.Location
-	Name     ast.Identifier
-}
-
-func (*TTypeParameter) _type() {}
-
-func (t *TTypeParameter) GetLocation() ast.Location {
-	return t.Location
-}
-
-func (p *TTypeParameter) String() string {
-	return string(p.Name)
-}
-
-type TPlaceholder struct {
-	Name ast.FullIdentifier
-}
-
-func (p *TPlaceholder) _type() {}
-
-func (p *TPlaceholder) GetLocation() ast.Location {
-	return ast.Location{}
+func (t *typeBase) SetSuccessor(typedType typed.Type) typed.Type {
+	_, _ = t.setSuccessor(typedType)
+	return typedType
 }

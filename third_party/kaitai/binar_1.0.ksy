@@ -1,6 +1,6 @@
 meta:
-  id: acorn
-  file-extension: acorn
+  id: binar
+  file-extension: binar
   endian: le
 seq:
   - id: format_version

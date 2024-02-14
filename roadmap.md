@@ -15,8 +15,9 @@
 ## Compiler v0.2
 * [ ] Nested record fields access
 * [ ] Prefix operators (like infix ones, neg is ugly)
-* [ ] "tree shaking" to strip unused code
-* [ ] Compilation performance improvements
+* [ ] "Tree shaking" to strip unused code
+* [x] Compilation performance improvements
+* [ ] Multithreaded compilation
   
 ## Libraries
 * [x] Nar.Base library + tests

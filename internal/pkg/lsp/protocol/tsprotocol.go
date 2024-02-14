@@ -2766,7 +2766,7 @@ type OrFNotebookPNotebookSelector struct {
 	Value interface{} `json:"value"`
 }
 
-// created for Or [Location PLocationMsg_workspace_symbol]
+// created for Or [location PLocationMsg_workspace_symbol]
 type OrPLocation_workspace_symbol struct {
 	Value interface{} `json:"value"`
 }
@@ -2801,7 +2801,7 @@ type Or_CompletionItem_textEdit struct {
 	Value interface{} `json:"value"`
 }
 
-// created for Or [Location []Location]
+// created for Or [location []location]
 type Or_Definition struct {
 	Value interface{} `json:"value"`
 }

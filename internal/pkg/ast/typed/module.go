@@ -3,48 +3,107 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	"slices"
 )
 
-type Definition struct {
-	Id           uint64
-	Name         ast.Identifier
-	Location     ast.Location
-	Params       []Pattern
-	Expression   Expression
-	DeclaredType Type
-	Hidden       bool
+type Module struct {
+	name         ast.QualifiedIdentifier
+	location     ast.Location
+	dependencies map[ast.QualifiedIdentifier][]ast.Identifier
+	definitions  []*Definition
 }
 
-func (d *Definition) GetLocation() ast.Location {
-	return d.Location
+func NewModule(
+	location ast.Location,
+	name ast.QualifiedIdentifier,
+	dependencies map[ast.QualifiedIdentifier][]ast.Identifier,
+	definitions []*Definition,
+) *Module {
+	return &Module{
+		name:         name,
+		location:     location,
+		dependencies: dependencies,
+		definitions:  definitions,
+	}
 }
 
-func (d *Definition) String() string {
-	return fmt.Sprintf("Definition(%v,%v,%v,%v,%v)", d.Name, d.Params, d.Expression, d.DeclaredType, d.Location)
+func (module *Module) AddDefinition(def *Definition) {
+	module.definitions = append(module.definitions, def)
 }
 
-func (d *Definition) GetType() Type {
-	if d.Expression == nil {
-		return d.DeclaredType
+func (module *Module) FindDefinition(name ast.Identifier) (*Definition, bool) {
+	for _, def := range module.definitions {
+		if def.name == name {
+			return def, true
+		}
+	}
+	return nil, false
+}
+
+func (module *Module) CheckTypes() (errors []error) {
+	for _, def := range module.definitions {
+		if !def.typed {
+			err := def.solveTypes(nil)
+			if err != nil {
+				errors = append(errors, err)
+				return //TODO: remove return
+			}
+		}
+	}
+	return
+}
+
+func (module *Module) CheckPatterns() (errors []error) {
+	for _, def := range module.definitions {
+		err := def.checkPatterns()
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+	}
+	return
+}
+
+func (module *Module) Compose(modules map[ast.QualifiedIdentifier]*Module, debug bool, binary *bytecode.Binary) error {
+	binary.HashString("")
+
+	if slices.Contains(binary.CompiledPaths, module.name) {
+		return nil
 	}
 
-	defType := d.Expression.GetType()
+	binary.CompiledPaths = append(binary.CompiledPaths, module.name)
 
-	if len(d.Params) > 0 {
-		defType = &TFunc{
-			Location: d.Location,
-			Params:   common.Map(func(x Pattern) Type { return x.GetType() }, d.Params),
-			Return:   defType,
+	for depModule := range module.dependencies {
+		m, ok := modules[depModule]
+		if !ok {
+			return common.Error{
+				Location: module.location,
+				Message:  fmt.Sprintf("module '%s' not found", depModule),
+			}
+		}
+		if err := m.Compose(modules, debug, binary); err != nil {
+			return err
 		}
 	}
 
-	return defType
-}
+	for _, def := range module.definitions {
+		extId := common.MakeFullIdentifier(module.name, def.name)
+		binary.FuncsMap[extId] = bytecode.Pointer(len(binary.Funcs))
+		binary.Funcs = append(binary.Funcs, bytecode.Func{})
+	}
 
-type Module struct {
-	Name         ast.QualifiedIdentifier
-	Location     ast.Location
-	Dependencies map[ast.QualifiedIdentifier][]ast.Identifier
-	Definitions  []*Definition
+	for _, def := range module.definitions {
+		pathId := common.MakeFullIdentifier(module.name, def.name)
+
+		ptr := binary.FuncsMap[pathId]
+		if binary.Funcs[ptr].Ops == nil {
+			binary.Funcs[ptr] = def.Bytecode(pathId, binary)
+			if !def.hidden || debug {
+				binary.Exports[pathId] = ptr
+			}
+		}
+	}
+	return nil
 }

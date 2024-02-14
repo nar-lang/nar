@@ -17,7 +17,12 @@ func normalizePattern(
 		if pattern == nil {
 			return nil, nil
 		}
-		return pattern.normalize(locals, modules, module, normalizedModule)
+		normalizedPattern, err := pattern.normalize(locals, modules, module, normalizedModule)
+		if err != nil {
+			return nil, err
+		}
+		pattern.setSuccessor(normalizedPattern)
+		return normalizedPattern, nil
 	}
 }
 
@@ -28,21 +33,11 @@ func (e *PAlias) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Pattern, error) {
 	normalize := normalizePattern(locals, modules, module, normalizedModule)
-	np := &normalized.PAlias{
-		PatternBase: &normalized.PatternBase{Location: e.location},
-		Alias:       e.alias,
-	}
+	nested, err1 := normalize(e.nested)
+	type_, err2 := normalizeType(modules, module, nil, nil)(e.type_)
+	np := normalized.NewPAlias(e.location, type_, e.alias, nested)
 	locals[e.alias] = np
-	var err error
-	np.Nested, err = normalize(e.nested)
-	if err != nil {
-		return nil, err
-	}
-	np.Type, err = normalizeType(modules, module, nil, nil)(e.type_)
-	if err != nil {
-		return nil, err
-	}
-	return np, nil
+	return np, common.MergeErrors(err1, err2)
 }
 
 func (e *PAny) normalize(
@@ -52,13 +47,7 @@ func (e *PAny) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Pattern, error) {
 	type_, err := normalizeType(modules, module, nil, nil)(e.type_)
-	if err != nil {
-		return nil, err
-	}
-	return &normalized.PAny{
-		PatternBase: &normalized.PatternBase{Location: e.location},
-		Type:        type_,
-	}, nil
+	return normalized.NewPAny(e.location, type_), err
 }
 
 func (e *PCons) normalize(
@@ -68,24 +57,10 @@ func (e *PCons) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Pattern, error) {
 	normalize := normalizePattern(locals, modules, module, normalizedModule)
-	head, err := normalize(e.head)
-	if err != nil {
-		return nil, err
-	}
-	tail, err := normalize(e.tail)
-	if err != nil {
-		return nil, err
-	}
-	type_, err := normalizeType(modules, module, nil, nil)(e.type_)
-	if err != nil {
-		return nil, err
-	}
-	return &normalized.PCons{
-		PatternBase: &normalized.PatternBase{Location: e.location},
-		Type:        type_,
-		Head:        head,
-		Tail:        tail,
-	}, nil
+	head, err1 := normalize(e.head)
+	tail, err2 := normalize(e.tail)
+	type_, err3 := normalizeType(modules, module, nil, nil)(e.type_)
+	return normalized.NewPCons(e.location, type_, head, tail), common.MergeErrors(err1, err2, err3)
 }
 
 func (e *PConst) normalize(
@@ -95,14 +70,7 @@ func (e *PConst) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Pattern, error) {
 	type_, err := normalizeType(modules, module, nil, nil)(e.type_)
-	if err != nil {
-		return nil, err
-	}
-	return &normalized.PConst{
-		PatternBase: &normalized.PatternBase{Location: e.location},
-		Type:        type_,
-		Value:       e.value,
-	}, nil
+	return normalized.NewPConst(e.location, type_, e.value), err
 }
 
 func (e *PDataOption) normalize(
@@ -124,21 +92,9 @@ func (e *PDataOption) normalize(
 				e.name, common.Join(ids, ", ")),
 		}
 	}
-	values, err := common.MapError(normalize, e.values)
-	if err != nil {
-		return nil, err
-	}
-	type_, err := normalizeType(modules, module, nil, nil)(e.type_)
-	if err != nil {
-		return nil, err
-	}
-	return &normalized.PDataOption{
-		PatternBase:    &normalized.PatternBase{Location: e.location},
-		Type:           type_,
-		ModuleName:     mod.name,
-		DefinitionName: def.Name,
-		Values:         values,
-	}, nil
+	values, err1 := common.MapError(normalize, e.values)
+	type_, err2 := normalizeType(modules, module, nil, nil)(e.type_)
+	return normalized.NewPOption(e.location, type_, mod.name, def.name, values), common.MergeErrors(err1, err2)
 }
 
 func (e *PList) normalize(
@@ -148,19 +104,9 @@ func (e *PList) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Pattern, error) {
 	normalize := normalizePattern(locals, modules, module, normalizedModule)
-	items, err := common.MapError(normalize, e.items)
-	if err != nil {
-		return nil, err
-	}
-	type_, err := normalizeType(modules, module, nil, nil)(e.type_)
-	if err != nil {
-		return nil, err
-	}
-	return &normalized.PList{
-		PatternBase: &normalized.PatternBase{Location: e.location},
-		Type:        type_,
-		Items:       items,
-	}, nil
+	items, err1 := common.MapError(normalize, e.items)
+	type_, err2 := normalizeType(modules, module, nil, nil)(e.type_)
+	return normalized.NewPList(e.location, type_, items), common.MergeErrors(err1, err2)
 }
 
 func (e *PNamed) normalize(
@@ -169,17 +115,10 @@ func (e *PNamed) normalize(
 	module *Module,
 	normalizedModule *normalized.Module,
 ) (normalized.Pattern, error) {
-	np := &normalized.PNamed{
-		PatternBase: &normalized.PatternBase{Location: e.location},
-		Name:        e.name,
-	}
+	type_, err := normalizeType(modules, module, nil, nil)(e.type_)
+	np := normalized.NewPNamed(e.location, type_, e.name)
 	locals[e.name] = np
-	var err error
-	np.Type, err = normalizeType(modules, module, nil, nil)(e.type_)
-	if err != nil {
-		return nil, err
-	}
-	return np, nil
+	return np, err
 }
 
 func (e *PRecord) normalize(
@@ -189,20 +128,11 @@ func (e *PRecord) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Pattern, error) {
 	type_, err := normalizeType(modules, module, nil, nil)(e.type_)
-	if err != nil {
-		return nil, err
-	}
-	return &normalized.PRecord{
-		PatternBase: &normalized.PatternBase{Location: e.location},
-		Type:        type_,
-		Fields: common.Map(func(x PRecordField) normalized.PRecordField {
-			locals[x.name] = &normalized.PNamed{
-				PatternBase: &normalized.PatternBase{Location: x.location},
-				Name:        x.name,
-			}
-			return normalized.PRecordField{Location: x.location, Name: x.name}
-		}, e.fields),
-	}, nil
+	fields := common.Map(func(x PRecordField) *normalized.PRecordField {
+		locals[x.name] = normalized.NewPNamed(x.location, nil, x.name)
+		return normalized.NewPRecordField(x.location, x.name)
+	}, e.fields)
+	return normalized.NewPRecord(e.location, type_, fields), err
 }
 
 func (e *PTuple) normalize(
@@ -212,17 +142,7 @@ func (e *PTuple) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Pattern, error) {
 	normalize := normalizePattern(locals, modules, module, normalizedModule)
-	items, err := common.MapError(normalize, e.items)
-	if err != nil {
-		return nil, err
-	}
-	type_, err := normalizeType(modules, module, nil, nil)(e.type_)
-	if err != nil {
-		return nil, err
-	}
-	return &normalized.PTuple{
-		PatternBase: &normalized.PatternBase{Location: e.location},
-		Type:        type_,
-		Items:       items,
-	}, nil
+	items, err1 := common.MapError(normalize, e.items)
+	type_, err2 := normalizeType(modules, module, nil, nil)(e.type_)
+	return normalized.NewPTuple(e.location, type_, items), common.MergeErrors(err1, err2)
 }

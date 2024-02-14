@@ -1,6 +1,7 @@
 package narc
 
 import (
+	"fmt"
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/ast/normalized"
@@ -56,15 +57,22 @@ func Compile(
 		log,
 		func(modulePath string) string { return "" })
 
-	if !log.HasErrors() {
+	if !log.Err() {
 		for _, name := range affectedModuleNames {
-			if err := processors.Compose(name, typedModules, debug, &bin); err != nil {
+			m, ok := typedModules[name]
+			if !ok {
+				log.Err(common.Error{
+					Message: fmt.Sprintf("module '%s' not found", name),
+				})
+				continue
+			}
+			if err := m.Compose(typedModules, debug, &bin); err != nil {
 				log.Err(err)
 			}
 		}
 	}
 
-	if !log.HasErrors() {
+	if !log.Err() {
 		outDir := filepath.Dir(outPath)
 		err := os.MkdirAll(outDir, os.ModePerm)
 		if err != nil {

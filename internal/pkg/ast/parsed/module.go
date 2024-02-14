@@ -4,11 +4,6 @@ import (
 	"nar-compiler/internal/pkg/ast"
 )
 
-type Statement interface {
-	GetLocation() ast.Location
-	_parsed()
-}
-
 type Import struct {
 	location         ast.Location
 	moduleIdentifier ast.QualifiedIdentifier

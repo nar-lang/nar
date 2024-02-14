@@ -99,7 +99,7 @@ func (t OrPLocation_workspace_symbol) MarshalJSON() ([]byte, error) {
 	case nil:
 		return []byte("null"), nil
 	}
-	return nil, fmt.Errorf("type %T not one of [Location PLocationMsg_workspace_symbol]", t)
+	return nil, fmt.Errorf("type %T not one of [location PLocationMsg_workspace_symbol]", t)
 }
 
 func (t *OrPLocation_workspace_symbol) UnmarshalJSON(x []byte) error {
@@ -117,7 +117,7 @@ func (t *OrPLocation_workspace_symbol) UnmarshalJSON(x []byte) error {
 		t.Value = h1
 		return nil
 	}
-	return &UnmarshalError{"unmarshal failed to match one of [Location PLocationMsg_workspace_symbol]"}
+	return &UnmarshalError{"unmarshal failed to match one of [location PLocationMsg_workspace_symbol]"}
 }
 
 // from line 4358
@@ -316,7 +316,7 @@ func (t Or_Definition) MarshalJSON() ([]byte, error) {
 	case nil:
 		return []byte("null"), nil
 	}
-	return nil, fmt.Errorf("type %T not one of [Location []Location]", t)
+	return nil, fmt.Errorf("type %T not one of [location []location]", t)
 }
 
 func (t *Or_Definition) UnmarshalJSON(x []byte) error {
@@ -334,7 +334,7 @@ func (t *Or_Definition) UnmarshalJSON(x []byte) error {
 		t.Value = h1
 		return nil
 	}
-	return &UnmarshalError{"unmarshal failed to match one of [Location []Location]"}
+	return &UnmarshalError{"unmarshal failed to match one of [location []location]"}
 }
 
 // from line 8865

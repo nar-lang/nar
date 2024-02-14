@@ -183,7 +183,7 @@ func (p *point) clean() {
 	}
 }
 
-// Format implements fmt.Formatter to print the Location in a standard form.
+// Format implements fmt.Formatter to print the location in a standard form.
 // The format produced is one that can be read back in using Parse.
 func (s Span) Format(f fmt.State, c rune) {
 	fullForm := f.Flag('+')
@@ -243,5 +243,5 @@ func (s Span) Format(f fmt.State, c rune) {
 //		posn := safetoken.Position(file, pos)
 //		return NewPoint(posn.Line, posn.Column, posn.Offset)
 //	}
-//	*span = New(URIFromPath(file.Name()), point(start), point(end))
+//	*span = New(URIFromPath(file.name()), point(start), point(end))
 //}

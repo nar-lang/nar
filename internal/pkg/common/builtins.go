@@ -13,20 +13,20 @@ const (
 )
 
 var (
-	NarCoreBasicsName      = ast.QualifiedIdentifier("Nar.Base.Basics")
-	NarCoreBasicsTrueName  = ast.Identifier("True")
-	NarCoreBasicsFalseName = ast.Identifier("False")
+	NarBaseBasicsName = ast.QualifiedIdentifier("Nar.Base.Basics")
+	NarBaseMathName   = ast.QualifiedIdentifier("Nar.Base.Math")
 
-	NarCoreMath         = ast.QualifiedIdentifier("Nar.Base.Math")
-	NarCoreMathNeg      = ast.Identifier("neg")
-	NarCoreCharChar     = MakeFullIdentifier("Nar.Base.Char", "Char")
-	NarCoreMathInt      = MakeFullIdentifier("Nar.Base.Math", "Int")
-	NarCoreMathFloat    = MakeFullIdentifier("Nar.Base.Math", "Float")
-	NarCoreBasicsUnit   = MakeFullIdentifier(NarCoreBasicsName, "Unit")
-	NarCoreStringString = MakeFullIdentifier("Nar.Base.String", "String")
-	NarCoreListList     = MakeFullIdentifier("Nar.Base.List", "List")
-	Number              = MakeFullIdentifier("", ast.Identifier(ConstraintNumber))
-	NarCoreBasicsBool   = MakeFullIdentifier(NarCoreBasicsName, "Bool")
+	NarBaseBasicsTrueName  = ast.Identifier("True")
+	NarBaseBasicsFalseName = ast.Identifier("False") //todo: qualified?
+	NarBaseMathNegName     = ast.Identifier("neg")
+
+	NarBaseCharChar     = MakeFullIdentifier("Nar.Base.Char", "Char")
+	NarBaseMathInt      = MakeFullIdentifier(NarBaseMathName, "Int")
+	NarBaseMathFloat    = MakeFullIdentifier(NarBaseMathName, "Float")
+	NarBaseBasicsUnit   = MakeFullIdentifier(NarBaseBasicsName, "Unit")
+	NarBaseStringString = MakeFullIdentifier("Nar.Base.String", "String")
+	NarBaseListList     = MakeFullIdentifier("Nar.Base.List", "List")
+	NarBaseBasicsBool   = MakeFullIdentifier(NarBaseBasicsName, "Bool")
 )
 
 func MakeFullIdentifier(moduleName ast.QualifiedIdentifier, name ast.Identifier) ast.FullIdentifier {

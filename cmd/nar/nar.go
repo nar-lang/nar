@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"nar-compiler/internal/pkg/common"
-	"nar-compiler/internal/pkg/lsp"
 	"nar-compiler/internal/pkg/processors"
 	narc "nar-compiler/pkg"
 	"os"
@@ -31,11 +30,11 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("nar compiler version: %s\nlanguage server protocol version: %s\n", processors.Version, lsp.Version)
+		fmt.Printf("nar compiler version: %s\nlanguage server protocol version: %s\n", processors.Version /*, lsp.Version*/)
 		return
 	}
 
-	log := &common.LogWriter{}
+	log := &common.LogWriter{FailOnErr: true}
 
 	if *runLsp != "" {
 		err := narc.LanguageServer(*runLsp, *lspPort, *cacheDir)
@@ -54,7 +53,7 @@ func main() {
 		loadedPackages, entry := narc.Compile(
 			flag.Args(), linker.GetOutFileLocation(*out),
 			!*release, *upgrade, *cacheDir, log)
-		if !log.HasErrors() {
+		if !log.Err() {
 			if len(log.Errors()) == 0 {
 				err := linker.Link(entry, loadedPackages, *out, !*release, *upgrade, *cacheDir, log)
 				if err != nil {

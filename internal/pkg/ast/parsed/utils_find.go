@@ -220,8 +220,7 @@ func findParsedDefinition(
 ) (*Definition, *Module, []ast.FullIdentifier) {
 	d, m, id := findParsedDefinitionImpl(modules, module, name)
 	if len(id) == 1 {
-		normalizedModule.Dependencies[m.name] =
-			append(normalizedModule.Dependencies[m.name], d.Name)
+		normalizedModule.AddDependencies(m.name, d.name)
 	}
 	return d, m, id
 }
@@ -230,12 +229,12 @@ func findParsedDefinitionImpl(
 	modules map[ast.QualifiedIdentifier]*Module, module *Module, name ast.QualifiedIdentifier,
 ) (*Definition, *Module, []ast.FullIdentifier) {
 	var defNameEq = func(x *Definition) bool {
-		return ast.QualifiedIdentifier(x.Name) == name
+		return ast.QualifiedIdentifier(x.name) == name
 	}
 
 	//1. search in current module
 	if def, ok := common.Find(defNameEq, module.definitions); ok {
-		return def, module, []ast.FullIdentifier{common.MakeFullIdentifier(module.name, def.Name)}
+		return def, module, []ast.FullIdentifier{common.MakeFullIdentifier(module.name, def.name)}
 	}
 
 	lastDot := strings.LastIndex(string(name), ".")

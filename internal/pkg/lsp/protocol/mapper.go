@@ -48,7 +48,7 @@ package protocol
 //
 //    protocol.Position = (Line, Character uint32)
 //    protocol.Range = (start, end Position)
-//    protocol.Location = (URI, protocol.Range)
+//    protocol.location = (URI, protocol.Range)
 //
 //          Line and Character are 0-based.
 //          Characters (columns) are measured in UTF-16 codes.

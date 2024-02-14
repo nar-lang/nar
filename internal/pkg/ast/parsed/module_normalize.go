@@ -9,9 +9,6 @@ import (
 	"strings"
 )
 
-var lastDefinitionId = uint64(0)
-var lastLambdaId = uint64(0)
-
 func (module *Module) PreNormalize(
 	modules map[ast.QualifiedIdentifier]*Module,
 ) (errors []error) {
@@ -23,42 +20,31 @@ func (module *Module) Normalize(
 	modules map[ast.QualifiedIdentifier]*Module,
 	normalizedModules map[ast.QualifiedIdentifier]*normalized.Module,
 ) (errors []error) {
-
-	o := &normalized.Module{
-		Name:         module.name,
-		Location:     module.location,
-		Dependencies: map[ast.QualifiedIdentifier][]ast.Identifier{},
+	if _, ok := normalizedModules[module.name]; ok {
+		return
 	}
 
-	lastLambdaId = 0
+	o := normalized.NewModule(module.location, module.name, nil)
 
 	for _, def := range module.definitions {
 		nDef, params, err := normalizeDefinition(modules, module, o)(def)
 		if err != nil {
 			errors = append(errors, err)
 		}
-		if nDef.Expression != nil {
-			nDef.Expression, err = flattenLambdas(nDef.Name, nDef.Expression, o, params)
-			if err != nil {
-				errors = append(errors, err)
-			}
-		}
-		o.Definitions = append(o.Definitions, nDef)
+		nDef.FlattenLambdas(params, o)
+
+		o.AddDefinition(nDef)
 	}
 
 	normalizedModules[module.name] = o
 
-	for modName := range o.Dependencies {
-		if _, ok := normalizedModules[modName]; ok {
-			return
-		}
-
+	for _, modName := range o.Dependencies() {
 		depModule, ok := modules[modName]
 		if !ok {
 			errors = append(errors,
 				common.Error{Location: depModule.location, Message: fmt.Sprintf("module `%s` not found", modName)},
 			)
-			return
+			continue
 		}
 
 		if err := depModule.Normalize(modules, normalizedModules); err != nil {
@@ -89,25 +75,17 @@ func (module *Module) flattenDataTypes() {
 			if len(option.values) > 0 {
 				type_ = NewTFunc(it.location, option.values, type_)
 			}
-			var body Expression = &Constructor{
-				ExpressionBase: &ExpressionBase{
-					Location: option.location,
-				},
-				ModuleName: module.name,
-				DataName:   it.name,
-				OptionName: option.name,
-				Args: common.Map(
+			var body Expression = NewConstructor(
+				option.location,
+				module.name,
+				it.name,
+				option.name,
+				common.Map(
 					func(i int) Expression {
-						return &Var{
-							ExpressionBase: &ExpressionBase{
-								Location: option.location,
-							},
-							Name: ast.QualifiedIdentifier(fmt.Sprintf("p%d", i)),
-						}
+						return NewVar(option.location, ast.QualifiedIdentifier(fmt.Sprintf("p%d", i)))
 					},
 					common.Range(0, len(option.values)),
-				),
-			}
+				))
 
 			params := common.Map(
 				func(i int) Pattern {
@@ -116,14 +94,8 @@ func (module *Module) flattenDataTypes() {
 				common.Range(0, len(option.values)),
 			)
 
-			module.definitions = append(module.definitions, &Definition{
-				Location:   option.location,
-				Hidden:     option.hidden || it.hidden,
-				Name:       option.name,
-				Params:     params,
-				Expression: body,
-				Type:       type_,
-			})
+			module.definitions = append(module.definitions,
+				NewDefinition(option.location, option.hidden || it.hidden, option.name, params, body, type_))
 		}
 	}
 }
@@ -160,8 +132,8 @@ func (module *Module) unwrapImports(modules map[ast.QualifiedIdentifier]*Module)
 		}
 
 		for _, d := range m.definitions {
-			if !d.Hidden {
-				expose(string(d.Name), string(d.Name))
+			if !d.hidden {
+				expose(string(d.name), string(d.name))
 			}
 		}
 

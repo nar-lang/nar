@@ -2,129 +2,41 @@ package normalized
 
 import (
 	"nar-compiler/internal/pkg/ast"
+	"nar-compiler/internal/pkg/ast/typed"
 )
 
 type Expression interface {
+	Statement
 	_expression()
+	Successor() typed.Expression
+	flattenLambdas(parentName ast.Identifier, m *Module, locals map[ast.Identifier]Pattern) Expression
+	replaceLocals(replace map[ast.Identifier]Expression) Expression
+	extractUsedLocalsSet(definedLocals map[ast.Identifier]Pattern, usedLocals map[ast.Identifier]struct{})
+	annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, modules map[ast.QualifiedIdentifier]*Module, typedModules map[ast.QualifiedIdentifier]*typed.Module, moduleName ast.QualifiedIdentifier, stack []*typed.Definition) (typed.Expression, error)
 }
 
-type ExpressionBase struct {
-	Location ast.Location
+type expressionBase struct {
+	location  ast.Location
+	successor typed.Expression
 }
 
-func (e *ExpressionBase) _expression() {}
-
-func (e *ExpressionBase) GetLocation() ast.Location {
-	return e.Location
+func newExpressionBase(loc ast.Location) *expressionBase {
+	return &expressionBase{
+		location: loc,
+	}
 }
 
-type Access struct {
-	*ExpressionBase
-	Record    Expression
-	FieldName ast.Identifier
+func (e *expressionBase) _expression() {}
+
+func (e *expressionBase) Location() ast.Location {
+	return e.location
 }
 
-type Apply struct {
-	*ExpressionBase
-	Func Expression
-	Args []Expression
+func (e *expressionBase) Successor() typed.Expression {
+	return e.successor
 }
 
-type Const struct {
-	*ExpressionBase
-	Value ast.ConstValue
-}
-
-type LetMatch struct {
-	*ExpressionBase
-	Pattern Pattern
-	Value   Expression
-	Nested  Expression
-}
-
-type LetDef struct {
-	*ExpressionBase
-	Name   ast.Identifier
-	Params []Pattern
-	Body   Expression
-	FnType Type
-	Nested Expression
-}
-
-type List struct {
-	*ExpressionBase
-	Items []Expression
-}
-
-type RecordField struct {
-	ast.Location
-	Name  ast.Identifier
-	Value Expression
-}
-
-type Record struct {
-	*ExpressionBase
-	Fields []RecordField
-}
-
-type SelectCase struct {
-	ast.Location
-	Pattern    Pattern
-	Expression Expression
-}
-
-type Select struct {
-	*ExpressionBase
-	Condition Expression
-	Cases     []SelectCase
-}
-
-type Tuple struct {
-	*ExpressionBase
-	Items []Expression
-}
-
-type UpdateLocal struct {
-	*ExpressionBase
-	RecordName ast.Identifier
-	Fields     []RecordField
-}
-
-type UpdateGlobal struct {
-	*ExpressionBase
-	ModuleName     ast.QualifiedIdentifier
-	DefinitionName ast.Identifier
-	Fields         []RecordField
-}
-
-type Lambda struct {
-	*ExpressionBase
-	Params []Pattern
-	Body   Expression
-}
-
-type Constructor struct {
-	*ExpressionBase
-	ModuleName ast.QualifiedIdentifier
-	DataName   ast.Identifier
-	OptionName ast.Identifier
-	Args       []Expression
-}
-
-type NativeCall struct {
-	*ExpressionBase
-	Name ast.FullIdentifier
-	Args []Expression
-}
-
-type Local struct {
-	*ExpressionBase
-	Name   ast.Identifier
-	Target Pattern
-}
-
-type Global struct {
-	*ExpressionBase
-	ModuleName     ast.QualifiedIdentifier
-	DefinitionName ast.Identifier
+func (e *expressionBase) setSuccessor(typedExpression typed.Expression) (typed.Expression, error) {
+	e.successor = typedExpression
+	return typedExpression, nil
 }

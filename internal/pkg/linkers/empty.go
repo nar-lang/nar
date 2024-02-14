@@ -9,7 +9,7 @@ type EmptyLinker struct {
 }
 
 func (l EmptyLinker) GetOutFileLocation(givenLocation string) string {
-	return givenLocation + ".acorn"
+	return givenLocation + ".binar"
 }
 
 func (l EmptyLinker) Link(

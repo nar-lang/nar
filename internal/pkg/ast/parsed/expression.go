@@ -7,162 +7,322 @@ import (
 
 type Expression interface {
 	Statement
-	GetSuccessor() normalized.Expression
 	normalize(
 		locals map[ast.Identifier]normalized.Pattern,
 		modules map[ast.QualifiedIdentifier]*Module,
 		module *Module,
 		normalizedModule *normalized.Module,
 	) (normalized.Expression, error)
+	Successor() normalized.Expression
 	setSuccessor(expr normalized.Expression)
 }
 
-type ExpressionBase struct {
-	Location  ast.Location
+type expressionBase struct {
+	location  ast.Location
 	successor normalized.Expression
 }
 
-func (*ExpressionBase) _parsed() {}
+func (*expressionBase) _parsed() {}
 
-func (e *ExpressionBase) GetLocation() ast.Location {
-	return e.Location
+func (e *expressionBase) GetLocation() ast.Location {
+	return e.location
 }
 
-func (e *ExpressionBase) GetSuccessor() normalized.Expression {
+func (e *expressionBase) Successor() normalized.Expression {
 	return e.successor
 }
 
-func (e *ExpressionBase) setSuccessor(expr normalized.Expression) {
+func (e *expressionBase) setSuccessor(expr normalized.Expression) {
 	e.successor = expr
 }
 
+func newExpressionBase(location ast.Location) *expressionBase {
+	return &expressionBase{location: location}
+}
+
 type Access struct {
-	*ExpressionBase
-	Record    Expression
-	FieldName ast.Identifier
+	*expressionBase
+	record    Expression
+	fieldName ast.Identifier
+}
+
+func NewAccess(location ast.Location, record Expression, fieldName ast.Identifier) Expression {
+	return &Access{
+		expressionBase: newExpressionBase(location),
+		record:         record,
+		fieldName:      fieldName,
+	}
 }
 
 type Apply struct {
-	*ExpressionBase
-	Func Expression
-	Args []Expression
+	*expressionBase
+	func_ Expression
+	args  []Expression
+}
+
+func NewApply(location ast.Location, function Expression, args []Expression) Expression {
+	return &Apply{
+		expressionBase: newExpressionBase(location),
+		func_:          function,
+		args:           args,
+	}
 }
 
 type Const struct {
-	*ExpressionBase
-	Value ast.ConstValue
+	*expressionBase
+	value ast.ConstValue
+}
+
+func NewConst(location ast.Location, value ast.ConstValue) Expression {
+	return &Const{
+		expressionBase: newExpressionBase(location),
+		value:          value,
+	}
 }
 
 type If struct {
-	*ExpressionBase
-	Condition, Positive, Negative Expression
+	*expressionBase
+	condition, positive, negative Expression
+}
+
+func NewIf(location ast.Location, condition, positive, negative Expression) Expression {
+	return &If{
+		expressionBase: newExpressionBase(location),
+		condition:      condition,
+		positive:       positive,
+		negative:       negative,
+	}
 }
 
 type LetMatch struct {
-	*ExpressionBase
-	Pattern Pattern
-	Value   Expression
-	Nested  Expression
+	*expressionBase
+	pattern Pattern
+	value   Expression
+	nested  Expression
+}
+
+func NewLetMatch(location ast.Location, pattern Pattern, value, nested Expression) Expression {
+	return &LetMatch{
+		expressionBase: newExpressionBase(location),
+		pattern:        pattern,
+		value:          value,
+		nested:         nested,
+	}
 }
 
 type LetDef struct {
-	*ExpressionBase
-	Name         ast.Identifier
-	NameLocation ast.Location
-	Params       []Pattern
-	Body         Expression
-	FnType       Type
-	Nested       Expression
+	*expressionBase
+	name         ast.Identifier
+	nameLocation ast.Location
+	params       []Pattern
+	body         Expression
+	fnType       Type
+	nested       Expression
+}
+
+func NewLetDef(
+	location ast.Location, name ast.Identifier, nameLocation ast.Location,
+	params []Pattern, body Expression, fnType Type, nested Expression,
+) Expression {
+	return &LetDef{
+		expressionBase: newExpressionBase(location),
+		name:           name,
+		nameLocation:   nameLocation,
+		params:         params,
+		body:           body,
+		fnType:         fnType,
+		nested:         nested,
+	}
 }
 
 type List struct {
-	*ExpressionBase
-	Items []Expression
+	*expressionBase
+	items []Expression
 }
 
-type RecordField struct {
-	Location ast.Location
-	Name     ast.Identifier
-	Value    Expression
+func NewList(location ast.Location, items []Expression) Expression {
+	return &List{
+		expressionBase: newExpressionBase(location),
+		items:          items,
+	}
 }
 
 type Record struct {
-	*ExpressionBase
-	Fields []RecordField
+	*expressionBase
+	fields []RecordField
 }
 
-type SelectCase struct {
-	ast.Location
-	Pattern    Pattern
-	Expression Expression
+func NewRecord(location ast.Location, fields []RecordField) Expression {
+	return &Record{
+		expressionBase: newExpressionBase(location),
+		fields:         fields,
+	}
 }
 
 type Select struct {
-	*ExpressionBase
-	Condition Expression
-	Cases     []SelectCase
+	*expressionBase
+	condition Expression
+	cases     []SelectCase
+}
+
+func NewSelect(location ast.Location, condition Expression, cases []SelectCase) Expression {
+	return &Select{
+		expressionBase: newExpressionBase(location),
+		condition:      condition,
+		cases:          cases,
+	}
 }
 
 type Tuple struct {
-	*ExpressionBase
-	Items []Expression
+	*expressionBase
+	items []Expression
+}
+
+func NewTuple(location ast.Location, items []Expression) Expression {
+	return &Tuple{
+		expressionBase: newExpressionBase(location),
+		items:          items,
+	}
 }
 
 type Update struct {
-	*ExpressionBase
-	RecordName ast.QualifiedIdentifier
-	Fields     []RecordField
+	*expressionBase
+	recordName ast.QualifiedIdentifier
+	fields     []RecordField
+}
+
+func NewUpdate(location ast.Location, recordName ast.QualifiedIdentifier, fields []RecordField) Expression {
+	return &Update{
+		expressionBase: newExpressionBase(location),
+		recordName:     recordName,
+		fields:         fields,
+	}
 }
 
 type Lambda struct {
-	*ExpressionBase
-	Params []Pattern
-	Return Type
-	Body   Expression
+	*expressionBase
+	params  []Pattern
+	return_ Type
+	body    Expression
+}
+
+func NewLambda(location ast.Location, params []Pattern, returnType Type, body Expression) Expression {
+	return &Lambda{
+		expressionBase: newExpressionBase(location),
+		params:         params,
+		return_:        returnType,
+		body:           body,
+	}
 }
 
 type Accessor struct {
-	*ExpressionBase
-	FieldName ast.Identifier
+	*expressionBase
+	fieldName ast.Identifier
 }
 
-type BinOpItem struct {
-	Expression Expression
-	Infix      ast.InfixIdentifier
-	Fn         *Infix
+func NewAccessor(location ast.Location, fieldName ast.Identifier) Expression {
+	return &Accessor{
+		expressionBase: newExpressionBase(location),
+		fieldName:      fieldName,
+	}
 }
 
 type BinOp struct {
-	*ExpressionBase
-	Items         []BinOpItem
-	InParentheses bool
+	*expressionBase
+	items         []BinOpItem
+	inParentheses bool
+}
+
+func (e *BinOp) SetInParentheses(inParentheses bool) {
+	e.inParentheses = inParentheses
+}
+
+func (e *BinOp) InParentheses() bool {
+	return e.inParentheses
+}
+
+func (e *BinOp) Items() []BinOpItem {
+	return e.items
+}
+
+func NewBinOp(location ast.Location, items []BinOpItem, inParentheses bool) Expression {
+	return &BinOp{
+		expressionBase: newExpressionBase(location),
+		items:          items,
+		inParentheses:  inParentheses,
+	}
 }
 
 type Negate struct {
-	*ExpressionBase
-	Nested Expression
+	*expressionBase
+	nested Expression
+}
+
+func NewNegate(location ast.Location, nested Expression) Expression {
+	return &Negate{
+		expressionBase: newExpressionBase(location),
+		nested:         nested,
+	}
 }
 
 type Var struct {
-	*ExpressionBase
-	Name ast.QualifiedIdentifier
+	*expressionBase
+	name ast.QualifiedIdentifier
+}
+
+func NewVar(location ast.Location, name ast.QualifiedIdentifier) Expression {
+	return &Var{
+		expressionBase: newExpressionBase(location),
+		name:           name,
+	}
 }
 
 type Constructor struct {
-	*ExpressionBase
-	ModuleName ast.QualifiedIdentifier
-	DataName   ast.Identifier
-	OptionName ast.Identifier
-	Args       []Expression
+	*expressionBase
+	moduleName ast.QualifiedIdentifier
+	dataName   ast.Identifier
+	optionName ast.Identifier
+	args       []Expression
+}
+
+func NewConstructor(
+	location ast.Location,
+	moduleName ast.QualifiedIdentifier,
+	dataName ast.Identifier,
+	optionName ast.Identifier,
+	args []Expression,
+) Expression {
+	return &Constructor{
+		expressionBase: newExpressionBase(location),
+		moduleName:     moduleName,
+		dataName:       dataName,
+		optionName:     optionName,
+		args:           args,
+	}
 }
 
 type InfixVar struct {
-	*ExpressionBase
-	Infix ast.InfixIdentifier
+	*expressionBase
+	infix ast.InfixIdentifier
+}
+
+func NewInfixVar(location ast.Location, infix ast.InfixIdentifier) Expression {
+	return &InfixVar{
+		expressionBase: newExpressionBase(location),
+		infix:          infix,
+	}
 }
 
 type NativeCall struct {
-	*ExpressionBase
-	Name ast.FullIdentifier
-	Args []Expression
+	*expressionBase
+	name ast.FullIdentifier
+	args []Expression
+}
+
+func NewNativeCall(location ast.Location, name ast.FullIdentifier, args []Expression) Expression {
+	return &NativeCall{
+		expressionBase: newExpressionBase(location),
+		name:           name,
+		args:           args,
+	}
 }

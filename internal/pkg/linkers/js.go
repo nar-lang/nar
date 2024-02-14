@@ -20,7 +20,7 @@ type JsLinker struct {
 }
 
 func (l *JsLinker) GetOutFileLocation(givenLocation string) string {
-	return filepath.Join(givenLocation, "program.acorn")
+	return filepath.Join(givenLocation, "program.binar")
 }
 
 func (l *JsLinker) Link(
@@ -52,7 +52,7 @@ func (l *JsLinker) Link(
 	}
 
 	indexJs.WriteString("const req = new XMLHttpRequest();\n")
-	indexJs.WriteString("req.open('GET', 'program.acorn', true);\n")
+	indexJs.WriteString("req.open('GET', 'program.binar', true);\n")
 	indexJs.WriteString("req.responseType = 'arraybuffer';\n")
 	indexJs.WriteString("req.onload = function(e) {\n")
 	indexJs.WriteString("    const runtime = new NarRuntime(e.target.response);\n")
