@@ -6,16 +6,21 @@ import (
 	"nar-compiler/internal/pkg/common"
 )
 
-type PRecord struct {
-	*patternBase
-	fields []PRecordField
-}
-
-func NewPRecord(loc ast.Location, fields []PRecordField) Pattern {
+func NewPRecord(loc ast.Location, fields []*PRecordField) Pattern {
 	return &PRecord{
 		patternBase: newPatternBase(loc),
 		fields:      fields,
 	}
+}
+
+type PRecord struct {
+	*patternBase
+	fields []*PRecordField
+}
+
+func (e *PRecord) Iterate(f func(statement Statement)) {
+	f(e)
+	e.patternBase.Iterate(f)
 }
 
 type PRecordField struct {
@@ -23,8 +28,8 @@ type PRecordField struct {
 	name     ast.Identifier
 }
 
-func NewPRecordField(loc ast.Location, name ast.Identifier) PRecordField {
-	return PRecordField{
+func NewPRecordField(loc ast.Location, name ast.Identifier) *PRecordField {
+	return &PRecordField{
 		location: loc,
 		name:     name,
 	}
@@ -39,9 +44,9 @@ func (e *PRecord) normalize(
 	var declaredType normalized.Type
 	var err error
 	if e.declaredType != nil {
-		declaredType, err = e.declaredType.normalize(modules, module, nil, nil)
+		declaredType, err = e.declaredType.normalize(modules, module, nil)
 	}
-	fields := common.Map(func(x PRecordField) *normalized.PRecordField {
+	fields := common.Map(func(x *PRecordField) *normalized.PRecordField {
 		locals[x.name] = normalized.NewPNamed(x.location, nil, x.name)
 		return normalized.NewPRecordField(x.location, x.name)
 	}, e.fields)

@@ -53,8 +53,8 @@ func Compile(
 
 		for _, modulePath := range pkg.Sources {
 			var parsedModule *parsed.Module
-			for _, m := range parsedModules { //todo: can use hashmap
-				if m.GetLocation().FilePath() == modulePath {
+			for _, m := range parsedModules {
+				if m.Location().FilePath() == modulePath {
 					parsedModule = m
 				}
 			}
@@ -77,8 +77,8 @@ func Compile(
 				parsedModule.SetReferencedPackages(referencedPackages)
 				if existedModule, ok := parsedModules[parsedModule.Name()]; ok {
 					log.Err(common.Error{
-						Location: parsedModule.GetLocation(),
-						Extra:    []ast.Location{existedModule.GetLocation()},
+						Location: parsedModule.Location(),
+						Extra:    []ast.Location{existedModule.Location()},
 						Message:  fmt.Sprintf("module name collision: `%s`", existedModule.Name()),
 					})
 				}
@@ -99,7 +99,7 @@ func Compile(
 
 	for _, name := range affectedModuleNames {
 		m := parsedModules[name]
-		err := m.PreNormalize(parsedModules)
+		err := m.Generate(parsedModules)
 		log.Err(err...)
 	}
 

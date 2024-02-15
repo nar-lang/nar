@@ -5,15 +5,24 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
+func NewList(location ast.Location, items []Expression) Expression {
+	return &List{
+		expressionBase: newExpressionBase(location),
+		items:          items,
+	}
+}
+
 type List struct {
 	*expressionBase
 	items []Expression
 }
 
-func NewList(location ast.Location, items []Expression) Expression {
-	return &List{
-		expressionBase: newExpressionBase(location),
-		items:          items,
+func (e *List) Iterate(f func(statement Statement)) {
+	f(e)
+	for _, item := range e.items {
+		if item != nil {
+			item.Iterate(f)
+		}
 	}
 }
 

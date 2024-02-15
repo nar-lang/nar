@@ -52,7 +52,7 @@ func (s *server) compiler() {
 		for name, mod := range s.parsedModules {
 			for uri := range modifiedDocs {
 				path := uriToPath(uri)
-				if mod.GetLocation().FilePath() == path {
+				if mod.Location().FilePath() == path {
 					delete(s.parsedModules, name)
 					delete(s.normalizedModules, name)
 					delete(s.typedModules, name)
@@ -156,7 +156,7 @@ func (s *server) compile(pkgNames []ast.PackageIdentifier) {
 
 	for _, moduleName := range affectedModuleNames {
 		if mod, ok := s.parsedModules[moduleName]; ok {
-			uri := pathToUri(mod.GetLocation().FilePath())
+			uri := pathToUri(mod.Location().FilePath())
 			if _, reported := diagnosticData[uri]; !reported {
 				s.notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
 					URI:         uri,

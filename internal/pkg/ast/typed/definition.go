@@ -156,11 +156,21 @@ func (def *Definition) Code(currentModule ast.QualifiedIdentifier) string {
 	if params != "" {
 		params = "(" + params + ")"
 	}
-	//TODO: type
-	if def.body == nil {
-		return fmt.Sprintf("def %s%s", def.name, params)
+	var typeString string
+	switch def.declaredType.(type) {
+	case nil:
+		break
+	case *TFunc:
+		typeString = ": " + def.declaredType.(*TFunc).return_.Code(currentModule)
+		break
+	default:
+		typeString = ": " + def.declaredType.Code(currentModule)
+		break
 	}
-	return fmt.Sprintf("def %s%s = %s", def.name, params, def.body.Code(currentModule))
+	if def.body == nil {
+		return fmt.Sprintf("def %s%s%s", def.name, params, typeString)
+	}
+	return fmt.Sprintf("def %s%s%s = %s", def.name, params, typeString, def.body.Code(currentModule))
 }
 
 func (def *Definition) Bytecode(pathId ast.FullIdentifier, binary *bytecode.Binary) bytecode.Func {

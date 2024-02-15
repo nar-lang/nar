@@ -16,9 +16,9 @@ var (
 	NarBaseBasicsName = ast.QualifiedIdentifier("Nar.Base.Basics")
 	NarBaseMathName   = ast.QualifiedIdentifier("Nar.Base.Math")
 
-	NarBaseBasicsTrueName  = ast.Identifier("True")
-	NarBaseBasicsFalseName = ast.Identifier("False") //todo: qualified?
-	NarBaseMathNegName     = ast.Identifier("neg")
+	NarTrueName  = ast.Identifier("True")
+	NarFalseName = ast.Identifier("False")
+	NarNegName   = ast.Identifier("neg")
 
 	NarBaseCharChar     = MakeFullIdentifier("Nar.Base.Char", "Char")
 	NarBaseMathInt      = MakeFullIdentifier(NarBaseMathName, "Int")

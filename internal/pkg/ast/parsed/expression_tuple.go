@@ -5,15 +5,24 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
+func NewTuple(location ast.Location, items []Expression) Expression {
+	return &Tuple{
+		expressionBase: newExpressionBase(location),
+		items:          items,
+	}
+}
+
 type Tuple struct {
 	*expressionBase
 	items []Expression
 }
 
-func NewTuple(location ast.Location, items []Expression) Expression {
-	return &Tuple{
-		expressionBase: newExpressionBase(location),
-		items:          items,
+func (e *Tuple) Iterate(f func(statement Statement)) {
+	f(e)
+	for _, item := range e.items {
+		if item != nil {
+			item.Iterate(f)
+		}
 	}
 }
 

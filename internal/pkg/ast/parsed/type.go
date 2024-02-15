@@ -7,11 +7,9 @@ import (
 
 type Type interface {
 	Statement
-	normalize(
-		modules map[ast.QualifiedIdentifier]*Module, module *Module, typeModule *Module, namedTypes namedTypeMap,
-	) (normalized.Type, error)
-	Successor() normalized.Type
+	normalize(modules map[ast.QualifiedIdentifier]*Module, module *Module, namedTypes namedTypeMap) (normalized.Type, error)
 	setSuccessor(p normalized.Type) (normalized.Type, error)
+	applyArgs(params map[ast.Identifier]Type, loc ast.Location) (Type, error)
 }
 
 type typeBase struct {
@@ -25,13 +23,13 @@ func newTypeBase(loc ast.Location) *typeBase {
 	}
 }
 
-func (t *typeBase) GetLocation() ast.Location {
+func (t *typeBase) Location() ast.Location {
 	return t.location
 }
 
 func (*typeBase) _parsed() {}
 
-func (t *typeBase) Successor() normalized.Type {
+func (t *typeBase) Successor() normalized.Statement {
 	return t.successor
 }
 

@@ -6,17 +6,30 @@ import (
 	"nar-compiler/internal/pkg/common"
 )
 
-type If struct {
-	*expressionBase
-	condition, positive, negative Expression
-}
-
 func NewIf(location ast.Location, condition, positive, negative Expression) Expression {
 	return &If{
 		expressionBase: newExpressionBase(location),
 		condition:      condition,
 		positive:       positive,
 		negative:       negative,
+	}
+}
+
+type If struct {
+	*expressionBase
+	condition, positive, negative Expression
+}
+
+func (e *If) Iterate(f func(statement Statement)) {
+	f(e)
+	if e.condition != nil {
+		e.condition.Iterate(f)
+	}
+	if e.positive != nil {
+		e.positive.Iterate(f)
+	}
+	if e.negative != nil {
+		e.negative.Iterate(f)
 	}
 }
 
@@ -27,12 +40,12 @@ func (e *If) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	boolType := normalized.NewTData(
-		e.condition.GetLocation(),
+		e.condition.Location(),
 		common.NarBaseBasicsBool,
 		nil,
 		[]*normalized.DataOption{
-			normalized.NewDataOption(common.NarBaseBasicsTrueName, false, nil),
-			normalized.NewDataOption(common.NarBaseBasicsFalseName, false, nil),
+			normalized.NewDataOption(common.NarTrueName, false, nil),
+			normalized.NewDataOption(common.NarFalseName, false, nil),
 		},
 	)
 	condition, err := e.condition.normalize(locals, modules, module, normalizedModule)
@@ -52,14 +65,14 @@ func (e *If) normalize(
 		condition,
 		[]*normalized.SelectCase{
 			normalized.NewSelectCase(
-				e.positive.GetLocation(),
+				e.positive.Location(),
 				normalized.NewPOption(
-					e.positive.GetLocation(), boolType, common.NarBaseBasicsName, common.NarBaseBasicsTrueName, nil),
+					e.positive.Location(), boolType, common.NarBaseBasicsName, common.NarTrueName, nil),
 				positive),
 			normalized.NewSelectCase(
-				e.negative.GetLocation(),
+				e.negative.Location(),
 				normalized.NewPOption(
-					e.negative.GetLocation(), boolType, common.NarBaseBasicsName, common.NarBaseBasicsFalseName, nil),
+					e.negative.Location(), boolType, common.NarBaseBasicsName, common.NarFalseName, nil),
 				negative),
 		}))
 }

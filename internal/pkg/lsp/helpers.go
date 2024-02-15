@@ -1,21 +1,20 @@
 package lsp
 
 import (
-	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/ast/parsed"
 	"nar-compiler/internal/pkg/lsp/protocol"
 )
 
 func (s *server) statementAtLocation(docURI protocol.DocumentURI, line, char uint32) (withLocation, *parsed.Module) {
-	path := uriToPath(docURI)
-	for _, m := range s.parsedModules {
-		if m.GetLocation().FilePath() == path {
-			loc := ast.NewLocationSrc(path, m.GetLocation().FileContent(), line, char)
-			at := atLocation{loc: loc}
-			at = parsed.FoldModule(find[parsed.Expression], find[parsed.Type], find[parsed.Pattern], at, m)
-			return at.stmt, m
-		}
-	}
+	//path := uriToPath(docURI)
+	//for _, m := range s.parsedModules {
+	//	if m.Location().FilePath() == path {
+	//		loc := ast.NewLocationSrc(path, m.Location().FileContent(), line, char)
+	//		at := atLocation{loc: loc}
+	//		at = parsed.Iterate(find[parsed.Expression], find[parsed.Type], find[parsed.Pattern], at, m)
+	//		return at.stmt, m
+	//	}
+	//}
 	return nil, nil
 }
 
@@ -50,7 +49,7 @@ func (s *server) findStatementDefinition(stmt withLocation, m *parsed.Module) (s
 	//			{
 	//				l := succ.(normalized.Local)
 	//				if tm, ok := s.typedModules[m.name()]; ok && l.Target != nil {
-	//					at := atLocation{loc: l.Target.GetLocation()}
+	//					at := atLocation{loc: l.Target.Location()}
 	//					at = typed.FoldModule(
 	//						find[typed.Expression],
 	//						find[typed.Type],
@@ -78,7 +77,7 @@ func (s *server) findStatementDefinition(stmt withLocation, m *parsed.Module) (s
 	//				findSuccessors[typed.Expression],
 	//				findSuccessors[typed.Type],
 	//				findSuccessors[typed.Pattern],
-	//				successors{loc: x.GetLocation()},
+	//				successors{loc: x.Location()},
 	//				s.typedModules[m.name()])
 	//			for _, stmt := range succ.stmts {
 	//				switch stmt.(type) {
@@ -95,7 +94,7 @@ func (s *server) findStatementDefinition(stmt withLocation, m *parsed.Module) (s
 	//		findSuccessors[typed.Expression],
 	//		findSuccessors[typed.Type],
 	//		findSuccessors[typed.Pattern],
-	//		successors{loc: stmt.GetLocation()},
+	//		successors{loc: stmt.Location()},
 	//		s.typedModules[m.name()])
 	//	for _, stmt := range succ.stmts {
 	//		switch stmt.(type) {
@@ -122,7 +121,7 @@ func (s *server) findStatementDefinition(stmt withLocation, m *parsed.Module) (s
 	//	break
 	//case nil:
 	//	//for _, pDef := range m.definitions {
-	//	//	if pDef.location.Contains(stmt.GetLocation()) {
+	//	//	if pDef.location.Contains(stmt.Location()) {
 	//	//		for _, tDef := range s.typedModules[m.name()].Definitions {
 	//	//			if tDef.name == pDef.name {
 	//	//				result = tDef
@@ -139,7 +138,7 @@ func (s *server) findStatementDefinition(stmt withLocation, m *parsed.Module) (s
 
 func (s *server) getModuleOfStatement(stmt withLocation) *parsed.Module {
 	for _, m := range s.parsedModules {
-		if m.GetLocation().FilePath() == stmt.GetLocation().FilePath() {
+		if m.Location().FilePath() == stmt.Location().FilePath() {
 			return m
 		}
 	}

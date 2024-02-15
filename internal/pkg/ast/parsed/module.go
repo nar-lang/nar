@@ -5,125 +5,18 @@ import (
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/ast/normalized"
 	"nar-compiler/internal/pkg/common"
-	"slices"
 	"strings"
+	"unicode"
 )
-
-type Import struct {
-	location         ast.Location
-	moduleIdentifier ast.QualifiedIdentifier
-	alias            *ast.Identifier
-	exposingAll      bool
-	exposing         []string
-}
-
-func NewImport(
-	loc ast.Location, module ast.QualifiedIdentifier, alias *ast.Identifier, exposingAll bool, exposing []string,
-) *Import {
-	return &Import{
-		location:         loc,
-		moduleIdentifier: module,
-		alias:            alias,
-		exposingAll:      exposingAll,
-		exposing:         exposing,
-	}
-}
-
-type Alias struct {
-	location ast.Location
-	hidden   bool
-	name     ast.Identifier
-	params   []ast.Identifier
-	type_    Type
-}
-
-func NewAlias(loc ast.Location, hidden bool, name ast.Identifier, params []ast.Identifier, type_ Type) *Alias {
-	return &Alias{
-		location: loc,
-		hidden:   hidden,
-		name:     name,
-		params:   params,
-		type_:    type_,
-	}
-}
-
-type Associativity int
-
-const (
-	Left  Associativity = -1
-	None                = 0
-	Right               = 1
-)
-
-type Infix struct {
-	location      ast.Location
-	hidden        bool
-	name          ast.InfixIdentifier
-	associativity Associativity
-	precedence    int
-	aliasLocation ast.Location
-	alias         ast.Identifier
-}
-
-func NewInfix(
-	loc ast.Location, hidden bool, name ast.InfixIdentifier, associativity Associativity,
-	precedence int, aliasLoc ast.Location, alias ast.Identifier,
-) *Infix {
-	return &Infix{
-		location:      loc,
-		hidden:        hidden,
-		name:          name,
-		associativity: associativity,
-		precedence:    precedence,
-		aliasLocation: aliasLoc,
-		alias:         alias,
-	}
-}
-
-type DataTypeOption struct {
-	location ast.Location
-	hidden   bool
-	name     ast.Identifier
-	values   []Type
-}
-
-func NewDataTypeOption(loc ast.Location, hidden bool, name ast.Identifier, values []Type) *DataTypeOption {
-	return &DataTypeOption{
-		location: loc,
-		hidden:   hidden,
-		name:     name,
-		values:   values,
-	}
-}
-
-type DataType struct {
-	location ast.Location
-	hidden   bool
-	name     ast.Identifier
-	params   []ast.Identifier
-	options  []*DataTypeOption
-}
-
-func NewDataType(
-	loc ast.Location, hidden bool, name ast.Identifier, params []ast.Identifier, options []*DataTypeOption,
-) *DataType {
-	return &DataType{
-		location: loc,
-		hidden:   hidden,
-		name:     name,
-		params:   params,
-		options:  options,
-	}
-}
 
 type Module struct {
 	name        ast.QualifiedIdentifier
 	location    ast.Location
-	imports     []*Import
-	aliases     []*Alias
-	infixFns    []*Infix
-	definitions []*Definition
-	dataTypes   []*DataType
+	imports     []Import
+	aliases     []Alias
+	infixFns    []Infix
+	definitions []Definition
+	dataTypes   []DataType
 
 	packageName        ast.PackageIdentifier
 	referencedPackages map[ast.PackageIdentifier]struct{}
@@ -131,7 +24,7 @@ type Module struct {
 
 func NewModule(
 	name ast.QualifiedIdentifier, loc ast.Location,
-	imports []*Import, aliases []*Alias, infixFns []*Infix, definitions []*Definition, dataTypes []*DataType,
+	imports []Import, aliases []Alias, infixFns []Infix, definitions []Definition, dataTypes []DataType,
 ) *Module {
 	return &Module{
 		name:               name,
@@ -149,7 +42,7 @@ func (module *Module) Name() ast.QualifiedIdentifier {
 	return module.name
 }
 
-func (module *Module) GetLocation() ast.Location {
+func (module *Module) Location() ast.Location {
 	return module.location
 }
 
@@ -165,10 +58,13 @@ func (module *Module) SetReferencedPackages(referencedPackages map[ast.PackageId
 	module.referencedPackages = referencedPackages
 }
 
-func (module *Module) PreNormalize(
-	modules map[ast.QualifiedIdentifier]*Module,
-) (errors []error) {
-	module.flattenDataTypes()
+func (module *Module) Generate(modules map[ast.QualifiedIdentifier]*Module) (errors []error) {
+	for _, dt := range module.dataTypes {
+		alias, defs := dt.flatten(module.name)
+		module.aliases = append(module.aliases, alias)
+		module.definitions = append(module.definitions, defs...)
+	}
+
 	return module.unwrapImports(modules)
 }
 
@@ -211,108 +107,281 @@ func (module *Module) Normalize(
 	return
 }
 
-func (module *Module) flattenDataTypes() {
-	for _, it := range module.dataTypes {
-		typeArgs := common.Map(func(x ast.Identifier) Type {
-			return NewTParameter(it.location, x)
-		}, it.params)
-
-		dataType := NewTData(
-			it.location,
-			common.MakeFullIdentifier(module.name, it.name),
-			typeArgs,
-			common.Map(func(x *DataTypeOption) DataOption {
-				return NewDataOption(x.name, x.hidden, x.values)
-			}, it.options),
-		)
-		module.aliases = append(module.aliases, NewAlias(it.location, it.hidden, it.name, it.params, dataType))
-		for _, option := range it.options {
-			type_ := dataType
-			if len(option.values) > 0 {
-				type_ = NewTFunc(it.location, option.values, type_)
-			}
-			body := NewConstructor(
-				option.location,
-				module.name,
-				it.name,
-				option.name,
-				common.Map(
-					func(i int) Expression {
-						return NewVar(option.location, ast.QualifiedIdentifier(fmt.Sprintf("p%d", i)))
-					},
-					common.Range(0, len(option.values)),
-				))
-
-			params := common.Map(
-				func(i int) Pattern {
-					return NewPNamed(option.location, ast.Identifier(fmt.Sprintf("p%d", i)))
-				},
-				common.Range(0, len(option.values)),
-			)
-
-			module.definitions = append(module.definitions,
-				NewDefinition(option.location, option.hidden || it.hidden, option.name, params, body, type_))
+func (module *Module) unwrapImports(modules map[ast.QualifiedIdentifier]*Module) (errors []error) {
+	for _, imp := range module.imports {
+		err := imp.unwrap(modules)
+		if err != nil {
+			errors = append(errors, err)
+			continue
 		}
+	}
+	return
+}
+
+func (module *Module) Iterate(f func(statement Statement)) {
+	for _, alias := range module.aliases {
+		if alias != nil {
+			alias.Iterate(f)
+		}
+	}
+	for _, def := range module.definitions {
+		def.Iterate(f)
 	}
 }
 
-func (module *Module) unwrapImports(modules map[ast.QualifiedIdentifier]*Module) (errors []error) {
-	for i, imp := range module.imports {
-		m, ok := modules[imp.moduleIdentifier]
-		if !ok {
-			errors = append(errors, common.Error{
-				Location: imp.location,
-				Message:  fmt.Sprintf("module `%s` not found", imp.moduleIdentifier),
-			})
-			continue
-		}
-		modName := m.name
-		if imp.alias != nil {
-			modName = ast.QualifiedIdentifier(*imp.alias)
-		}
-		shortModName := ast.QualifiedIdentifier("")
-		lastDotIndex := strings.LastIndex(string(modName), ".")
-		if lastDotIndex >= 0 {
-			shortModName = modName[lastDotIndex+1:]
-		}
+func (module *Module) findInfixFn(
+	modules map[ast.QualifiedIdentifier]*Module, name ast.InfixIdentifier,
+) (Infix, *Module, []ast.FullIdentifier) {
+	//1. search in current module
+	var infNameEq = func(x Infix) bool { return x.name() == name }
+	if inf, ok := common.Find(infNameEq, module.infixFns); ok {
+		return inf, module, []ast.FullIdentifier{common.MakeFullIdentifier(module.name, inf.alias())}
+	}
 
-		var exp []string
-		expose := func(n string, exn string) {
-			if imp.exposingAll || slices.Contains(imp.exposing, exn) {
-				exp = append(exp, n)
-			}
-			exp = append(exp, fmt.Sprintf("%s.%s", modName, n))
-			if shortModName != "" {
-				exp = append(exp, fmt.Sprintf("%s.%s", shortModName, n))
+	//2. search in imported modules
+	if modules != nil {
+		for _, imp := range module.imports {
+			if imp.exposes(string(name)) {
+				return modules[imp.module()].findInfixFn(nil, name)
 			}
 		}
 
-		for _, d := range m.definitions {
-			if !d.hidden {
-				expose(string(d.name), string(d.name))
+		//6. search all modules
+		var rInfix Infix
+		var rModule *Module
+		var rIdent []ast.FullIdentifier
+		for _, submodule := range modules {
+			if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+				if foundInfix, foundModule, foundId := submodule.findInfixFn(nil, name); foundId != nil {
+					rInfix = foundInfix
+					rModule = foundModule
+					rIdent = append(rIdent, foundId...)
+				}
+			}
+		}
+		return rInfix, rModule, rIdent
+	}
+	return nil, nil, nil
+}
+
+func (module *Module) findType(
+	modules map[ast.QualifiedIdentifier]*Module,
+	name ast.QualifiedIdentifier,
+	args []Type,
+	loc ast.Location,
+) (Type, *Module, []ast.FullIdentifier, error) {
+	var aliasNameEq = func(x Alias) bool { return ast.QualifiedIdentifier(x.name()) == name }
+
+	// 1. check current module
+	if typeAlias, ok := common.Find(aliasNameEq, module.aliases); ok {
+		type_, id, err := typeAlias.inferType(module.name, args)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return type_, module, []ast.FullIdentifier{id}, nil
+	}
+
+	lastDot := strings.LastIndex(string(name), ".")
+	typeName := name[lastDot+1:]
+	modName := ""
+	if lastDot >= 0 {
+		modName = string(name[:lastDot])
+	}
+
+	//2. search in imported modules
+	if modules != nil {
+		var rType Type
+		var rModule *Module
+		var rIdent []ast.FullIdentifier
+
+		for _, imp := range module.imports {
+
+			if imp.exposes(string(name)) {
+				return modules[imp.module()].findType(nil, typeName, args, loc)
 			}
 		}
 
-		for _, a := range m.aliases {
-			if !a.hidden {
-				expose(string(a.name), string(a.name))
-				if dt, ok := a.type_.(*TData); ok {
-					for _, v := range dt.options {
-						if !v.hidden {
-							expose(string(v.name), string(a.name))
+		//3. search in all modules by qualified name
+		if modName != "" {
+			if submodule, ok := modules[ast.QualifiedIdentifier(modName)]; ok {
+				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+					return submodule.findType(nil, typeName, args, loc)
+				}
+			}
+
+			//4. search in all modules by short name
+			modName = "." + modName
+			for modId, submodule := range modules {
+				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+					if strings.HasSuffix(string(modId), modName) {
+						foundType, foundModule, foundId, err := submodule.findType(nil, typeName, args, loc)
+						if err != nil {
+							return nil, nil, nil, err
+						}
+						if foundId != nil {
+							rType = foundType
+							rModule = foundModule
+							rIdent = append(rIdent, foundId...)
 						}
 					}
 				}
 			}
-		}
-
-		for _, a := range m.infixFns {
-			if !a.hidden {
-				expose(string(a.name), string(a.name))
+			if len(rIdent) != 0 {
+				return rType, rModule, rIdent, nil
 			}
 		}
-		imp.exposing = exp
-		module.imports[i] = imp
+
+		//5. search by type name as module name
+		if unicode.IsUpper([]rune(typeName)[0]) {
+			modDotName := string("." + typeName)
+			for modId, submodule := range modules {
+				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+					if strings.HasSuffix(string(modId), modDotName) || modId == typeName {
+						foundType, foundModule, foundId, err := submodule.findType(nil, typeName, args, loc)
+						if err != nil {
+							return nil, nil, nil, err
+						}
+						if foundId != nil {
+							rType = foundType
+							rModule = foundModule
+							rIdent = append(rIdent, foundId...)
+						}
+					}
+				}
+			}
+			if len(rIdent) != 0 {
+				return rType, rModule, rIdent, nil
+			}
+		}
+
+		if modName == "" {
+			//6. search all modules
+			for _, submodule := range modules {
+				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+					foundType, foundModule, foundId, err := submodule.findType(nil, typeName, args, loc)
+					if err != nil {
+						return nil, nil, nil, err
+					}
+					if foundId != nil {
+						rType = foundType
+						rModule = foundModule
+						rIdent = append(rIdent, foundId...)
+					}
+				}
+			}
+			if len(rIdent) != 0 {
+				return rType, rModule, rIdent, nil
+			}
+		}
 	}
-	return
+
+	return nil, nil, nil, nil
+}
+
+func (module *Module) findDefinitionAndAddDependency(
+	modules map[ast.QualifiedIdentifier]*Module,
+	name ast.QualifiedIdentifier,
+	normalizedModule *normalized.Module,
+) (Definition, *Module, []ast.FullIdentifier) {
+	d, m, id := module.findDefinition(modules, name)
+	if len(id) == 1 {
+		normalizedModule.AddDependencies(m.name, d.name())
+	}
+	return d, m, id
+}
+
+func (module *Module) findDefinition(
+	modules map[ast.QualifiedIdentifier]*Module, name ast.QualifiedIdentifier,
+) (Definition, *Module, []ast.FullIdentifier) {
+	var defNameEq = func(x Definition) bool {
+		return ast.QualifiedIdentifier(x.name()) == name
+	}
+
+	//1. search in current module
+	if def, ok := common.Find(defNameEq, module.definitions); ok {
+		return def, module, []ast.FullIdentifier{common.MakeFullIdentifier(module.name, def.name())}
+	}
+
+	lastDot := strings.LastIndex(string(name), ".")
+	defName := name[lastDot+1:]
+	modName := ""
+	if lastDot >= 0 {
+		modName = string(name[:lastDot])
+	}
+
+	//2. search in imported modules
+	if modules != nil {
+		for _, imp := range module.imports {
+			if imp.exposes(string(name)) {
+				return modules[imp.module()].findDefinition(nil, defName)
+			}
+		}
+
+		var rDef Definition
+		var rModule *Module
+		var rIdent []ast.FullIdentifier
+
+		//3. search in all modules by qualified name
+		if modName != "" {
+			if submodule, ok := modules[ast.QualifiedIdentifier(modName)]; ok {
+				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+					return submodule.findDefinition(nil, defName)
+				}
+			}
+
+			//4. search in all modules by short name
+			modName = "." + modName
+			for modId, submodule := range modules {
+				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+					if strings.HasSuffix(string(modId), modName) {
+						if d, m, i := submodule.findDefinition(nil, defName); len(i) != 0 {
+							rDef = d
+							rModule = m
+							rIdent = append(rIdent, i...)
+						}
+					}
+				}
+			}
+			if len(rIdent) != 0 {
+				return rDef, rModule, rIdent
+			}
+		}
+
+		//5. search by definition name as module name
+		if len(defName) > 0 && unicode.IsUpper([]rune(defName)[0]) {
+			modDotName := string("." + defName)
+			for modId, submodule := range modules {
+				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+					if strings.HasSuffix(string(modId), modDotName) || modId == defName {
+						if d, m, i := submodule.findDefinition(nil, defName); len(i) != 0 {
+							rDef = d
+							rModule = m
+							rIdent = append(rIdent, i...)
+						}
+					}
+				}
+			}
+			if len(rIdent) != 0 {
+				return rDef, rModule, rIdent
+			}
+		}
+
+		if modName == "" {
+			//6. search all modules
+			for _, submodule := range modules {
+				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+					if d, m, i := submodule.findDefinition(nil, defName); len(i) != 0 {
+						rDef = d
+						rModule = m
+						rIdent = append(rIdent, i...)
+					}
+				}
+			}
+			if len(rIdent) != 0 {
+				return rDef, rModule, rIdent
+			}
+		}
+	}
+
+	return nil, nil, nil
 }

@@ -48,7 +48,6 @@ func (module *Module) CheckTypes() (errors []error) {
 			err := def.solveTypes(nil)
 			if err != nil {
 				errors = append(errors, err)
-				return //TODO: remove return
 			}
 		}
 	}

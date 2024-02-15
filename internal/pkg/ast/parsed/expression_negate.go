@@ -6,15 +6,22 @@ import (
 	"nar-compiler/internal/pkg/common"
 )
 
+func NewNegate(location ast.Location, nested Expression) Expression {
+	return &Negate{
+		expressionBase: newExpressionBase(location),
+		nested:         nested,
+	}
+}
+
 type Negate struct {
 	*expressionBase
 	nested Expression
 }
 
-func NewNegate(location ast.Location, nested Expression) Expression {
-	return &Negate{
-		expressionBase: newExpressionBase(location),
-		nested:         nested,
+func (e *Negate) Iterate(f func(statement Statement)) {
+	f(e)
+	if e.nested != nil {
+		e.nested.Iterate(f)
 	}
 }
 
@@ -30,7 +37,7 @@ func (e *Negate) normalize(
 	}
 	return e.setSuccessor(normalized.NewApply(
 		e.location,
-		normalized.NewGlobal(e.location, common.NarBaseMathName, common.NarBaseMathNegName),
+		normalized.NewGlobal(e.location, common.NarBaseMathName, common.NarNegName),
 		[]normalized.Expression{nested},
 	))
 }

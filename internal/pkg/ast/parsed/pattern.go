@@ -15,14 +15,7 @@ type Pattern interface {
 	) (normalized.Pattern, error)
 	Type() Type
 	SetDeclaredType(decl Type)
-	Successor() normalized.Pattern
 	setSuccessor(n normalized.Pattern) normalized.Pattern
-}
-
-type patternBase struct {
-	location     ast.Location
-	declaredType Type
-	successor    normalized.Pattern
 }
 
 func newPatternBase(loc ast.Location) *patternBase {
@@ -31,7 +24,13 @@ func newPatternBase(loc ast.Location) *patternBase {
 	}
 }
 
-func (p *patternBase) GetLocation() ast.Location {
+type patternBase struct {
+	location     ast.Location
+	declaredType Type
+	successor    normalized.Pattern
+}
+
+func (p *patternBase) Location() ast.Location {
 	return p.location
 }
 
@@ -45,11 +44,17 @@ func (p *patternBase) Type() Type {
 	return p.declaredType
 }
 
-func (p *patternBase) Successor() normalized.Pattern {
+func (p *patternBase) Successor() normalized.Statement {
 	return p.successor
 }
 
 func (p *patternBase) setSuccessor(n normalized.Pattern) normalized.Pattern {
 	p.successor = n
 	return n
+}
+
+func (p *patternBase) Iterate(f func(statement Statement)) {
+	if p.declaredType != nil {
+		f(p.declaredType)
+	}
 }

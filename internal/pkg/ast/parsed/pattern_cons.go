@@ -6,17 +6,28 @@ import (
 	"nar-compiler/internal/pkg/common"
 )
 
-type PCons struct {
-	*patternBase
-	head, tail Pattern
-}
-
 func NewPCons(loc ast.Location, head, tail Pattern) Pattern {
 	return &PCons{
 		patternBase: newPatternBase(loc),
 		head:        head,
 		tail:        tail,
 	}
+}
+
+type PCons struct {
+	*patternBase
+	head, tail Pattern
+}
+
+func (e *PCons) Iterate(f func(statement Statement)) {
+	f(e)
+	if e.head != nil {
+		e.head.Iterate(f)
+	}
+	if e.tail != nil {
+		e.tail.Iterate(f)
+	}
+	e.patternBase.Iterate(f)
 }
 
 func (e *PCons) normalize(
@@ -30,7 +41,7 @@ func (e *PCons) normalize(
 	var declaredType normalized.Type
 	var err3 error
 	if e.declaredType != nil {
-		declaredType, err3 = e.declaredType.normalize(modules, module, nil, nil)
+		declaredType, err3 = e.declaredType.normalize(modules, module, nil)
 	}
 	return e.setSuccessor(normalized.NewPCons(e.location, declaredType, head, tail)),
 		common.MergeErrors(err1, err2, err3)

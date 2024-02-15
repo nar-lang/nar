@@ -5,17 +5,29 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
+func NewApply(location ast.Location, function Expression, args []Expression) Expression {
+	return &Apply{
+		expressionBase: newExpressionBase(location),
+		func_:          function,
+		args:           args,
+	}
+}
+
 type Apply struct {
 	*expressionBase
 	func_ Expression
 	args  []Expression
 }
 
-func NewApply(location ast.Location, function Expression, args []Expression) Expression {
-	return &Apply{
-		expressionBase: newExpressionBase(location),
-		func_:          function,
-		args:           args,
+func (e *Apply) Iterate(f func(statement Statement)) {
+	f(e)
+	if e.func_ != nil {
+		e.func_.Iterate(f)
+	}
+	for _, arg := range e.args {
+		if arg != nil {
+			arg.Iterate(f)
+		}
 	}
 }
 

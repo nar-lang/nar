@@ -6,16 +6,26 @@ import (
 	"nar-compiler/internal/pkg/common"
 )
 
-type PTuple struct {
-	*patternBase
-	items []Pattern
-}
-
 func NewPTuple(loc ast.Location, items []Pattern) Pattern {
 	return &PTuple{
 		patternBase: newPatternBase(loc),
 		items:       items,
 	}
+}
+
+type PTuple struct {
+	*patternBase
+	items []Pattern
+}
+
+func (e *PTuple) Iterate(f func(statement Statement)) {
+	f(e)
+	for _, item := range e.items {
+		if item != nil {
+			item.Iterate(f)
+		}
+	}
+	e.patternBase.Iterate(f)
 }
 
 func (e *PTuple) normalize(
@@ -34,19 +44,17 @@ func (e *PTuple) normalize(
 	var declaredType normalized.Type
 	if e.declaredType != nil {
 		var err error
-		declaredType, err = e.declaredType.normalize(modules, module, nil, nil)
+		declaredType, err = e.declaredType.normalize(modules, module, nil)
 		errors = append(errors, err)
 	}
 	return e.setSuccessor(normalized.NewPTuple(e.location, declaredType, items)),
 		common.MergeErrors(errors...)
 }
 
-func (t *TTuple) normalize(
-	modules map[ast.QualifiedIdentifier]*Module, module *Module, typeModule *Module, namedTypes namedTypeMap,
-) (normalized.Type, error) {
+func (t *TTuple) normalize(modules map[ast.QualifiedIdentifier]*Module, module *Module, namedTypes namedTypeMap) (normalized.Type, error) {
 	var items []normalized.Type
 	for _, item := range t.items {
-		nItem, err := item.normalize(modules, module, typeModule, namedTypes)
+		nItem, err := item.normalize(modules, module, namedTypes)
 		if err != nil {
 			return nil, err
 		}

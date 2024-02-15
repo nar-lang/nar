@@ -6,16 +6,6 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
-type Function struct {
-	*expressionBase
-	name         ast.Identifier
-	nameLocation ast.Location
-	params       []Pattern
-	body         Expression
-	declaredType Type
-	nested       Expression
-}
-
 func NewFunction(
 	location ast.Location, name ast.Identifier, nameLocation ast.Location,
 	params []Pattern, body Expression, declaredType Type, nested Expression,
@@ -28,6 +18,34 @@ func NewFunction(
 		body:           body,
 		declaredType:   declaredType,
 		nested:         nested,
+	}
+}
+
+type Function struct {
+	*expressionBase
+	name         ast.Identifier
+	nameLocation ast.Location
+	params       []Pattern
+	body         Expression
+	declaredType Type
+	nested       Expression
+}
+
+func (e *Function) Iterate(f func(statement Statement)) {
+	f(e)
+	for _, param := range e.params {
+		if param != nil {
+			param.Iterate(f)
+		}
+	}
+	if e.declaredType != nil {
+		e.declaredType.Iterate(f)
+	}
+	if e.body != nil {
+		e.body.Iterate(f)
+	}
+	if e.nested != nil {
+		e.nested.Iterate(f)
 	}
 }
 
@@ -57,7 +75,7 @@ func (e *Function) normalize(
 	}
 	var declaredType normalized.Type
 	if e.declaredType != nil {
-		declaredType, err = e.declaredType.normalize(modules, module, nil, nil)
+		declaredType, err = e.declaredType.normalize(modules, module, nil)
 		if err != nil {
 			return nil, err
 		}

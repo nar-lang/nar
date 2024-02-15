@@ -3,27 +3,8 @@ package parsed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/normalized"
 	"nar-compiler/internal/pkg/common"
 )
-
-func normalizeExpressionSafe(
-	locals map[ast.Identifier]normalized.Pattern,
-	modules map[ast.QualifiedIdentifier]*Module,
-	module *Module,
-	normalizedModule *normalized.Module,
-	expr Expression) (normalized.Expression, error) {
-
-	if expr == nil {
-		return nil, nil
-	}
-	normalizedExpression, err := expr.normalize(locals, modules, module, normalizedModule)
-	if err != nil {
-		return nil, err
-	}
-	expr.setSuccessor(normalizedExpression)
-	return normalizedExpression, nil
-}
 
 func newAmbiguousInfixError(ids []ast.FullIdentifier, name ast.InfixIdentifier, loc ast.Location) error {
 	if len(ids) == 0 {

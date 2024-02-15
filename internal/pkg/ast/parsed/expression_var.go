@@ -8,16 +8,20 @@ import (
 	"strings"
 )
 
-type Var struct {
-	*expressionBase
-	name ast.QualifiedIdentifier
-}
-
 func NewVar(location ast.Location, name ast.QualifiedIdentifier) Expression {
 	return &Var{
 		expressionBase: newExpressionBase(location),
 		name:           name,
 	}
+}
+
+type Var struct {
+	*expressionBase
+	name ast.QualifiedIdentifier
+}
+
+func (e *Var) Iterate(f func(statement Statement)) {
+	f(e)
 }
 
 func (e *Var) normalize(
@@ -30,9 +34,9 @@ func (e *Var) normalize(
 		return normalized.NewLocal(e.location, ast.Identifier(e.name), lc), nil
 	}
 
-	d, m, ids := findParsedDefinition(modules, module, e.name, normalizedModule)
+	d, m, ids := module.findDefinitionAndAddDependency(modules, e.name, normalizedModule)
 	if len(ids) == 1 {
-		return normalized.NewGlobal(e.location, m.name, d.name), nil
+		return normalized.NewGlobal(e.location, m.name, d.name()), nil
 	} else if len(ids) > 1 {
 		return nil, newAmbiguousDefinitionError(ids, e.name, e.location)
 	}

@@ -6,16 +6,26 @@ import (
 	"nar-compiler/internal/pkg/common"
 )
 
-type PList struct {
-	*patternBase
-	items []Pattern
-}
-
 func NewPList(loc ast.Location, items []Pattern) Pattern {
 	return &PList{
 		patternBase: newPatternBase(loc),
 		items:       items,
 	}
+}
+
+type PList struct {
+	*patternBase
+	items []Pattern
+}
+
+func (e *PList) Iterate(f func(statement Statement)) {
+	f(e)
+	for _, item := range e.items {
+		if item != nil {
+			item.Iterate(f)
+		}
+	}
+	e.patternBase.Iterate(f)
 }
 
 func (e *PList) normalize(
@@ -35,7 +45,7 @@ func (e *PList) normalize(
 	var declaredType normalized.Type
 	if e.declaredType != nil {
 		var err error
-		declaredType, err = e.declaredType.normalize(modules, module, nil, nil)
+		declaredType, err = e.declaredType.normalize(modules, module, nil)
 		errors = append(errors, err)
 	}
 	return e.setSuccessor(normalized.NewPList(e.location, declaredType, items)),

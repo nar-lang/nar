@@ -33,7 +33,7 @@ func locToLocation(loc ast.Location) *protocol.Location {
 }
 
 type withLocation interface {
-	GetLocation() ast.Location
+	Location() ast.Location
 }
 
 type atLocation struct {
@@ -46,8 +46,8 @@ func find[T withLocation](stmt T, x atLocation) atLocation {
 }
 
 func findAtLocation(stmt withLocation, x atLocation) atLocation {
-	if stmt != nil && stmt.GetLocation().Contains(x.loc) {
-		if x.stmt == nil || x.stmt.GetLocation().Size() > stmt.GetLocation().Size() {
+	if stmt != nil && stmt.Location().Contains(x.loc) {
+		if x.stmt == nil || x.stmt.Location().Size() > stmt.Location().Size() {
 			x.stmt = stmt
 		}
 	}
@@ -64,7 +64,7 @@ func findSuccessors[T withLocation](stmt T, x successors) successors {
 }
 
 func findSuccessorsAtLocation(stmt withLocation, x successors) successors {
-	if stmt != nil && stmt.GetLocation().Start() == x.loc.Start() && stmt.GetLocation().End() == x.loc.End() {
+	if stmt != nil && stmt.Location().Start() == x.loc.Start() && stmt.Location().End() == x.loc.End() {
 		x.stmts = append(x.stmts, stmt)
 	}
 	return x

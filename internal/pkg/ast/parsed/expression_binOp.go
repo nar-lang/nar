@@ -5,17 +5,26 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
+func NewBinOp(location ast.Location, items []*BinOpItem, inParentheses bool) Expression {
+	return &BinOp{
+		expressionBase: newExpressionBase(location),
+		items:          items,
+		inParentheses:  inParentheses,
+	}
+}
+
 type BinOp struct {
 	*expressionBase
 	items         []*BinOpItem
 	inParentheses bool
 }
 
-func NewBinOp(location ast.Location, items []*BinOpItem, inParentheses bool) Expression {
-	return &BinOp{
-		expressionBase: newExpressionBase(location),
-		items:          items,
-		inParentheses:  inParentheses,
+func (e *BinOp) Iterate(f func(statement Statement)) {
+	f(e)
+	for _, i := range e.items {
+		if i.operand != nil {
+			i.operand.Iterate(f)
+		}
 	}
 }
 
@@ -43,7 +52,7 @@ func (e *BinOp) normalize(
 		if o1.operand != nil {
 			output = append(output, o1)
 		} else {
-			if infixFn, _, ids := findParsedInfixFn(modules, module, o1.infix); len(ids) != 1 {
+			if infixFn, _, ids := module.findInfixFn(modules, o1.infix); len(ids) != 1 {
 				return nil, newAmbiguousInfixError(ids, o1.infix, e.location)
 			} else {
 				o1.fn = infixFn
@@ -51,8 +60,7 @@ func (e *BinOp) normalize(
 
 			for i := len(operators) - 1; i >= 0; i-- {
 				o2 := operators[i]
-				if o2.fn.precedence > o1.fn.precedence ||
-					(o2.fn.precedence == o1.fn.precedence && o1.fn.associativity == Left) {
+				if o1.fn.hasLowerPrecedenceThan(o2.fn) {
 					output = append(output, o2)
 					operators = operators[:len(operators)-1]
 				} else {
@@ -71,7 +79,7 @@ func (e *BinOp) normalize(
 		op := output[len(output)-1].infix
 		output = output[:len(output)-1]
 
-		if infixA, m, ids := findParsedInfixFn(modules, module, op); len(ids) != 1 {
+		if infixA, m, ids := module.findInfixFn(modules, op); len(ids) != 1 {
 			return nil, newAmbiguousInfixError(ids, op, e.location)
 		} else {
 			var left, right normalized.Expression
@@ -106,7 +114,7 @@ func (e *BinOp) normalize(
 
 			return normalized.NewApply(
 				e.location,
-				normalized.NewGlobal(e.location, m.name, infixA.alias),
+				normalized.NewGlobal(e.location, m.name, infixA.alias()),
 				[]normalized.Expression{left, right},
 			), nil
 		}
@@ -122,7 +130,7 @@ func (e *BinOp) normalize(
 type BinOpItem struct {
 	operand Expression
 	infix   ast.InfixIdentifier
-	fn      *Infix
+	fn      Infix
 }
 
 func NewBinOpOperand(expression Expression) *BinOpItem {

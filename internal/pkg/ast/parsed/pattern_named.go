@@ -5,11 +5,6 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
-type PNamed struct {
-	*patternBase
-	name ast.Identifier
-}
-
 func NewPNamed(loc ast.Location, name ast.Identifier) Pattern {
 	return &PNamed{
 		patternBase: newPatternBase(loc),
@@ -17,8 +12,18 @@ func NewPNamed(loc ast.Location, name ast.Identifier) Pattern {
 	}
 }
 
-func (p *PNamed) Name() ast.Identifier {
-	return p.name
+type PNamed struct {
+	*patternBase
+	name ast.Identifier
+}
+
+func (e *PNamed) Iterate(f func(statement Statement)) {
+	f(e)
+	e.patternBase.Iterate(f)
+}
+
+func (e *PNamed) Name() ast.Identifier {
+	return e.name
 }
 
 func (e *PNamed) normalize(
@@ -30,7 +35,7 @@ func (e *PNamed) normalize(
 	var declaredType normalized.Type
 	var err error
 	if e.declaredType != nil {
-		declaredType, err = e.declaredType.normalize(modules, module, nil, nil)
+		declaredType, err = e.declaredType.normalize(modules, module, nil)
 	}
 	np := normalized.NewPNamed(e.location, declaredType, e.name)
 	locals[e.name] = np

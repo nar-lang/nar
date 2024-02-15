@@ -13,8 +13,11 @@ type Expression interface {
 		module *Module,
 		normalizedModule *normalized.Module,
 	) (normalized.Expression, error)
-	Successor() normalized.Expression
 	setSuccessor(expr normalized.Expression) (normalized.Expression, error)
+}
+
+func newExpressionBase(location ast.Location) *expressionBase {
+	return &expressionBase{location: location}
 }
 
 type expressionBase struct {
@@ -24,19 +27,15 @@ type expressionBase struct {
 
 func (*expressionBase) _parsed() {}
 
-func (e *expressionBase) GetLocation() ast.Location {
+func (e *expressionBase) Location() ast.Location {
 	return e.location
 }
 
-func (e *expressionBase) Successor() normalized.Expression {
+func (e *expressionBase) Successor() normalized.Statement {
 	return e.successor
 }
 
 func (e *expressionBase) setSuccessor(expr normalized.Expression) (normalized.Expression, error) {
 	e.successor = expr
 	return expr, nil
-}
-
-func newExpressionBase(location ast.Location) *expressionBase {
-	return &expressionBase{location: location}
 }

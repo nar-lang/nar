@@ -5,16 +5,20 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
-type Const struct {
-	*expressionBase
-	value ast.ConstValue
-}
-
 func NewConst(location ast.Location, value ast.ConstValue) Expression {
 	return &Const{
 		expressionBase: newExpressionBase(location),
 		value:          value,
 	}
+}
+
+type Const struct {
+	*expressionBase
+	value ast.ConstValue
+}
+
+func (e *Const) Iterate(f func(statement Statement)) {
+	f(e)
 }
 
 func (e *Const) normalize(

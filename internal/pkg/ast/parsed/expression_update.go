@@ -7,17 +7,26 @@ import (
 	"nar-compiler/internal/pkg/common"
 )
 
+func NewUpdate(location ast.Location, recordName ast.QualifiedIdentifier, fields []*RecordField) Expression {
+	return &Update{
+		expressionBase: newExpressionBase(location),
+		recordName:     recordName,
+		fields:         fields,
+	}
+}
+
 type Update struct {
 	*expressionBase
 	recordName ast.QualifiedIdentifier
 	fields     []*RecordField
 }
 
-func NewUpdate(location ast.Location, recordName ast.QualifiedIdentifier, fields []*RecordField) Expression {
-	return &Update{
-		expressionBase: newExpressionBase(location),
-		recordName:     recordName,
-		fields:         fields,
+func (e *Update) Iterate(f func(statement Statement)) {
+	f(e)
+	for _, field := range e.fields {
+		if field != nil {
+			field.value.Iterate(f)
+		}
 	}
 }
 
@@ -36,9 +45,9 @@ func (e *Update) normalize(
 		fields = append(fields, normalized.NewRecordField(field.location, field.name, value))
 	}
 
-	d, m, ids := findParsedDefinition(modules, module, e.recordName, normalizedModule)
+	d, m, ids := module.findDefinitionAndAddDependency(modules, e.recordName, normalizedModule)
 	if len(ids) == 1 {
-		return normalized.NewUpdateGlobal(e.location, m.name, d.name, fields), nil
+		return normalized.NewUpdateGlobal(e.location, m.name, d.name(), fields), nil
 	} else if len(ids) > 1 {
 		return nil, newAmbiguousDefinitionError(ids, e.recordName, e.location)
 	}

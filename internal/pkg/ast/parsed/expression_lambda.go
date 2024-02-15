@@ -5,6 +5,15 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
+func NewLambda(location ast.Location, params []Pattern, returnType Type, body Expression) Expression {
+	return &Lambda{
+		expressionBase: newExpressionBase(location),
+		params:         params,
+		return_:        returnType,
+		body:           body,
+	}
+}
+
 type Lambda struct {
 	*expressionBase
 	params  []Pattern
@@ -12,12 +21,18 @@ type Lambda struct {
 	body    Expression
 }
 
-func NewLambda(location ast.Location, params []Pattern, returnType Type, body Expression) Expression {
-	return &Lambda{
-		expressionBase: newExpressionBase(location),
-		params:         params,
-		return_:        returnType,
-		body:           body,
+func (e *Lambda) Iterate(f func(statement Statement)) {
+	f(e)
+	for _, param := range e.params {
+		if param != nil {
+			param.Iterate(f)
+		}
+	}
+	if e.return_ != nil {
+		e.return_.Iterate(f)
+	}
+	if e.body != nil {
+		e.body.Iterate(f)
 	}
 }
 

@@ -5,15 +5,24 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
+func NewRecord(location ast.Location, fields []*RecordField) Expression {
+	return &Record{
+		expressionBase: newExpressionBase(location),
+		fields:         fields,
+	}
+}
+
 type Record struct {
 	*expressionBase
 	fields []*RecordField
 }
 
-func NewRecord(location ast.Location, fields []*RecordField) Expression {
-	return &Record{
-		expressionBase: newExpressionBase(location),
-		fields:         fields,
+func (e *Record) Iterate(f func(statement Statement)) {
+	f(e)
+	for _, field := range e.fields {
+		if field != nil {
+			field.value.Iterate(f)
+		}
 	}
 }
 

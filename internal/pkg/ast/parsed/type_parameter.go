@@ -3,12 +3,8 @@ package parsed
 import (
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/ast/normalized"
+	"nar-compiler/internal/pkg/common"
 )
-
-type TParameter struct {
-	*typeBase
-	name ast.Identifier
-}
 
 func NewTParameter(loc ast.Location, name ast.Identifier) Type {
 	return &TParameter{
@@ -17,8 +13,23 @@ func NewTParameter(loc ast.Location, name ast.Identifier) Type {
 	}
 }
 
-func (t *TParameter) normalize(
-	modules map[ast.QualifiedIdentifier]*Module, module *Module, typeModule *Module, namedTypes namedTypeMap,
-) (normalized.Type, error) {
+type TParameter struct {
+	*typeBase
+	name ast.Identifier
+}
+
+func (t *TParameter) Iterate(f func(statement Statement)) {
+	f(t)
+}
+
+func (t *TParameter) normalize(modules map[ast.QualifiedIdentifier]*Module, module *Module, namedTypes namedTypeMap) (normalized.Type, error) {
 	return t.setSuccessor(normalized.NewTParameter(t.location, t.name))
+}
+
+func (t *TParameter) applyArgs(params map[ast.Identifier]Type, loc ast.Location) (Type, error) {
+	if p, ok := params[t.name]; !ok || p == nil {
+		return nil, common.NewError(t.location, "missing type parameter %s", t.name)
+	} else {
+		return p, nil
+	}
 }

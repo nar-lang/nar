@@ -5,14 +5,19 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
-type PAny struct {
-	*patternBase
-}
-
 func NewPAny(loc ast.Location) Pattern {
 	return &PAny{
 		patternBase: newPatternBase(loc),
 	}
+}
+
+type PAny struct {
+	*patternBase
+}
+
+func (e *PAny) Iterate(f func(statement Statement)) {
+	f(e)
+	e.patternBase.Iterate(f)
 }
 
 func (e *PAny) normalize(
@@ -24,7 +29,7 @@ func (e *PAny) normalize(
 	var declaredType normalized.Type
 	var err error
 	if e.declaredType != nil {
-		declaredType, err = e.declaredType.normalize(modules, module, nil, nil)
+		declaredType, err = e.declaredType.normalize(modules, module, nil)
 	}
 	return e.setSuccessor(normalized.NewPAny(e.location, declaredType)), err
 }

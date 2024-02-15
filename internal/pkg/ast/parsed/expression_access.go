@@ -5,17 +5,24 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
+func NewAccess(location ast.Location, record Expression, fieldName ast.Identifier) Expression {
+	return &Access{
+		expressionBase: newExpressionBase(location),
+		record:         record,
+		fieldName:      fieldName,
+	}
+}
+
 type Access struct {
 	*expressionBase
 	record    Expression
 	fieldName ast.Identifier
 }
 
-func NewAccess(location ast.Location, record Expression, fieldName ast.Identifier) Expression {
-	return &Access{
-		expressionBase: newExpressionBase(location),
-		record:         record,
-		fieldName:      fieldName,
+func (e *Access) Iterate(f func(statement Statement)) {
+	f(e)
+	if e.record != nil {
+		e.record.Iterate(f)
 	}
 }
 

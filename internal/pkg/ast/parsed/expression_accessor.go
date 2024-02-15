@@ -5,16 +5,20 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
-type Accessor struct {
-	*expressionBase
-	fieldName ast.Identifier
-}
-
 func NewAccessor(location ast.Location, fieldName ast.Identifier) Expression {
 	return &Accessor{
 		expressionBase: newExpressionBase(location),
 		fieldName:      fieldName,
 	}
+}
+
+type Accessor struct {
+	*expressionBase
+	fieldName ast.Identifier
+}
+
+func (e *Accessor) Iterate(f func(statement Statement)) {
+	f(e)
 }
 
 func (e *Accessor) normalize(

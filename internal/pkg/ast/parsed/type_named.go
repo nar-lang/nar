@@ -8,12 +8,6 @@ import (
 	"strings"
 )
 
-type TNamed struct {
-	*typeBase
-	name ast.QualifiedIdentifier
-	args []Type
-}
-
 func NewTNamed(loc ast.Location, name ast.QualifiedIdentifier, args []Type) Type {
 	return &TNamed{
 		typeBase: newTypeBase(loc),
@@ -22,16 +16,29 @@ func NewTNamed(loc ast.Location, name ast.QualifiedIdentifier, args []Type) Type
 	}
 }
 
+type TNamed struct {
+	*typeBase
+	name ast.QualifiedIdentifier
+	args []Type
+}
+
+func (t *TNamed) Iterate(f func(statement Statement)) {
+	f(t)
+	for _, arg := range t.args {
+		if arg != nil {
+			arg.Iterate(f)
+		}
+	}
+}
+
 func (t *TNamed) Find(
 	modules map[ast.QualifiedIdentifier]*Module, module *Module,
 ) (Type, *Module, []ast.FullIdentifier, error) {
-	return findParsedType(modules, module, t.name, t.args, t.location)
+	return module.findType(modules, t.name, t.args, t.location)
 }
 
-func (t *TNamed) normalize(
-	modules map[ast.QualifiedIdentifier]*Module, module *Module, typeModule *Module, namedTypes namedTypeMap,
-) (normalized.Type, error) {
-	x, m, ids, err := t.Find(modules, module)
+func (t *TNamed) normalize(modules map[ast.QualifiedIdentifier]*Module, module *Module, namedTypes namedTypeMap) (normalized.Type, error) {
+	x, _, ids, err := t.Find(modules, module)
 	if err != nil {
 		return nil, err
 	}
@@ -59,9 +66,21 @@ func (t *TNamed) normalize(
 		}
 	}
 
-	nType, err := x.normalize(modules, module, m, namedTypes)
+	nType, err := x.normalize(modules, module, namedTypes)
 	if err != nil {
 		return nil, err
 	}
 	return t.setSuccessor(nType)
+}
+
+func (t *TNamed) applyArgs(params map[ast.Identifier]Type, loc ast.Location) (Type, error) {
+	var args []Type
+	for _, arg := range t.args {
+		nArg, err := arg.applyArgs(params, loc)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, nArg)
+	}
+	return NewTNamed(loc, t.name, args), nil
 }

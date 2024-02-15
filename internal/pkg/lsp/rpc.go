@@ -95,7 +95,7 @@ func (s *server) Shutdown(_ *nothing) error {
 //) (result *protocol.location, err error) {
 //	sl, wl := s.findDefinition(params.TextDocument.URI, params.Position.Line, params.Position.Character)
 //	if wl != nil && sl != nil {
-//		return locToLocation(wl.GetLocation()), nil
+//		return locToLocation(wl.Location()), nil
 //	}
 //	return nil, nil
 //}
@@ -106,7 +106,7 @@ func (s *server) Shutdown(_ *nothing) error {
 //	_, wl := s.findDefinition(params.TextDocument.URI, params.Position.Line, params.Position.Character)
 //	if _, ok := wl.(typed.Pattern); ok {
 //		_, l := s.findStatementDefinition(wl, s.getModuleOfStatement(wl))
-//		result = locToLocation(l.GetLocation())
+//		result = locToLocation(l.Location())
 //	}
 //	return
 //}
@@ -118,7 +118,7 @@ func (s *server) Shutdown(_ *nothing) error {
 //	var moduleName ast.QualifiedIdentifier
 //	if wl != nil {
 //		for _, m := range s.parsedModules {
-//			if m.GetLocation().FilePath() == wl.GetLocation().FilePath() {
+//			if m.Location().FilePath() == wl.Location().FilePath() {
 //				moduleName = m.name()
 //				break
 //			}
@@ -151,9 +151,9 @@ func (s *server) Shutdown(_ *nothing) error {
 //		um := typed.UnboundMap{}
 //
 //		for _, tm := range s.typedModules {
-//			if tm.location.FilePath() == pt.GetLocation().FilePath() {
+//			if tm.location.FilePath() == pt.Location().FilePath() {
 //				for _, d := range tm.Definitions {
-//					if d.location.Contains(pt.GetLocation()) {
+//					if d.location.Contains(pt.Location()) {
 //						d.GetType().ToString(um, moduleName)
 //					}
 //				}
@@ -177,7 +177,7 @@ func (s *server) Shutdown(_ *nothing) error {
 //		} else {
 //			text = fmt.Sprintf(
 //				"local variable\n```nar\n%s: %s\n```",
-//				src.GetLocation().Text(),
+//				src.Location().Text(),
 //				pt.GetType().ToString(um, moduleName))
 //		}
 //	case typed.Type:
@@ -194,7 +194,7 @@ func (s *server) Shutdown(_ *nothing) error {
 //				Kind:  protocol.Markdown,
 //				Value: text,
 //			},
-//			Range: locToRange(src.GetLocation()),
+//			Range: locToRange(src.Location()),
 //		}, nil
 //	}
 //	return nil, nil
@@ -228,8 +228,8 @@ func (s *server) Shutdown(_ *nothing) error {
 //	//					children = append(children, protocol.DocumentSymbol{
 //	//						name:           string(name),
 //	//						Kind:           protocol.Field,
-//	//						Range:          locToRange(f.GetLocation()),
-//	//						SelectionRange: locToRange(f.GetLocation()),
+//	//						Range:          locToRange(f.Location()),
+//	//						SelectionRange: locToRange(f.Location()),
 //	//					})
 //	//				}
 //	//			} else {
@@ -310,10 +310,10 @@ func (s *server) Shutdown(_ *nothing) error {
 //	switch found.(type) {
 //	case *typed.Definition:
 //		def := found.(*typed.Definition)
-//		result = append(result, *locToLocation(def.GetLocation()))
+//		result = append(result, *locToLocation(def.Location()))
 //		var moduleName ast.QualifiedIdentifier
 //		for _, m := range s.parsedModules {
-//			if m.GetLocation().FilePath() == def.GetLocation().FilePath() {
+//			if m.Location().FilePath() == def.Location().FilePath() {
 //				moduleName = m.name()
 //				break
 //			}
@@ -323,7 +323,7 @@ func (s *server) Shutdown(_ *nothing) error {
 //				func(e typed.Expression, acc []protocol.location) []protocol.location {
 //					if g, ok := e.(*typed.Global); ok {
 //						if g.Definition.name == def.name && g.ModuleName == moduleName {
-//							return append(acc, *locToLocation(e.GetLocation()))
+//							return append(acc, *locToLocation(e.Location()))
 //						}
 //					}
 //					return acc
@@ -346,10 +346,10 @@ func (s *server) Shutdown(_ *nothing) error {
 //						xNative, xIsNative := t.(*typed.TNative)
 //						xData, xIsData := t.(*typed.TData)
 //						if xIsNative && isNative && xNative.name == tNative.name {
-//							return append(acc, *locToLocation(t.GetLocation()))
+//							return append(acc, *locToLocation(t.Location()))
 //						}
 //						if xIsData && isData && xData.name == tData.name {
-//							return append(acc, *locToLocation(t.GetLocation()))
+//							return append(acc, *locToLocation(t.Location()))
 //						}
 //						return acc
 //					},
@@ -363,8 +363,8 @@ func (s *server) Shutdown(_ *nothing) error {
 //		break
 //	case typed.Pattern:
 //		loc := ast.NewLocationSrc(
-//			src.GetLocation().FilePath(),
-//			src.GetLocation().FileContent(),
+//			src.Location().FilePath(),
+//			src.Location().FileContent(),
 //			params.Position.Line,
 //			params.Position.Character,
 //		)
@@ -392,14 +392,14 @@ func (s *server) Shutdown(_ *nothing) error {
 //		}
 //		if name != "" {
 //			for _, m := range s.typedModules {
-//				if m.location.FilePath() == src.GetLocation().FilePath() {
+//				if m.location.FilePath() == src.Location().FilePath() {
 //					for _, d := range m.Definitions {
 //						if d.location.Contains(loc) {
 //							result = typed.FoldDefinition(
 //								func(e typed.Expression, acc []protocol.location) []protocol.location {
 //									if loc, ok := e.(*typed.Local); ok {
 //										if loc.name == name {
-//											return append(acc, *locToLocation(e.GetLocation()))
+//											return append(acc, *locToLocation(e.Location()))
 //										}
 //									}
 //									return acc
@@ -410,12 +410,12 @@ func (s *server) Shutdown(_ *nothing) error {
 //								func(e typed.Pattern, acc []protocol.location) []protocol.location {
 //									if n, ok := e.(*typed.PNamed); ok {
 //										if n.name == name {
-//											return append(acc, *locToLocation(e.GetLocation()))
+//											return append(acc, *locToLocation(e.Location()))
 //										}
 //									}
 //									if n, ok := e.(*typed.PAlias); ok {
 //										if n.Alias == name {
-//											return append(acc, *locToLocation(e.GetLocation()))
+//											return append(acc, *locToLocation(e.Location()))
 //										}
 //									}
 //									return acc

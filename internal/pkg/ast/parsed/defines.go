@@ -6,7 +6,9 @@ import (
 )
 
 type Statement interface {
-	GetLocation() ast.Location
+	Location() ast.Location
+	Iterate(f func(statement Statement))
+	Successor() normalized.Statement
 	_parsed()
 }
 

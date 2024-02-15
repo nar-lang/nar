@@ -5,17 +5,26 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
+func NewCall(location ast.Location, name ast.FullIdentifier, args []Expression) Expression {
+	return &Call{
+		expressionBase: newExpressionBase(location),
+		name:           name,
+		args:           args,
+	}
+}
+
 type Call struct {
 	*expressionBase
 	name ast.FullIdentifier
 	args []Expression
 }
 
-func NewCall(location ast.Location, name ast.FullIdentifier, args []Expression) Expression {
-	return &Call{
-		expressionBase: newExpressionBase(location),
-		name:           name,
-		args:           args,
+func (e *Call) Iterate(f func(statement Statement)) {
+	f(e)
+	for _, arg := range e.args {
+		if arg != nil {
+			arg.Iterate(f)
+		}
 	}
 }
 

@@ -5,14 +5,6 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
-type Constructor struct {
-	*expressionBase
-	moduleName ast.QualifiedIdentifier
-	dataName   ast.Identifier
-	optionName ast.Identifier
-	args       []Expression
-}
-
 func NewConstructor(
 	location ast.Location,
 	moduleName ast.QualifiedIdentifier,
@@ -29,13 +21,29 @@ func NewConstructor(
 	}
 }
 
+type Constructor struct {
+	*expressionBase
+	moduleName ast.QualifiedIdentifier
+	dataName   ast.Identifier
+	optionName ast.Identifier
+	args       []Expression
+}
+
+func (e *Constructor) Iterate(f func(statement Statement)) {
+	f(e)
+	for _, arg := range e.args {
+		if arg != nil {
+			arg.Iterate(f)
+		}
+	}
+}
+
 func (e *Constructor) normalize(
 	locals map[ast.Identifier]normalized.Pattern,
 	modules map[ast.QualifiedIdentifier]*Module,
 	module *Module,
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
-	//TODO: allocate required size where it possible
 	var args []normalized.Expression
 	for _, arg := range e.args {
 		nArg, err := arg.normalize(locals, modules, module, normalizedModule)

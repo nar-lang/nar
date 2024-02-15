@@ -22,6 +22,19 @@ func NewLet(location ast.Location, pattern Pattern, value, nested Expression) Ex
 	}
 }
 
+func (e *Let) Iterate(f func(statement Statement)) {
+	f(e)
+	if e.pattern != nil {
+		e.pattern.Iterate(f)
+	}
+	if e.value != nil {
+		e.value.Iterate(f)
+	}
+	if e.nested != nil {
+		e.nested.Iterate(f)
+	}
+}
+
 func (e *Let) normalize(
 	locals map[ast.Identifier]normalized.Pattern,
 	modules map[ast.QualifiedIdentifier]*Module,

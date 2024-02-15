@@ -5,16 +5,21 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
-type PConst struct {
-	*patternBase
-	value ast.ConstValue
-}
-
 func NewPConst(loc ast.Location, value ast.ConstValue) Pattern {
 	return &PConst{
 		patternBase: newPatternBase(loc),
 		value:       value,
 	}
+}
+
+type PConst struct {
+	*patternBase
+	value ast.ConstValue
+}
+
+func (e *PConst) Iterate(f func(statement Statement)) {
+	f(e)
+	e.patternBase.Iterate(f)
 }
 
 func (e *PConst) normalize(
@@ -26,7 +31,7 @@ func (e *PConst) normalize(
 	var declaredType normalized.Type
 	var err error
 	if e.declaredType != nil {
-		declaredType, err = e.declaredType.normalize(modules, module, nil, nil)
+		declaredType, err = e.declaredType.normalize(modules, module, nil)
 	}
 	return e.setSuccessor(normalized.NewPConst(e.location, declaredType, e.value)), err
 }

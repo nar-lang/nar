@@ -5,14 +5,7 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
-type TData struct {
-	*typeBase
-	name    ast.FullIdentifier
-	args    []Type
-	options []DataOption
-}
-
-func NewTData(loc ast.Location, name ast.FullIdentifier, args []Type, options []DataOption) Type {
+func NewTData(loc ast.Location, name ast.FullIdentifier, args []Type, options []*DataOption) Type {
 	return &TData{
 		typeBase: newTypeBase(loc),
 		name:     name,
@@ -21,23 +14,30 @@ func NewTData(loc ast.Location, name ast.FullIdentifier, args []Type, options []
 	}
 }
 
-type DataOption struct {
-	name   ast.Identifier
-	hidden bool
-	values []Type
+type TData struct {
+	*typeBase
+	name    ast.FullIdentifier
+	args    []Type
+	options []*DataOption
 }
 
-func NewDataOption(name ast.Identifier, hidden bool, values []Type) DataOption {
-	return DataOption{
-		name:   name,
-		hidden: hidden,
-		values: values,
+func (t *TData) Iterate(f func(statement Statement)) {
+	f(t)
+	for _, arg := range t.args {
+		if arg != nil {
+			arg.Iterate(f)
+		}
+	}
+	for _, opt := range t.options {
+		for _, value := range opt.values {
+			if value != nil {
+				value.Iterate(f)
+			}
+		}
 	}
 }
 
-func (t *TData) normalize(
-	modules map[ast.QualifiedIdentifier]*Module, module *Module, typeModule *Module, namedTypes namedTypeMap,
-) (normalized.Type, error) {
+func (t *TData) normalize(modules map[ast.QualifiedIdentifier]*Module, module *Module, namedTypes namedTypeMap) (normalized.Type, error) {
 	if namedTypes == nil {
 		namedTypes = namedTypeMap{}
 	}
@@ -48,7 +48,7 @@ func (t *TData) normalize(
 
 	var args []normalized.Type
 	for _, arg := range t.args {
-		nArg, err := arg.normalize(modules, module, typeModule, namedTypes)
+		nArg, err := arg.normalize(modules, module, namedTypes)
 		if err != nil {
 			return nil, err
 		}
@@ -58,21 +58,39 @@ func (t *TData) normalize(
 	for _, option := range t.options {
 		var values []normalized.Type
 		for _, value := range option.values {
-			if typeModule != nil { //TODO: redundant?
-				nValue, err := value.normalize(modules, typeModule, typeModule, namedTypes)
-				if err != nil {
-					return nil, err
-				}
-				values = append(values, nValue)
-			} else {
-				nValue, err := value.normalize(modules, module, typeModule, namedTypes)
-				if err != nil {
-					return nil, err
-				}
-				values = append(values, nValue)
+			nValue, err := value.normalize(modules, module, namedTypes)
+			if err != nil {
+				return nil, err
 			}
+			values = append(values, nValue)
 		}
 		options = append(options, normalized.NewDataOption(option.name, option.hidden, values))
 	}
 	return t.setSuccessor(normalized.NewTData(t.location, t.name, args, options))
+}
+
+func (t *TData) applyArgs(params map[ast.Identifier]Type, loc ast.Location) (Type, error) {
+	var args []Type
+	for _, arg := range t.args {
+		nArg, err := arg.applyArgs(params, loc)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, nArg)
+	}
+	return NewTData(loc, t.name, args, t.options), nil
+}
+
+type DataOption struct {
+	name   ast.Identifier
+	hidden bool
+	values []Type
+}
+
+func NewDataOption(name ast.Identifier, hidden bool, values []Type) *DataOption {
+	return &DataOption{
+		name:   name,
+		hidden: hidden,
+		values: values,
+	}
 }

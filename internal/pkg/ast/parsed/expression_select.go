@@ -6,17 +6,34 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
+func NewSelect(location ast.Location, condition Expression, cases []*SelectCase) Expression {
+	return &Select{
+		expressionBase: newExpressionBase(location),
+		condition:      condition,
+		cases:          cases,
+	}
+}
+
 type Select struct {
 	*expressionBase
 	condition Expression
 	cases     []*SelectCase
 }
 
-func NewSelect(location ast.Location, condition Expression, cases []*SelectCase) Expression {
-	return &Select{
-		expressionBase: newExpressionBase(location),
-		condition:      condition,
-		cases:          cases,
+func (e *Select) Iterate(f func(statement Statement)) {
+	f(e)
+	if e.condition != nil {
+		e.condition.Iterate(f)
+	}
+	for _, cs := range e.cases {
+		if cs != nil {
+			if cs.pattern != nil {
+				cs.pattern.Iterate(f)
+			}
+			if cs.body != nil {
+				cs.body.Iterate(f)
+			}
+		}
 	}
 }
 

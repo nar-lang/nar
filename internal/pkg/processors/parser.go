@@ -767,7 +767,7 @@ func parsePattern(src *source) (parsed.Pattern, error) {
 
 	//record
 	if readExact(src, SeqBracesOpen) {
-		var fields []parsed.PRecordField
+		var fields []*parsed.PRecordField
 		for {
 			fieldCursor := src.cursor
 			name := readIdentifier(src, false)
@@ -1301,7 +1301,7 @@ func finishParseExpression(src *source, expr parsed.Expression, negate bool) (pa
 			items = append(items, parsed.NewBinOpOperand(final))
 		}
 
-		return parsed.NewBinOp(loc(src, expr.GetLocation().Start()), items, false), nil
+		return parsed.NewBinOp(loc(src, expr.Location().Start()), items, false), nil
 	}
 
 	if readExact(src, SeqParenthesisOpen) {
@@ -1324,7 +1324,7 @@ func finishParseExpression(src *source, expr parsed.Expression, negate bool) (pa
 			}
 			return nil, newError(*src, "expected `,` or `)` here")
 		}
-		return finishParseExpression(src, parsed.NewApply(loc(src, expr.GetLocation().Start()), expr, items), negate)
+		return finishParseExpression(src, parsed.NewApply(loc(src, expr.Location().Start()), expr, items), negate)
 	}
 
 	if readExact(src, SeqDot) {
@@ -1335,15 +1335,15 @@ func finishParseExpression(src *source, expr parsed.Expression, negate bool) (pa
 		return finishParseExpression(src, parsed.NewAccess(loc(src, cursor), expr, ast.Identifier(*name)), negate)
 	}
 	if negate {
-		expr = parsed.NewNegate(loc(src, expr.GetLocation().Start()), expr)
+		expr = parsed.NewNegate(loc(src, expr.Location().Start()), expr)
 	}
 	return expr, nil
 }
 
-func parseDataOption(src *source) (*parsed.DataTypeOption, error) {
+func parseDataOption(src *source) (parsed.DataTypeOption, error) {
 	cursor := src.cursor
 	hidden := readExact(src, KwHidden)
-	var types []parsed.Type
+	var types []*parsed.DataTypeValue
 
 	name := readIdentifier(src, false)
 
@@ -1351,10 +1351,15 @@ func parseDataOption(src *source) (*parsed.DataTypeOption, error) {
 		return nil, newError(*src, "expected option name here")
 	}
 	if readExact(src, SeqParenthesisOpen) {
+		index := 0
 		for {
 			argCursor := src.cursor
-			if readIdentifier(src, false) == nil || !readExact(src, SeqColon) {
+			valueName := readIdentifier(src, false)
+			if valueName == nil || !readExact(src, SeqColon) {
 				src.cursor = argCursor
+				n := ast.QualifiedIdentifier(fmt.Sprintf("p%d", index))
+				valueName = &n
+				index++
 			}
 
 			type_, err := parseType(src)
@@ -1364,7 +1369,7 @@ func parseDataOption(src *source) (*parsed.DataTypeOption, error) {
 			if nil == type_ {
 				return nil, newError(*src, "expected option value type here")
 			}
-			types = append(types, type_)
+			types = append(types, parsed.NewDataTypeValue(loc(src, argCursor), ast.Identifier(*valueName), type_))
 
 			if readExact(src, SeqComma) {
 				continue
@@ -1378,7 +1383,7 @@ func parseDataOption(src *source) (*parsed.DataTypeOption, error) {
 	return parsed.NewDataTypeOption(loc(src, cursor), hidden, ast.Identifier(*name), types), nil
 }
 
-func parseImport(src *source) (*parsed.Import, error) {
+func parseImport(src *source) (parsed.Import, error) {
 	if !readExact(src, KwImport) {
 		return nil, nil
 	}
@@ -1434,7 +1439,7 @@ func parseImport(src *source) (*parsed.Import, error) {
 	return parsed.NewImport(loc(src, cursor), *ident, (*ast.Identifier)(alias), exposingAll, exposing), nil
 }
 
-func parseInfixFn(src *source) (*parsed.Infix, error) {
+func parseInfixFn(src *source) (parsed.Infix, error) {
 	if !readExact(src, KwInfix) {
 		return nil, nil
 	}
@@ -1516,7 +1521,7 @@ func parseInfixFn(src *source) (*parsed.Infix, error) {
 	return parsed.NewInfix(loc(src, cursor), hidden, name, associativity, precedence, loc(src, aliasCursor), alias), err
 }
 
-func parseAlias(src *source) (*parsed.Alias, error) {
+func parseAlias(src *source) (parsed.Alias, error) {
 	if !readExact(src, KwAlias) {
 		return nil, nil
 	}
@@ -1559,7 +1564,7 @@ func parseAlias(src *source) (*parsed.Alias, error) {
 	return parsed.NewAlias(loc(src, cursor), hidden, name, params, type_), err
 }
 
-func parseDataType(src *source) (*parsed.DataType, error) {
+func parseDataType(src *source) (parsed.DataType, error) {
 	if !readExact(src, KwType) {
 		return nil, nil
 	}
@@ -1569,7 +1574,7 @@ func parseDataType(src *source) (*parsed.DataType, error) {
 	hidden := readExact(src, KwHidden)
 	var name ast.Identifier
 	var params []ast.Identifier
-	var options []*parsed.DataTypeOption
+	var options []parsed.DataTypeOption
 
 	pName := readIdentifier(src, false)
 	if pName == nil {
@@ -1587,7 +1592,7 @@ func parseDataType(src *source) (*parsed.DataType, error) {
 	}
 
 	for err == nil {
-		var option *parsed.DataTypeOption
+		var option parsed.DataTypeOption
 		option, err = parseDataOption(src)
 		if err == nil {
 			options = append(options, option)
@@ -1600,7 +1605,7 @@ func parseDataType(src *source) (*parsed.DataType, error) {
 	return parsed.NewDataType(loc(src, cursor), hidden, name, params, options), err
 }
 
-func parseDefinition(src *source, modName ast.QualifiedIdentifier) (*parsed.Definition, error) {
+func parseDefinition(src *source, modName ast.QualifiedIdentifier) (parsed.Definition, error) {
 	cursor := src.cursor
 
 	if !readExact(src, KwDef) {
@@ -1649,7 +1654,7 @@ func parseDefinition(src *source, modName ast.QualifiedIdentifier) (*parsed.Defi
 				var args []parsed.Expression
 				for _, x := range params {
 					if named, ok := x.(*parsed.PNamed); ok {
-						args = append(args, parsed.NewVar(x.GetLocation(), ast.QualifiedIdentifier(named.Name())))
+						args = append(args, parsed.NewVar(x.Location(), ast.QualifiedIdentifier(named.Name())))
 					} else {
 						err = newError(*src,
 							"native function should start with lowercase letter and cannot be a pattern match")
@@ -1680,6 +1685,7 @@ func parseDefinition(src *source, modName ast.QualifiedIdentifier) (*parsed.Defi
 						loc(src, typeCursor),
 						common.Map(func(x parsed.Pattern) parsed.Type { return x.Type() }, params),
 						ret)
+
 				}
 			}
 		}
@@ -1702,11 +1708,11 @@ func parseModule(src *source) (module *parsed.Module, errors []error) {
 		return
 	}
 
-	var imports []*parsed.Import
-	var aliases []*parsed.Alias
-	var infixFns []*parsed.Infix
-	var definitions []*parsed.Definition
-	var dataTypes []*parsed.DataType
+	var imports []parsed.Import
+	var aliases []parsed.Alias
+	var infixFns []parsed.Infix
+	var definitions []parsed.Definition
+	var dataTypes []parsed.DataType
 
 	for {
 		imp, err := parseImport(src)
