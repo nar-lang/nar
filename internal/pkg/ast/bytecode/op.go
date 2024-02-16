@@ -209,10 +209,7 @@ func (op apply) Word() uint64 {
 func AppendApply(numArgs int, loc ast.Location, ops []Op, locations []ast.Location,
 ) ([]Op, []ast.Location) {
 	if numArgs > 255 {
-		panic(common.Error{
-			Location: loc,
-			Message:  "function cannot be applied with more than 255 arguments",
-		}.Error())
+		panic(common.NewErrorAt(loc, "function cannot be applied with more than 255 arguments").Error())
 	}
 	return append(ops, apply{NumArgs: uint8(numArgs)}),
 		append(locations, loc)
@@ -239,10 +236,7 @@ func (op call) Word() uint64 {
 func AppendCall(name string, numArgs int, loc ast.Location, ops []Op, locations []ast.Location, binary *Binary,
 ) ([]Op, []ast.Location) {
 	if numArgs > 255 {
-		panic(common.Error{
-			Location: loc,
-			Message:  "function cannot be called with more than 255 arguments",
-		}.Error())
+		panic(common.NewErrorAt(loc, "function cannot be called with more than 255 arguments").Error())
 	}
 	return append(ops, call{Name: binary.HashString(name), NumArgs: uint8(numArgs)}),
 		append(locations, loc)
@@ -346,10 +340,7 @@ func AppendMakePattern(
 	loc ast.Location, ops []Op, locations []ast.Location, binary *Binary,
 ) ([]Op, []ast.Location) {
 	if numNested > 255 {
-		panic(common.Error{
-			Location: loc,
-			Message:  "pattern cannot contain more than 255 nested patterns",
-		}.Error())
+		panic(common.NewErrorAt(loc, "pattern cannot contain more than 255 nested patterns").Error())
 	}
 	return append(ops, makePattern{Kind: kind, Name: binary.HashString(name), NumNested: uint8(numNested)}),
 		append(locations, loc)

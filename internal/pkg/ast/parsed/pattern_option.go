@@ -1,7 +1,6 @@
 package parsed
 
 import (
-	"fmt"
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/ast/normalized"
 	"nar-compiler/internal/pkg/common"
@@ -39,21 +38,20 @@ func (e *POption) normalize(
 ) (normalized.Pattern, error) {
 	def, mod, ids := module.findDefinitionAndAddDependency(modules, e.name, normalizedModule)
 	if len(ids) == 0 {
-		return nil, common.Error{Location: e.location, Message: "data constructor not found"}
+		return nil, common.NewErrorOf(e, "data constructor not found")
 	} else if len(ids) > 1 {
-		return nil, common.Error{
-			Location: e.location,
-			Message: fmt.Sprintf(
-				"ambiguous data constructor `%s`, it can be one of %s. "+
-					"Use import or qualified identifer to clarify which one to use",
-				e.name, common.Join(ids, ", ")),
-		}
+		return nil, common.NewErrorOf(e,
+			"ambiguous data constructor `%s`, it can be one of %s. "+
+				"Use import or qualified identifer to clarify which one to use",
+			e.name, common.Join(ids, ", "))
 	}
 	var values []normalized.Pattern
 	var errors []error
 	for _, value := range e.values {
 		nValue, err := value.normalize(locals, modules, module, normalizedModule)
-		errors = append(errors, err)
+		if err != nil {
+			errors = append(errors, err)
+		}
 		values = append(values, nValue)
 	}
 
@@ -61,8 +59,10 @@ func (e *POption) normalize(
 	if e.declaredType != nil {
 		var err error
 		declaredType, err = e.declaredType.normalize(modules, module, nil)
-		errors = append(errors, err)
+		if err != nil {
+			errors = append(errors, err)
+		}
 	}
-	return e.setSuccessor(normalized.NewPOption(e.location, declaredType, mod.name, def.name(), values)),
+	return e.setSuccessor(normalized.NewPOption(e.location, declaredType, mod.name, def.Name(), values)),
 		common.MergeErrors(errors...)
 }

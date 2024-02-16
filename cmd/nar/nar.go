@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"nar-compiler/internal/pkg/common"
+	"nar-compiler/internal/pkg/lsp"
 	"nar-compiler/internal/pkg/processors"
 	narc "nar-compiler/pkg"
 	"os"
@@ -30,7 +31,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("nar compiler version: %s\nlanguage server protocol version: %s\n", processors.Version /*, lsp.Version*/)
+		fmt.Printf("nar compiler version: %s\nlanguage server protocol version: %s\n", processors.Version, lsp.Version)
 		return
 	}
 

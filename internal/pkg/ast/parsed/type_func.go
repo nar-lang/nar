@@ -39,7 +39,7 @@ func (t *TFunc) normalize(modules map[ast.QualifiedIdentifier]*Module, module *M
 	var params []normalized.Type
 	for _, param := range t.params {
 		if param == nil {
-			return nil, common.NewError(t.location, "missing parameter type annotation")
+			return nil, common.NewErrorAt(t.location, "missing parameter type annotation")
 		}
 		nParam, err := param.normalize(modules, module, namedTypes)
 		if err != nil {

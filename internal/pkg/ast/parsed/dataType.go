@@ -9,6 +9,8 @@ import (
 type DataType interface {
 	Statement
 	flatten(name ast.QualifiedIdentifier) (Alias, []Definition)
+	Name() ast.Identifier
+	Options() []DataTypeOption
 }
 
 func NewDataType(
@@ -30,6 +32,14 @@ type dataType struct {
 	params    []ast.Identifier
 	options   []DataTypeOption
 	successor Statement
+}
+
+func (d dataType) Options() []DataTypeOption {
+	return d.options
+}
+
+func (d dataType) Name() ast.Identifier {
+	return d.name
 }
 
 func (d dataType) Successor() normalized.Statement {
@@ -77,6 +87,7 @@ type DataTypeOption interface {
 	Statement
 	dataOption() *DataOption
 	constructor(moduleName ast.QualifiedIdentifier, dataName ast.Identifier, dataType Type, hidden bool) Definition
+	Name() ast.Identifier
 }
 
 func NewDataTypeOption(loc ast.Location, hidden bool, name ast.Identifier, values []*DataTypeValue) DataTypeOption {
@@ -94,6 +105,10 @@ type dataTypeOption struct {
 	name      ast.Identifier
 	values    []*DataTypeValue
 	successor Statement
+}
+
+func (d *dataTypeOption) Name() ast.Identifier {
+	return d.name
 }
 
 func (d *dataTypeOption) constructor(moduleName ast.QualifiedIdentifier, dataName ast.Identifier, dataType Type, hidden bool) Definition {

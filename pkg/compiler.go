@@ -61,9 +61,7 @@ func Compile(
 		for _, name := range affectedModuleNames {
 			m, ok := typedModules[name]
 			if !ok {
-				log.Err(common.Error{
-					Message: fmt.Sprintf("module '%s' not found", name),
-				})
+				log.Err(common.NewSystemError(fmt.Errorf("module '%s' not found", name)))
 				continue
 			}
 			if err := m.Compose(typedModules, debug, &bin); err != nil {

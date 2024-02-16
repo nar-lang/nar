@@ -4,44 +4,45 @@ import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
 	"runtime"
-	"slices"
-	"strings"
 )
 
-type Error struct {
-	Location ast.Location
-	Extra    []ast.Location
-	Message  string
+type WithLocation interface {
+	Location() ast.Location
 }
 
-func NewError(loc ast.Location, msg string, params ...any) error {
-	return Error{Location: loc, Message: fmt.Sprintf(msg, params...)}
+type ErrorWithLocation interface {
+	error
+	WithLocation
+	Message() string
 }
 
-func (e Error) Error() string {
-	sb := strings.Builder{}
-	cursorString := e.Location.CursorString()
+func NewErrorOf(e WithLocation, msg string, params ...any) error {
+	return NewErrorAt(e.Location(), msg, params...)
+}
+
+func NewErrorAt(loc ast.Location, msg string, params ...any) error {
+	return locatedError{location: loc, message: fmt.Sprintf(msg, params...)}
+}
+
+type locatedError struct {
+	location ast.Location
+	message  string
+}
+
+func (e locatedError) Location() ast.Location {
+	return e.location
+}
+
+func (e locatedError) Message() string {
+	return e.message
+}
+
+func (e locatedError) Error() string {
+	cursorString := e.location.CursorString()
 	if cursorString != "" {
-		sb.WriteString(fmt.Sprintf("%s %s\n", cursorString, e.Message))
+		return cursorString + " " + e.message
 	}
-
-	var uniqueExtra []ast.Location
-	for _, e := range e.Extra {
-		if !slices.ContainsFunc(uniqueExtra, func(x ast.Location) bool {
-			return x.EqualsTo(e)
-		}) {
-			uniqueExtra = append(uniqueExtra, e)
-		}
-	}
-
-	for _, extra := range uniqueExtra {
-		sb.WriteString(fmt.Sprintf("+ %s\n", extra.CursorString()))
-	}
-
-	if e.Location.IsEmpty() {
-		sb.WriteString(fmt.Sprintf("%s\n", e.Message))
-	}
-	return sb.String()
+	return e.message
 }
 
 func NewSystemError(err error) error {

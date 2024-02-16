@@ -38,15 +38,18 @@ func (e *PList) normalize(
 	var errors []error
 	for _, item := range e.items {
 		nItem, err := item.normalize(locals, modules, module, normalizedModule)
-
-		errors = append(errors, err)
+		if err != nil {
+			errors = append(errors, err)
+		}
 		items = append(items, nItem)
 	}
 	var declaredType normalized.Type
 	if e.declaredType != nil {
 		var err error
 		declaredType, err = e.declaredType.normalize(modules, module, nil)
-		errors = append(errors, err)
+		if err != nil {
+			errors = append(errors, err)
+		}
 	}
 	return e.setSuccessor(normalized.NewPList(e.location, declaredType, items)),
 		common.MergeErrors(errors...)

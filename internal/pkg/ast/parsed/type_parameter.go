@@ -28,7 +28,7 @@ func (t *TParameter) normalize(modules map[ast.QualifiedIdentifier]*Module, modu
 
 func (t *TParameter) applyArgs(params map[ast.Identifier]Type, loc ast.Location) (Type, error) {
 	if p, ok := params[t.name]; !ok || p == nil {
-		return nil, common.NewError(t.location, "missing type parameter %s", t.name)
+		return nil, common.NewErrorAt(t.location, "missing type parameter %s", t.name)
 	} else {
 		return p, nil
 	}

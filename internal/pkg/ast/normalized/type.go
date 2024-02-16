@@ -9,7 +9,6 @@ type Type interface {
 	Statement
 	_type()
 	annotate(ctx *typed.SolvingContext, params typeParamsMap, source bool, placeholders placeholderMap) (typed.Type, error)
-	Successor() typed.Type
 	SetSuccessor(typedType typed.Type) typed.Type
 }
 
@@ -28,7 +27,7 @@ func (t *typeBase) Location() ast.Location {
 	return t.location
 }
 
-func (t *typeBase) Successor() typed.Type {
+func (t *typeBase) Successor() typed.Statement {
 	return t.successor
 }
 

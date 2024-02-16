@@ -7,6 +7,11 @@ import (
 
 type Statement interface {
 	Location() ast.Location
+	Successor() typed.Statement
+}
+
+type WithSuccessor interface {
+	SetSuccessor(s Expression)
 }
 
 type placeholderMap map[ast.FullIdentifier]typed.Type

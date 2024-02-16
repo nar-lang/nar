@@ -1,7 +1,6 @@
 package processors
 
 import (
-	"fmt"
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/ast/normalized"
 	"nar-compiler/internal/pkg/ast/parsed"
@@ -76,11 +75,7 @@ func Compile(
 				parsedModule.SetPackageName(pkg.Package.Name)
 				parsedModule.SetReferencedPackages(referencedPackages)
 				if existedModule, ok := parsedModules[parsedModule.Name()]; ok {
-					log.Err(common.Error{
-						Location: parsedModule.Location(),
-						Extra:    []ast.Location{existedModule.Location()},
-						Message:  fmt.Sprintf("module name collision: `%s`", existedModule.Name()),
-					})
+					log.Err(common.NewErrorOf(parsedModule, "module name collision: `%s`", existedModule.Name()))
 				}
 				parsedModules[parsedModule.Name()] = parsedModule
 			}

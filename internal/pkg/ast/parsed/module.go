@@ -1,7 +1,6 @@
 package parsed
 
 import (
-	"fmt"
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/ast/normalized"
 	"nar-compiler/internal/pkg/common"
@@ -81,7 +80,7 @@ func (module *Module) Normalize(
 	for _, def := range module.definitions {
 		nDef, params, err := def.normalize(modules, module, o)
 		if err != nil {
-			errors = append(errors, err)
+			errors = append(errors, err...)
 		}
 		nDef.FlattenLambdas(params, o)
 
@@ -93,9 +92,7 @@ func (module *Module) Normalize(
 	for _, modName := range o.Dependencies() {
 		depModule, ok := modules[modName]
 		if !ok {
-			errors = append(errors,
-				common.Error{Location: depModule.location, Message: fmt.Sprintf("module `%s` not found", modName)},
-			)
+			errors = append(errors, common.NewErrorOf(depModule, "module `%s` not found", modName))
 			continue
 		}
 
@@ -170,7 +167,7 @@ func (module *Module) findType(
 	args []Type,
 	loc ast.Location,
 ) (Type, *Module, []ast.FullIdentifier, error) {
-	var aliasNameEq = func(x Alias) bool { return ast.QualifiedIdentifier(x.name()) == name }
+	var aliasNameEq = func(x Alias) bool { return ast.QualifiedIdentifier(x.Name()) == name }
 
 	// 1. check current module
 	if typeAlias, ok := common.Find(aliasNameEq, module.aliases); ok {
@@ -201,7 +198,7 @@ func (module *Module) findType(
 			}
 		}
 
-		//3. search in all modules by qualified name
+		//3. search in all modules by qualified Name
 		if modName != "" {
 			if submodule, ok := modules[ast.QualifiedIdentifier(modName)]; ok {
 				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
@@ -209,7 +206,7 @@ func (module *Module) findType(
 				}
 			}
 
-			//4. search in all modules by short name
+			//4. search in all modules by short Name
 			modName = "." + modName
 			for modId, submodule := range modules {
 				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
@@ -231,7 +228,7 @@ func (module *Module) findType(
 			}
 		}
 
-		//5. search by type name as module name
+		//5. search by type Name as module Name
 		if unicode.IsUpper([]rune(typeName)[0]) {
 			modDotName := string("." + typeName)
 			for modId, submodule := range modules {
@@ -285,7 +282,7 @@ func (module *Module) findDefinitionAndAddDependency(
 ) (Definition, *Module, []ast.FullIdentifier) {
 	d, m, id := module.findDefinition(modules, name)
 	if len(id) == 1 {
-		normalizedModule.AddDependencies(m.name, d.name())
+		normalizedModule.AddDependencies(m.name, d.Name())
 	}
 	return d, m, id
 }
@@ -294,12 +291,12 @@ func (module *Module) findDefinition(
 	modules map[ast.QualifiedIdentifier]*Module, name ast.QualifiedIdentifier,
 ) (Definition, *Module, []ast.FullIdentifier) {
 	var defNameEq = func(x Definition) bool {
-		return ast.QualifiedIdentifier(x.name()) == name
+		return ast.QualifiedIdentifier(x.Name()) == name
 	}
 
 	//1. search in current module
 	if def, ok := common.Find(defNameEq, module.definitions); ok {
-		return def, module, []ast.FullIdentifier{common.MakeFullIdentifier(module.name, def.name())}
+		return def, module, []ast.FullIdentifier{common.MakeFullIdentifier(module.name, def.Name())}
 	}
 
 	lastDot := strings.LastIndex(string(name), ".")
@@ -321,7 +318,7 @@ func (module *Module) findDefinition(
 		var rModule *Module
 		var rIdent []ast.FullIdentifier
 
-		//3. search in all modules by qualified name
+		//3. search in all modules by qualified Name
 		if modName != "" {
 			if submodule, ok := modules[ast.QualifiedIdentifier(modName)]; ok {
 				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
@@ -329,7 +326,7 @@ func (module *Module) findDefinition(
 				}
 			}
 
-			//4. search in all modules by short name
+			//4. search in all modules by short Name
 			modName = "." + modName
 			for modId, submodule := range modules {
 				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
@@ -347,7 +344,7 @@ func (module *Module) findDefinition(
 			}
 		}
 
-		//5. search by definition name as module name
+		//5. search by definition Name as module Name
 		if len(defName) > 0 && unicode.IsUpper([]rune(defName)[0]) {
 			modDotName := string("." + defName)
 			for modId, submodule := range modules {
@@ -384,4 +381,20 @@ func (module *Module) findDefinition(
 	}
 
 	return nil, nil, nil
+}
+
+func (module *Module) InfixFns() []Infix {
+	return module.infixFns
+}
+
+func (module *Module) Aliases() []Alias {
+	return module.aliases
+}
+
+func (module *Module) DataTypes() []DataType {
+	return module.dataTypes
+}
+
+func (module *Module) Definitions() []Definition {
+	return module.definitions
 }

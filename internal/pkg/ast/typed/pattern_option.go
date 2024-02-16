@@ -95,7 +95,7 @@ func (p *POption) appendBytecode(ops []bytecode.Op, locations []ast.Location, bi
 
 func (p *POption) appendEquations(eqs Equations, loc *ast.Location, localDefs localTypesMap, ctx *SolvingContext, stack []*Definition) (Equations, error) {
 	if p.definition == nil {
-		return nil, common.Error{Location: p.location, Message: "definition not found"}
+		return nil, common.NewErrorOf(p, "definition not found")
 	}
 	defType, err := p.definition.uniqueType(ctx, stack)
 	if err != nil {
@@ -121,4 +121,8 @@ func (p *POption) appendEquations(eqs Equations, loc *ast.Location, localDefs lo
 		eqs = append(eqs, NewEquation(p, p.type_, p.declaredType))
 	}
 	return eqs, nil
+}
+
+func (p *POption) Definition() *Definition {
+	return p.definition
 }

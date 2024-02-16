@@ -11,10 +11,10 @@ type Module struct {
 	location     ast.Location
 	name         ast.QualifiedIdentifier
 	dependencies map[ast.QualifiedIdentifier][]ast.Identifier
-	definitions  []*Definition
+	definitions  []Definition
 }
 
-func NewModule(location ast.Location, name ast.QualifiedIdentifier, definitions []*Definition) *Module {
+func NewModule(location ast.Location, name ast.QualifiedIdentifier, definitions []Definition) *Module {
 	return &Module{
 		name:         name,
 		location:     location,
@@ -27,7 +27,7 @@ func (module *Module) Location() ast.Location {
 	return module.location
 }
 
-func (module *Module) AddDefinition(definition *Definition) {
+func (module *Module) AddDefinition(definition Definition) {
 	module.definitions = append(module.definitions, definition)
 }
 
@@ -42,7 +42,7 @@ func (module *Module) AddDependencies(modName ast.QualifiedIdentifier, identName
 func (module *Module) extractLambda(
 	loc ast.Location, parentName ast.Identifier, params []Pattern, body Expression,
 	locals map[ast.Identifier]Pattern, name ast.Identifier,
-) (def *Definition, usedLocals []ast.Identifier, replacement Expression) {
+) (def Definition, usedLocals []ast.Identifier, replacement Expression) {
 	lastLambdaId++
 	lambdaName := ast.Identifier(fmt.Sprintf("_lmbd_%s_%d_%s", parentName, lastLambdaId, name))
 	paramNames := extractParamNames(params)
@@ -53,13 +53,13 @@ func (module *Module) extractLambda(
 	def = NewDefinition(loc, LastDefinitionId, true, lambdaName, params, body, nil)
 	module.definitions = append(module.definitions, def)
 
-	replacement = NewGlobal(loc, module.name, def.name)
+	replacement = NewGlobal(loc, module.name, def.name())
 
 	if len(usedLocals) > 0 {
 		replacement = NewApply(loc, replacement,
 			common.Map(func(x ast.Identifier) Expression {
 				local, _ := locals[x]
-				return NewLocal(loc, x, local)
+				return NewLocal(loc, x, local, nil) //TODO: nil???
 			}, usedLocals),
 		)
 	}
@@ -81,9 +81,7 @@ func (module *Module) Annotate(
 		}
 		depModule, ok := modules[depName]
 		if !ok {
-			errors = append(errors, common.Error{
-				Location: module.location,
-				Message:  fmt.Sprintf("module dependency `%s` not found", depName)})
+			errors = append(errors, common.NewErrorOf(module, "module dependency `%s` not found", depName))
 			return
 		}
 		if err := depModule.Annotate(modules, typedModules); err != nil {

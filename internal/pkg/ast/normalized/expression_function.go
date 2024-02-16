@@ -9,11 +9,12 @@ import (
 
 type Function struct {
 	*expressionBase
-	name   ast.Identifier
-	params []Pattern
-	body   Expression
-	fnType Type
-	nested Expression
+	name        ast.Identifier
+	params      []Pattern
+	body        Expression
+	fnType      Type
+	nested      Expression
+	predecessor WithSuccessor
 }
 
 func NewFunction(
@@ -23,6 +24,7 @@ func NewFunction(
 	body Expression,
 	fnType Type,
 	nested Expression,
+	predecessor WithSuccessor,
 ) Expression {
 	return &Function{
 		expressionBase: newExpressionBase(loc),
@@ -31,6 +33,7 @@ func NewFunction(
 		body:           body,
 		fnType:         fnType,
 		nested:         nested,
+		predecessor:    predecessor,
 	}
 }
 
@@ -38,38 +41,40 @@ func (e *Function) flattenLambdas(parentName ast.Identifier, m *Module, locals m
 	lambdaDef, usedLocals, replacement := m.extractLambda(
 		e.location, parentName, e.params, e.body, locals, e.name)
 
+	e.predecessor.SetSuccessor(lambdaDef.body())
+
 	if len(usedLocals) > 0 {
 		replName := ast.Identifier(fmt.Sprintf("_lmbd_closrue_%d", lastLambdaId))
 		replaceMap := map[ast.Identifier]Expression{}
 
 		var closureArgs []Expression
 		for i, arg := range usedLocals {
-			closureArgs = append(closureArgs, NewLocal(e.location, arg, lambdaDef.params[i]))
+			closureArgs = append(closureArgs, NewLocal(e.location, arg, lambdaDef.params()[i], e.predecessor))
 		}
 
 		const selfName = "_self"
 		selfPattern := NewPNamed(e.location, nil, selfName)
-		lambdaDef.body = NewLet(e.location,
+		lambdaDef.setBody(NewLet(e.location,
 			selfPattern,
-			NewApply(e.location, NewGlobal(e.location, m.name, lambdaDef.name), closureArgs),
-			lambdaDef.body)
+			NewApply(e.location, NewGlobal(e.location, m.name, lambdaDef.name()), closureArgs),
+			lambdaDef.body()))
 
-		replaceMap[e.name] = NewLocal(e.location, selfName, selfPattern)
-		lambdaDef.body = lambdaDef.body.replaceLocals(replaceMap)
-		paramNames := extractParamNames(lambdaDef.params)
-		lambdaDef.body = lambdaDef.body.flattenLambdas(lambdaDef.name, m, paramNames)
+		replaceMap[e.name] = NewLocal(e.location, selfName, selfPattern, e.predecessor)
+		lambdaDef.setBody(lambdaDef.body().replaceLocals(replaceMap))
+		paramNames := extractParamNames(lambdaDef.params())
+		lambdaDef.setBody(lambdaDef.body().flattenLambdas(lambdaDef.name(), m, paramNames))
 
 		patternName := NewPNamed(e.location, nil, replName)
-		replaceMap[e.name] = NewLocal(e.location, replName, patternName)
+		replaceMap[e.name] = NewLocal(e.location, replName, patternName, e.predecessor)
 		letNested := e.nested.replaceLocals(replaceMap)
 		letNested = letNested.flattenLambdas(parentName, m, locals)
 		return NewLet(e.location, patternName, replacement, letNested)
 	} else {
 		replaceMap := map[ast.Identifier]Expression{}
 		replaceMap[e.name] = replacement
-		lambdaDef.body = lambdaDef.body.replaceLocals(replaceMap)
-		paramNames := extractParamNames(lambdaDef.params)
-		lambdaDef.body = lambdaDef.body.flattenLambdas(lambdaDef.name, m, paramNames)
+		lambdaDef.setBody(lambdaDef.body().replaceLocals(replaceMap))
+		paramNames := extractParamNames(lambdaDef.params())
+		lambdaDef.setBody(lambdaDef.body().flattenLambdas(lambdaDef.name(), m, paramNames))
 		replacedLocals := e.nested.replaceLocals(replaceMap)
 		return replacedLocals.flattenLambdas(parentName, m, locals)
 	}

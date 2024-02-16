@@ -28,7 +28,7 @@ func (e *TData) annotate(ctx *typed.SolvingContext, params typeParamsMap, source
 	}
 	args, err := common.MapError(func(t Type) (typed.Type, error) {
 		if t == nil {
-			return nil, common.Error{Location: e.location, Message: "type parameter is not declared"}
+			return nil, common.NewErrorOf(e, "type parameter is not declared")
 		}
 		return t.annotate(ctx, params, source, placeholders)
 	}, e.args)
@@ -41,7 +41,7 @@ func (e *TData) annotate(ctx *typed.SolvingContext, params typeParamsMap, source
 		func(x *DataOption) (*typed.DataOption, error) {
 			values, err := common.MapError(func(t Type) (typed.Type, error) {
 				if t == nil {
-					return nil, common.Error{Location: e.location, Message: "option value type is not declared"}
+					return nil, common.NewErrorOf(e, "option value type is not declared")
 				}
 				return t.annotate(ctx, params, source, placeholders)
 			}, x.values)

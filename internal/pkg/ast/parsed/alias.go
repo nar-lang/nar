@@ -8,7 +8,7 @@ import (
 
 type Alias interface {
 	Statement
-	name() ast.Identifier
+	Name() ast.Identifier
 	inferType(moduleName ast.QualifiedIdentifier, args []Type) (Type, ast.FullIdentifier, error)
 	hidden() bool
 	aliasType() Type
@@ -46,7 +46,7 @@ func (a *alias) inferType(moduleName ast.QualifiedIdentifier, args []Type) (Type
 		return NewTNative(a.location, id, args), id, nil
 	}
 	if len(a.params) != len(args) {
-		return nil, "", common.NewError(a.location, "wrong number of type parameters, expected %d, got %d", len(a.params), len(args))
+		return nil, "", common.NewErrorAt(a.location, "wrong number of type parameters, expected %d, got %d", len(a.params), len(args))
 	}
 	typeMap := map[ast.Identifier]Type{}
 	for i, x := range a.params {
@@ -66,7 +66,7 @@ func (a *alias) Successor() normalized.Statement {
 	return a.type_.Successor()
 }
 
-func (a *alias) name() ast.Identifier {
+func (a *alias) Name() ast.Identifier {
 	return a.name_
 }
 

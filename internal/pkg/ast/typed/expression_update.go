@@ -112,10 +112,7 @@ func (e *Update) appendEquations(eqs Equations, loc *ast.Location, localDefs loc
 
 	if e.moduleName != "" {
 		if e.definition == nil {
-			return nil, common.Error{
-				Location: e.location,
-				Message:  fmt.Sprintf("definition `%s` not found", common.MakeFullIdentifier(e.moduleName, e.recordName)),
-			}
+			return nil, common.NewErrorOf(e, "definition `%s` not found", common.MakeFullIdentifier(e.moduleName, e.recordName))
 		}
 		defType, err := e.definition.uniqueType(ctx, stack)
 		if err != nil {

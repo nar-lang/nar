@@ -48,7 +48,7 @@ func (i *import_) _parsed() {}
 func (imp *import_) unwrap(modules map[ast.QualifiedIdentifier]*Module) error {
 	m, ok := modules[imp.module_]
 	if !ok {
-		return common.NewError(imp.location, "module `%s` not found", imp.module_)
+		return common.NewErrorAt(imp.location, "module `%s` not found", imp.module_)
 	}
 	modName := m.name
 	if imp.alias != nil {
@@ -73,17 +73,17 @@ func (imp *import_) unwrap(modules map[ast.QualifiedIdentifier]*Module) error {
 
 	for _, d := range m.definitions {
 		if !d.hidden() {
-			expose(string(d.name()), string(d.name()))
+			expose(string(d.Name()), string(d.Name()))
 		}
 	}
 
 	for _, a := range m.aliases {
 		if !a.hidden() {
-			expose(string(a.name()), string(a.name()))
+			expose(string(a.Name()), string(a.Name()))
 			if dt, ok := a.aliasType().(*TData); ok {
 				for _, v := range dt.options {
 					if !v.hidden {
-						expose(string(v.name), string(a.name()))
+						expose(string(v.name), string(a.Name()))
 					}
 				}
 			}

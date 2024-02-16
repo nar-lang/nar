@@ -1,6 +1,7 @@
 package lsp
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -19,9 +20,11 @@ import (
 const Version = "1.0"
 
 type server struct {
-	cacheDir string
-	log      *common.LogWriter
-	trace    protocol.TraceValues
+	id        int
+	cacheDir  string
+	log       *common.LogWriter
+	trace     protocol.TraceValues
+	cancelCtx context.CancelFunc
 
 	rootURI          protocol.DocumentURI
 	workspaceFolders []protocol.WorkspaceFolder
@@ -50,8 +53,14 @@ type LanguageServer interface {
 	GotMessage(msg []byte)
 }
 
+var lastId = 0
+
 func NewServer(cacheDir string, writeResponse func([]byte)) LanguageServer {
+	lastId++
+	ctx, cancelCtx := context.WithCancel(context.Background())
 	s := &server{
+		id:                    lastId,
+		cancelCtx:             cancelCtx,
 		inChan:                make(chan []byte, 16),
 		responseChan:          make(chan rpcResponse, 16),
 		notificationChan:      make(chan rpcNotification, 128),
@@ -66,13 +75,14 @@ func NewServer(cacheDir string, writeResponse func([]byte)) LanguageServer {
 		normalizedModules:     map[ast.QualifiedIdentifier]*normalized.Module{},
 		typedModules:          map[ast.QualifiedIdentifier]*typed.Module{},
 	}
-	go s.sender(writeResponse)
-	go s.receiver()
-	go s.compiler()
+	go s.sender(writeResponse, ctx)
+	go s.receiver(ctx)
+	go s.compiler(ctx)
 	return s
 }
 
 func (s *server) Close() {
+	s.cancelCtx()
 	close(s.responseChan)
 	close(s.notificationChan)
 	close(s.inChan)
@@ -83,42 +93,39 @@ func (s *server) GotMessage(msg []byte) {
 	s.inChan <- msg
 }
 
-func (s *server) receiver() {
+func (s *server) receiver(ctx context.Context) {
 	for {
-		msg, ok := <-s.inChan
-		if !ok {
+		select {
+		case msg := <-s.inChan:
+			if err := s.handleMessage(msg); err != nil {
+				log.Println(err.Error())
+			}
 			break
-		}
-		if err := s.handleMessage(msg); err != nil {
-			log.Println(err.Error())
+		case <-ctx.Done():
+			return
 		}
 	}
 }
 
-func (s *server) sender(writeResponse func([]byte)) {
+func (s *server) sender(writeResponse func([]byte), ctx context.Context) {
 	for {
 		var data []byte
 		var err error
 		select {
-		case response, ok := <-s.responseChan:
-			if !ok {
-				break
-			}
+		case response := <-s.responseChan:
 			data, err = json.Marshal(response)
 			break
-		case notification, ok := <-s.notificationChan:
-			if !ok {
-				break
-			}
+		case notification := <-s.notificationChan:
 			data, err = json.Marshal(notification)
 			break
+		case <-ctx.Done():
+			return
 		}
 		if err != nil {
 			s.log.Err(err)
 		} else {
 			writeResponse(data)
 		}
-
 		s.log.Flush(os.Stdout)
 	}
 }

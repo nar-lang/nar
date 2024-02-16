@@ -23,7 +23,7 @@ func NewTNative(loc ast.Location, name ast.FullIdentifier, args []Type) Type {
 func (e *TNative) annotate(ctx *typed.SolvingContext, params typeParamsMap, source bool, placeholders placeholderMap) (typed.Type, error) {
 	args, err := common.MapError(func(t Type) (typed.Type, error) {
 		if t == nil {
-			return nil, common.Error{Location: e.location, Message: "type parameter is not declared"}
+			return nil, common.NewErrorOf(e, "type parameter is not declared")
 		}
 		return t.annotate(ctx, params, source, placeholders)
 	}, e.args)

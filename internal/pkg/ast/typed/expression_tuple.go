@@ -61,10 +61,7 @@ func (e Tuple) appendEquations(eqs Equations, loc *ast.Location, localDefs local
 	items, err := common.MapError(func(e Expression) (Type, error) {
 		itemType := e.Type()
 		if itemType == nil {
-			return nil, common.Error{
-				Location: e.Location(),
-				Message:  "type cannot be inferred",
-			}
+			return nil, common.NewErrorOf(e, "type cannot be inferred")
 		}
 		return itemType, nil
 	}, e.items)

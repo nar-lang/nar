@@ -106,6 +106,10 @@ func (t *TData) SetOptions(options []*DataOption) {
 	t.options = options
 }
 
+func (t *TData) Name() ast.FullIdentifier {
+	return t.name
+}
+
 type DataOption struct {
 	name   ast.DataOptionIdentifier
 	values []Type

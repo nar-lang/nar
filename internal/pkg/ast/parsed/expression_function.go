@@ -31,6 +31,10 @@ type Function struct {
 	nested       Expression
 }
 
+func (e *Function) SetSuccessor(s normalized.Expression) {
+	e.successor = s
+}
+
 func (e *Function) Iterate(f func(statement Statement)) {
 	f(e)
 	for _, param := range e.params {
@@ -80,5 +84,5 @@ func (e *Function) normalize(
 			return nil, err
 		}
 	}
-	return e.setSuccessor(normalized.NewFunction(e.location, e.name, params, body, declaredType, nested))
+	return e.setSuccessor(normalized.NewFunction(e.location, e.name, params, body, declaredType, nested, e))
 }

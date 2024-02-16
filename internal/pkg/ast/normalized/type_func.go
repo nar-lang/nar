@@ -23,7 +23,7 @@ func NewTFunc(loc ast.Location, params []Type, ret Type) Type {
 func (e *TFunc) annotate(ctx *typed.SolvingContext, params typeParamsMap, source bool, placeholders placeholderMap) (typed.Type, error) {
 	funcParams, err := common.MapError(func(t Type) (typed.Type, error) {
 		if t == nil {
-			return nil, common.Error{Location: e.location, Message: "function parameter type is not declared"}
+			return nil, common.NewErrorOf(e, "function parameter type is not declared")
 		}
 		return t.annotate(ctx, params, source, placeholders)
 	}, e.params)
@@ -31,7 +31,7 @@ func (e *TFunc) annotate(ctx *typed.SolvingContext, params typeParamsMap, source
 		return nil, err
 	}
 	if e.return_ == nil {
-		return nil, common.Error{Location: e.location, Message: "function return type is not declared"}
+		return nil, common.NewErrorOf(e, "function return type is not declared")
 	}
 	return_, err := e.return_.annotate(ctx, params, source, placeholders)
 	if err != nil {

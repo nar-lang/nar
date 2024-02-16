@@ -4,7 +4,6 @@ import (
 	"maps"
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/ast/normalized"
-	"nar-compiler/internal/pkg/common"
 )
 
 type Definition interface {
@@ -12,9 +11,11 @@ type Definition interface {
 	normalize(
 		modules map[ast.QualifiedIdentifier]*Module, module *Module,
 		normalizedModule *normalized.Module,
-	) (*normalized.Definition, map[ast.Identifier]normalized.Pattern, error)
-	name() ast.Identifier
+	) (normalized.Definition, map[ast.Identifier]normalized.Pattern, []error)
+	Name() ast.Identifier
 	hidden() bool
+	Body() Expression
+	Params() []Pattern
 }
 
 func NewDefinition(
@@ -42,14 +43,22 @@ type definition struct {
 	params       []Pattern
 	body         Expression
 	declaredType Type
-	successor    *normalized.Definition
+	successor    normalized.Definition
+}
+
+func (def *definition) Params() []Pattern {
+	return def.params
+}
+
+func (def *definition) Body() Expression {
+	return def.body
 }
 
 func (def *definition) hidden() bool {
 	return def.hidden_
 }
 
-func (def *definition) name() ast.Identifier {
+func (def *definition) Name() ast.Identifier {
 	return def.name_
 }
 
@@ -66,7 +75,7 @@ func (def *definition) _parsed() {}
 func (def *definition) normalize(
 	modules map[ast.QualifiedIdentifier]*Module, module *Module,
 	normalizedModule *normalized.Module,
-) (*normalized.Definition, map[ast.Identifier]normalized.Pattern, error) {
+) (normalized.Definition, map[ast.Identifier]normalized.Pattern, []error) {
 	normalized.LastDefinitionId++
 
 	paramLocals := map[ast.Identifier]normalized.Pattern{}
@@ -74,22 +83,32 @@ func (def *definition) normalize(
 	var errors []error
 	for _, param := range def.params {
 		nParam, err := param.normalize(paramLocals, modules, module, normalizedModule)
-		errors = append(errors, err)
+		if err != nil {
+			errors = append(errors, err)
+		}
 		params = append(params, nParam)
 	}
+	var body normalized.Expression
+	var err error
 	locals := maps.Clone(paramLocals)
-	body, err := def.body.normalize(locals, modules, module, normalizedModule)
-	errors = append(errors, err)
+	if def.body != nil {
+		body, err = def.body.normalize(locals, modules, module, normalizedModule)
+		if err != nil {
+			errors = append(errors, err)
+		}
+	}
 	var declaredType normalized.Type
 	if def.declaredType != nil {
 		declaredType, err = def.declaredType.normalize(modules, module, nil)
-		errors = append(errors, err)
+		if err != nil {
+			errors = append(errors, err)
+		}
 	}
 
 	nDef := normalized.NewDefinition(
 		def.location, normalized.LastDefinitionId, def.hidden_, def.name_, params, body, declaredType)
 	def.successor = nDef
-	return nDef, paramLocals, common.MergeErrors(errors...)
+	return nDef, paramLocals, errors
 }
 
 func (def *definition) Iterate(f func(statement Statement)) {

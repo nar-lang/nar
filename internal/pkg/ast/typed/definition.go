@@ -110,6 +110,9 @@ func (def *Definition) mapTypes(subst map[uint64]Type) error {
 	if err != nil {
 		return err
 	}
+	if def.body == nil {
+		return common.NewErrorOf(def, "missing body")
+	}
 	return def.body.mapTypes(subst)
 }
 

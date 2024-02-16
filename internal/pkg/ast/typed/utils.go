@@ -14,24 +14,18 @@ func checkPatterns(patterns []Pattern) error {
 	if matrix, redundant, err := toNonRedundantRows(patterns); err != nil {
 		return err
 	} else if len(redundant) > 0 {
-		return common.Error{
-			Location: redundant[0].Location(),
-			Extra:    common.Map(func(p Pattern) ast.Location { return p.Location() }, redundant[1:]),
-			Message:  "pattern matching is redundant",
-		}
+		return common.NewErrorOf(redundant[0], "pattern matching is redundant")
 	} else {
 		missingPatterns, err := isExhaustive(matrix, 1)
 		if err != nil {
 			return err
 		}
 		if len(missingPatterns) > 0 {
-			return common.Error{
-				Location: patterns[len(patterns)-1].Location(),
-				Message: "pattern matching is not exhaustive, missing patterns: \n\t" +
-					strings.Join(
-						common.Map(func(r []simplePattern) string { return common.Join(r, ", ") }, missingPatterns),
-						"\n\t"),
-			}
+			return common.NewErrorOf(patterns[len(patterns)-1],
+				"pattern matching is not exhaustive, missing patterns: \n\t %s",
+				strings.Join(
+					common.Map(func(r []simplePattern) string { return common.Join(r, ", ") }, missingPatterns),
+					"\n\t"))
 		}
 	}
 	return nil
@@ -318,5 +312,5 @@ func getConstType(ctx *SolvingContext, cv ast.ConstValue, src annotationSource) 
 }
 
 func newTypeMatchError(loc ast.Location, a, t Type) error {
-	return common.NewError(loc, "cannot match %s and %s", t.Code(""), a.Code(""))
+	return common.NewErrorAt(loc, "cannot match %s and %s", t.Code(""), a.Code(""))
 }

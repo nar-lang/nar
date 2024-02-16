@@ -9,7 +9,6 @@ type Pattern interface {
 	Statement
 	extractLocals(locals map[ast.Identifier]Pattern)
 	annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, modules map[ast.QualifiedIdentifier]*Module, typedModules map[ast.QualifiedIdentifier]*typed.Module, moduleName ast.QualifiedIdentifier, typeMapSource bool, stack []*typed.Definition) (typed.Pattern, error)
-	Successor() typed.Pattern
 }
 
 type patternBase struct {
@@ -26,7 +25,7 @@ func (p *patternBase) Location() ast.Location {
 	return p.location
 }
 
-func (p *patternBase) Successor() typed.Pattern {
+func (p *patternBase) Successor() typed.Statement {
 	return p.successor
 }
 

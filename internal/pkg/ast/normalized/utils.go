@@ -1,7 +1,6 @@
 package normalized
 
 import (
-	"fmt"
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/ast/typed"
 	"nar-compiler/internal/pkg/common"
@@ -17,25 +16,19 @@ func getAnnotatedGlobal(
 ) (*typed.Definition, error) {
 	mod, ok := modules[moduleName]
 	if !ok {
-		return nil, common.Error{
-			Location: loc,
-			Message:  fmt.Sprintf("module `%s` not found", moduleName),
-		}
+		return nil, common.NewErrorAt(loc, "module `%s` not found", moduleName)
 	}
 	nDef, ok := common.Find(
-		func(definition *Definition) bool {
-			return definition.name == definitionName
+		func(definition Definition) bool {
+			return definition.name() == definitionName
 		},
 		mod.definitions)
 	if !ok {
-		return nil, common.Error{
-			Location: loc,
-			Message:  fmt.Sprintf("definition `%s` not found", definitionName),
-		}
+		return nil, common.NewErrorAt(loc, "definition `%s` not found", definitionName)
 	}
 
 	def, ok := common.Find(func(definition *typed.Definition) bool {
-		return definition.Id() == nDef.id
+		return definition.Id() == nDef.id()
 	}, stack)
 
 	if !ok {
@@ -49,7 +42,7 @@ func getAnnotatedGlobal(
 		}
 
 		var err error
-		def, ok = typedModule.FindDefinition(nDef.name)
+		def, ok = typedModule.FindDefinition(nDef.name())
 		if !ok {
 			def, err = nDef.annotate(modules, typedModules, moduleName, stack)
 			if err != nil {

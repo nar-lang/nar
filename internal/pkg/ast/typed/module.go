@@ -1,7 +1,6 @@
 package typed
 
 import (
-	"fmt"
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
@@ -13,6 +12,10 @@ type Module struct {
 	location     ast.Location
 	dependencies map[ast.QualifiedIdentifier][]ast.Identifier
 	definitions  []*Definition
+}
+
+func (module *Module) Location() ast.Location {
+	return module.location
 }
 
 func NewModule(
@@ -77,10 +80,7 @@ func (module *Module) Compose(modules map[ast.QualifiedIdentifier]*Module, debug
 	for depModule := range module.dependencies {
 		m, ok := modules[depModule]
 		if !ok {
-			return common.Error{
-				Location: module.location,
-				Message:  fmt.Sprintf("module '%s' not found", depModule),
-			}
+			return common.NewErrorOf(module, "module '%s' not found", depModule)
 		}
 		if err := m.Compose(modules, debug, binary); err != nil {
 			return err

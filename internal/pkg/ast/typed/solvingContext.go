@@ -135,10 +135,7 @@ func (tg *typeGroup) containsUnbound(ub *TUnbound) bool {
 
 func (tg *typeGroup) absorb(ub *TUnbound, loc ast.Location) error {
 	if tg.constraint != "" && ub.constraint != "" && tg.constraint != ub.constraint {
-		return common.Error{
-			Location: loc,
-			Message:  "type constraint violation",
-		}
+		return common.NewErrorAt(loc, "type constraint violation")
 	}
 	if ub.constraint != "" {
 		tg.constraint = ub.constraint
@@ -160,10 +157,7 @@ func (tg *typeGroup) merge(rg *typeGroup, loc ast.Location) (Equations, error) {
 	}
 
 	if tg.constraint != "" && rg.constraint != "" && tg.constraint != rg.constraint {
-		return nil, common.Error{
-			Location: loc,
-			Message:  "type constraint violation",
-		}
+		return nil, common.NewErrorAt(loc, "type constraint violation")
 	}
 	if rg.constraint != "" {
 		tg.constraint = rg.constraint
@@ -178,10 +172,7 @@ func (tg *typeGroup) specialize(type_ Type, loc ast.Location) (Equations, error)
 	switch tg.constraint {
 	case common.ConstraintNumber:
 		if n, ok := type_.(*TNative); !ok || (n.name != common.NarBaseMathInt && n.name != common.NarBaseMathFloat) {
-			return nil, common.Error{
-				Location: loc,
-				Message:  fmt.Sprintf("numeric type cannot hold %s", type_.Code("")),
-			}
+			return nil, common.NewErrorAt(loc, "numeric type cannot hold %s", type_.Code(""))
 		}
 	}
 
@@ -262,7 +253,7 @@ func (ctx *SolvingContext) specialize(ub *TUnbound, type_ Type, loc ast.Location
 			return tg.specialize(type_, loc)
 		}
 	}
-	return nil, common.NewError(ub.location, "cannot find annotation of `%s`", ub.Code(""))
+	return nil, common.NewErrorAt(ub.location, "cannot find annotation of `%s`", ub.Code(""))
 }
 
 func (ctx *SolvingContext) merge(l, r *TUnbound, loc ast.Location) (Equations, error) {

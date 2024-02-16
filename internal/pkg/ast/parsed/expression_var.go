@@ -1,7 +1,6 @@
 package parsed
 
 import (
-	"fmt"
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/ast/normalized"
 	"nar-compiler/internal/pkg/common"
@@ -20,6 +19,10 @@ type Var struct {
 	name ast.QualifiedIdentifier
 }
 
+func (e *Var) SetSuccessor(s normalized.Expression) {
+	e.successor = s
+}
+
 func (e *Var) Iterate(f func(statement Statement)) {
 	f(e)
 }
@@ -31,12 +34,12 @@ func (e *Var) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	if lc, ok := locals[ast.Identifier(e.name)]; ok {
-		return normalized.NewLocal(e.location, ast.Identifier(e.name), lc), nil
+		return e.setSuccessor(normalized.NewLocal(e.location, ast.Identifier(e.name), lc, e))
 	}
 
 	d, m, ids := module.findDefinitionAndAddDependency(modules, e.name, normalizedModule)
 	if len(ids) == 1 {
-		return normalized.NewGlobal(e.location, m.name, d.name()), nil
+		return e.setSuccessor(normalized.NewGlobal(e.location, m.name, d.Name()))
 	} else if len(ids) > 1 {
 		return nil, newAmbiguousDefinitionError(ids, e.name, e.location)
 	}
@@ -54,8 +57,5 @@ func (e *Var) normalize(
 		return e.setSuccessor(access)
 	}
 
-	return nil, common.Error{
-		Location: e.location,
-		Message:  fmt.Sprintf("identifier `%s` not found", e.location.Text()),
-	}
+	return nil, common.NewErrorOf(e, "identifier `%s` not found", e.location.Text())
 }

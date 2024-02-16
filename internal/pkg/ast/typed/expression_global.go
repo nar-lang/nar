@@ -50,10 +50,7 @@ func (e *Global) Code(currentModule ast.QualifiedIdentifier) string {
 
 func (e *Global) appendEquations(eqs Equations, loc *ast.Location, localDefs localTypesMap, ctx *SolvingContext, stack []*Definition) (Equations, error) {
 	if e.definition == nil {
-		return nil, common.Error{
-			Location: e.location,
-			Message:  fmt.Sprintf("definition `%s` not found", e.definitionName),
-		}
+		return nil, common.NewErrorOf(e, "definition `%s` not found", e.definitionName)
 	}
 
 	defType, err := e.definition.uniqueType(ctx, stack)
@@ -69,11 +66,12 @@ func (e *Global) appendBytecode(ops []bytecode.Op, locations []ast.Location, bin
 	id := common.MakeFullIdentifier(e.moduleName, e.definitionName)
 	funcIndex, ok := binary.FuncsMap[id]
 	if !ok {
-		panic(common.Error{
-			Location: e.location,
-			Message:  fmt.Sprintf("global definition `%s` not found", id),
-		}.Error())
+		panic(common.NewErrorOf(e, "global definition `%s` not found", id).Error())
 	}
 	ops, locations = bytecode.AppendLoadGlobal(funcIndex, e.location, ops, locations)
 	return ops, locations
+}
+
+func (e *Global) Definition() *Definition {
+	return e.definition
 }

@@ -80,10 +80,7 @@ func (p *PTuple) appendEquations(eqs Equations, loc *ast.Location, localDefs loc
 	items, err := common.MapError(func(e Pattern) (Type, error) {
 		t := e.Type()
 		if t == nil {
-			return nil, common.Error{
-				Location: e.Location(),
-				Message:  "type cannot be inferred",
-			}
+			return nil, common.NewErrorOf(e, "type cannot be inferred")
 		}
 		return t, nil
 	}, p.items)

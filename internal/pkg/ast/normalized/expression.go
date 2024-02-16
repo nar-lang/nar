@@ -8,7 +8,6 @@ import (
 type Expression interface {
 	Statement
 	_expression()
-	Successor() typed.Expression
 	flattenLambdas(parentName ast.Identifier, m *Module, locals map[ast.Identifier]Pattern) Expression
 	replaceLocals(replace map[ast.Identifier]Expression) Expression
 	extractUsedLocalsSet(definedLocals map[ast.Identifier]Pattern, usedLocals map[ast.Identifier]struct{})
@@ -32,7 +31,7 @@ func (e *expressionBase) Location() ast.Location {
 	return e.location
 }
 
-func (e *expressionBase) Successor() typed.Expression {
+func (e *expressionBase) Successor() typed.Statement {
 	return e.successor
 }
 

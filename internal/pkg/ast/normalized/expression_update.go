@@ -1,7 +1,6 @@
 package normalized
 
 import (
-	"fmt"
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/ast/typed"
 	"nar-compiler/internal/pkg/common"
@@ -79,11 +78,8 @@ func (e *Update) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, m
 		return e.setSuccessor(typed.NewUpdateGlobal(ctx, e.location, e.moduleName, e.recordName, targetDef, fields))
 	} else {
 		if e.target == nil {
-			return nil, common.Error{
-				Location: e.location,
-				Message:  fmt.Sprintf("local variable `%s` not resolved", e.recordName),
-			}
+			return nil, common.NewErrorOf(e, "local variable `%s` not resolved", e.recordName)
 		}
-		return e.setSuccessor(typed.NewUpdateLocal(e.location, e.recordName, e.target.Successor(), fields))
+		return e.setSuccessor(typed.NewUpdateLocal(e.location, e.recordName, e.target.Successor().(typed.Pattern), fields))
 	}
 }

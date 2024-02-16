@@ -54,7 +54,7 @@ func (e *Constructor) mapTypes(subst map[uint64]Type) error {
 		if xdt, err := e.dataType.mapTo(subst); err != nil {
 			return err
 		} else if txdt, ok := xdt.(*TData); !ok {
-			return common.Error{Location: e.dataType.location, Message: "failed to map data type"}
+			return common.NewErrorOf(e.dataType, "failed to map data type")
 		} else {
 			e.dataType = txdt
 		}

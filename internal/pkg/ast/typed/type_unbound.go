@@ -60,10 +60,7 @@ func (t *TUnbound) mapTo(subst map[uint64]Type) (Type, error) {
 		}
 		return x.mapTo(subst)
 	}
-	return nil, common.Error{
-		Location: t.location,
-		Message:  fmt.Sprintf("failed to infer type"),
-	}
+	return nil, common.NewErrorOf(t, "failed to infer type")
 }
 
 func (t *TUnbound) equalsTo(other Type, req map[ast.FullIdentifier]struct{}) bool {

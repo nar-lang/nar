@@ -1,6 +1,7 @@
 package lsp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
@@ -13,7 +14,7 @@ import (
 	"time"
 )
 
-func (s *server) compiler() {
+func (s *server) compiler(ctx context.Context) {
 	modifiedDocs := map[protocol.DocumentURI]struct{}{}
 	forcedDocs := map[protocol.DocumentURI]struct{}{}
 	modifiedPackages := map[ast.PackageIdentifier]struct{}{}
@@ -37,6 +38,8 @@ func (s *server) compiler() {
 			case <-time.After(500 * time.Millisecond):
 				waitTimeout = false
 				break
+			case <-ctx.Done():
+				return
 			}
 		}
 
@@ -177,38 +180,30 @@ func (s *server) compile(pkgNames []ast.PackageIdentifier) {
 func (s *server) extractDiagnosticsData(log *common.LogWriter) map[protocol.DocumentURI][]protocol.Diagnostic {
 	diagnosticsData := map[protocol.DocumentURI][]protocol.Diagnostic{}
 
-	insertDiagnostic := func(e common.Error, severity protocol.DiagnosticSeverity) {
-		if e.Location.IsEmpty() {
-			e.Location = e.Extra[0]
-			e.Extra = e.Extra[1:]
-		}
-		uri := pathToUri(e.Location.FilePath())
-		diagnosticsData[uri] = append(diagnosticsData[uri], protocol.Diagnostic{
-			Range:    locToRange(e.Location),
-			Severity: protocol.SeverityError,
-			Message:  e.Message,
-			RelatedInformation: common.Map(func(l ast.Location) protocol.DiagnosticRelatedInformation {
-				return protocol.DiagnosticRelatedInformation{
-					Location: *locToLocation(l),
-					Message:  "?",
-				}
-			}, e.Extra),
-		})
+	insertDiagnostic := func(e common.ErrorWithLocation, severity protocol.DiagnosticSeverity) {
+		uri := pathToUri(e.Location().FilePath())
+		diagnosticsData[uri] = append(diagnosticsData[uri],
+			protocol.Diagnostic{
+				Range:              locToRange(e.Location()),
+				Severity:           protocol.SeverityError,
+				Message:            e.Message(),
+				RelatedInformation: nil,
+			})
 	}
 
 	for _, err := range log.Errors() {
-		var e common.Error
-		if errors.As(err, &e) {
-			insertDiagnostic(e, protocol.SeverityError)
+		var ewl common.ErrorWithLocation
+		if errors.As(err, &ewl) {
+			insertDiagnostic(ewl, protocol.SeverityError)
 		} else {
 			s.log.Err(err)
 		}
 	}
 
 	for _, err := range log.Warnings() {
-		var e common.Error
-		if errors.As(err, &e) {
-			insertDiagnostic(e, protocol.SeverityError)
+		var ewl common.ErrorWithLocation
+		if errors.As(err, &ewl) {
+			insertDiagnostic(ewl, protocol.SeverityWarning)
 		} else {
 			s.log.Warn(err)
 		}

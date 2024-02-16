@@ -27,9 +27,7 @@ func (e *TParameter) annotate(ctx *typed.SolvingContext, params typeParamsMap, s
 			params[e.name] = r
 			return e.setSuccessor(r)
 		} else {
-			return nil, common.Error{
-				Location: e.location, Message: "unknown type parameter",
-			}
+			return nil, common.NewErrorOf(e, "unknown type parameter")
 		}
 	}
 }

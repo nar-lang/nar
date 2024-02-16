@@ -94,3 +94,7 @@ func (t *TNative) Code(currentModule ast.QualifiedIdentifier) string {
 func (t *TNative) String() string {
 	return string(t.name)
 }
+
+func (t *TNative) Name() ast.FullIdentifier {
+	return t.name
+}

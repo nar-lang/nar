@@ -36,12 +36,12 @@ func (t *TRecord) merge(other Type, loc ast.Location) (Equations, error) {
 			if of, ok := o.fields[n]; ok {
 				eqs = append(eqs, NewEquationBestLoc(f, of, loc))
 			} else if !o.mayHaveMoreFields {
-				return nil, common.Error{Location: loc, Message: fmt.Sprintf("record missing field `%s`", n)}
+				return nil, common.NewErrorAt(loc, "record missing field `%s`", n)
 			}
 		}
 		for n := range o.fields {
 			if _, ok := t.fields[n]; !ok && !t.mayHaveMoreFields {
-				return nil, common.Error{Location: loc, Message: fmt.Sprintf("record missing field `%s`", n)}
+				return nil, common.NewErrorAt(loc, "record missing field `%s`", n)
 			}
 		}
 		return eqs, nil
@@ -95,4 +95,8 @@ func (t *TRecord) Code(currentModule ast.QualifiedIdentifier) string {
 	}
 	sb.WriteString("}")
 	return sb.String()
+}
+
+func (t *TRecord) Fields() map[ast.Identifier]Type {
+	return t.fields
 }

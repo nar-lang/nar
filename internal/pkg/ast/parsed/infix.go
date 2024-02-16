@@ -10,6 +10,8 @@ type Infix interface {
 	hasLowerPrecedenceThan(fn Infix) bool
 	alias() ast.Identifier
 	hidden() bool
+	Name() ast.InfixIdentifier
+	Location() ast.Location
 }
 
 func NewInfix(
@@ -36,6 +38,14 @@ type infix struct {
 	aliasLocation ast.Location
 	alias_        ast.Identifier
 	successor     normalized.Statement
+}
+
+func (i *infix) Location() ast.Location {
+	return i.location
+}
+
+func (i *infix) Name() ast.InfixIdentifier {
+	return i.name_
 }
 
 func (i *infix) hidden() bool {

@@ -104,10 +104,7 @@ func loc(src *source, start uint32) ast.Location {
 }
 
 func newError(src source, msg string) error {
-	return common.Error{
-		Location: loc(&src, src.cursor),
-		Message:  msg,
-	}
+	return common.NewErrorAt(loc(&src, src.cursor), msg)
 }
 
 func isOk(src *source) bool {

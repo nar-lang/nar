@@ -22,7 +22,7 @@ func (e *TRecord) annotate(ctx *typed.SolvingContext, params typeParamsMap, sour
 	fields := map[ast.Identifier]typed.Type{}
 	for n, v := range e.fields {
 		if v == nil {
-			return nil, common.Error{Location: e.location, Message: "record field type is not declared"}
+			return nil, common.NewErrorOf(e, "record field type is not declared")
 		}
 		var err error
 		fields[n], err = v.annotate(ctx, params, source, placeholders)
