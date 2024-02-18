@@ -11,8 +11,9 @@ import (
 type Import interface {
 	_parsed()
 	exposes(name string) bool
-	module() ast.QualifiedIdentifier
+	Module() ast.QualifiedIdentifier
 	unwrap(modules map[ast.QualifiedIdentifier]*Module) error
+	Alias() *ast.Identifier
 }
 
 func NewImport(
@@ -35,7 +36,11 @@ type import_ struct {
 	exposing    []string
 }
 
-func (i *import_) module() ast.QualifiedIdentifier {
+func (i *import_) Alias() *ast.Identifier {
+	return i.alias
+}
+
+func (i *import_) Module() ast.QualifiedIdentifier {
 	return i.module_
 }
 
@@ -72,13 +77,13 @@ func (imp *import_) unwrap(modules map[ast.QualifiedIdentifier]*Module) error {
 	}
 
 	for _, d := range m.definitions {
-		if !d.hidden() {
+		if !d.Hidden() {
 			expose(string(d.Name()), string(d.Name()))
 		}
 	}
 
 	for _, a := range m.aliases {
-		if !a.hidden() {
+		if !a.Hidden() {
 			expose(string(a.Name()), string(a.Name()))
 			if dt, ok := a.aliasType().(*TData); ok {
 				for _, v := range dt.options {

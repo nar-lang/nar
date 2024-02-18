@@ -139,7 +139,7 @@ func (module *Module) findInfixFn(
 	if modules != nil {
 		for _, imp := range module.imports {
 			if imp.exposes(string(name)) {
-				return modules[imp.module()].findInfixFn(nil, name)
+				return modules[imp.Module()].findInfixFn(nil, name)
 			}
 		}
 
@@ -194,7 +194,7 @@ func (module *Module) findType(
 		for _, imp := range module.imports {
 
 			if imp.exposes(string(name)) {
-				return modules[imp.module()].findType(nil, typeName, args, loc)
+				return modules[imp.Module()].findType(nil, typeName, args, loc)
 			}
 		}
 
@@ -310,7 +310,7 @@ func (module *Module) findDefinition(
 	if modules != nil {
 		for _, imp := range module.imports {
 			if imp.exposes(string(name)) {
-				return modules[imp.module()].findDefinition(nil, defName)
+				return modules[imp.Module()].findDefinition(nil, defName)
 			}
 		}
 
@@ -397,4 +397,8 @@ func (module *Module) DataTypes() []DataType {
 
 func (module *Module) Definitions() []Definition {
 	return module.definitions
+}
+
+func (module *Module) Imports() []Import {
+	return module.imports
 }

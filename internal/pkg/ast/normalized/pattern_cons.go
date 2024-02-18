@@ -38,3 +38,11 @@ func (e *PCons) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, mo
 	}
 	return e.setSuccessor(typed.NewPCons(ctx, e.location, annotatedDeclaredType, head, tail))
 }
+
+func (e *PCons) Head() Pattern {
+	return e.head
+}
+
+func (e *PCons) Tail() Pattern {
+	return e.tail
+}

@@ -58,3 +58,7 @@ func (e *Let) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, modu
 	}
 	return e.setSuccessor(typed.NewLet(ctx, e.location, pattern, value, body))
 }
+
+func (e *Let) Pattern() Pattern {
+	return e.pattern
+}

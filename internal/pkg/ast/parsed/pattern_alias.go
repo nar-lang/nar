@@ -44,3 +44,7 @@ func (e *PAlias) normalize(
 	locals[e.alias] = np
 	return e.setSuccessor(np), common.MergeErrors(err1, err2)
 }
+
+func (e *PAlias) Alias() ast.Identifier {
+	return e.alias
+}

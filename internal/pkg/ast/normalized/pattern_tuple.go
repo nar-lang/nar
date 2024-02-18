@@ -37,3 +37,7 @@ func (e *PTuple) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, m
 	}
 	return e.setSuccessor(typed.NewPTuple(ctx, e.location, annotatedDeclaredType, items))
 }
+
+func (e *PTuple) Items() []Pattern {
+	return e.items
+}

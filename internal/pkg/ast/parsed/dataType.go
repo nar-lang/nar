@@ -11,6 +11,7 @@ type DataType interface {
 	flatten(name ast.QualifiedIdentifier) (Alias, []Definition)
 	Name() ast.Identifier
 	Options() []DataTypeOption
+	Hidden() bool
 }
 
 func NewDataType(
@@ -32,6 +33,10 @@ type dataType struct {
 	params    []ast.Identifier
 	options   []DataTypeOption
 	successor Statement
+}
+
+func (d dataType) Hidden() bool {
+	return d.hidden
 }
 
 func (d dataType) Options() []DataTypeOption {
@@ -88,6 +93,7 @@ type DataTypeOption interface {
 	dataOption() *DataOption
 	constructor(moduleName ast.QualifiedIdentifier, dataName ast.Identifier, dataType Type, hidden bool) Definition
 	Name() ast.Identifier
+	Hidden() bool
 }
 
 func NewDataTypeOption(loc ast.Location, hidden bool, name ast.Identifier, values []*DataTypeValue) DataTypeOption {
@@ -105,6 +111,10 @@ type dataTypeOption struct {
 	name      ast.Identifier
 	values    []*DataTypeValue
 	successor Statement
+}
+
+func (d *dataTypeOption) Hidden() bool {
+	return d.hidden
 }
 
 func (d *dataTypeOption) Name() ast.Identifier {

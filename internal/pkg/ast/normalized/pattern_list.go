@@ -37,3 +37,7 @@ func (e *PList) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, mo
 	}
 	return e.setSuccessor(typed.NewPList(ctx, e.location, annotatedDeclaredType, items))
 }
+
+func (e *PList) Items() []Pattern {
+	return e.items
+}

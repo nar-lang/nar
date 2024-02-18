@@ -20,6 +20,7 @@ type Definition interface {
 	body() Expression
 	setBody(expr Expression)
 	id() uint64
+	Params() []Pattern
 }
 
 func NewDefinition(
@@ -47,6 +48,10 @@ type definition struct {
 	location     ast.Location
 	hidden       bool
 	successor    *typed.Definition
+}
+
+func (def *definition) Params() []Pattern {
+	return def.params_
 }
 
 func (def *definition) id() uint64 {

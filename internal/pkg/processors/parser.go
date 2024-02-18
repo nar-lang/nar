@@ -79,6 +79,10 @@ const (
 	SmbEscape      = '\\'
 )
 
+var Keywords = []string{
+	KwModule, KwImport, KwAs, KwExposing, KwInfix, KwAlias, KwType, KwDef, KwHidden, KwNative, KwLeft, KwRight, KwNon, KwIf, KwThen, KwElse, KwLet, KwIn, KwSelect, KwCase, KwEnd,
+}
+
 // - void skip*() skips sequence if it can, returns nothing, does not set error.
 // - * read*() reads something, returns NULL if cannot, does not set error. eats all trailing whitespace and comments.
 // - bool parse(..., *out) parses something, can set error (returns false in that case) if failed in a middle of parsing,

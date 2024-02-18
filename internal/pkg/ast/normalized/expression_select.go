@@ -20,6 +20,7 @@ func NewSelect(loc ast.Location, condition Expression, cases []*SelectCase) Expr
 		cases:          cases,
 	}
 }
+
 func (e *Select) flattenLambdas(parentName ast.Identifier, m *Module, locals map[ast.Identifier]Pattern) Expression {
 	e.condition = e.condition.flattenLambdas(parentName, m, locals)
 	for i, a := range e.cases {
@@ -68,10 +69,22 @@ func (e *Select) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, m
 	return e.setSuccessor(typed.NewSelect(ctx, e.location, condition, cases))
 }
 
+func (e *Select) Cases() []*SelectCase {
+	return e.cases
+}
+
 type SelectCase struct {
 	location   ast.Location
 	pattern    Pattern
 	expression Expression
+}
+
+func (c SelectCase) Location() ast.Location {
+	return c.location
+}
+
+func (c SelectCase) Pattern() Pattern {
+	return c.pattern
 }
 
 func NewSelectCase(loc ast.Location, pattern Pattern, expression Expression) *SelectCase {

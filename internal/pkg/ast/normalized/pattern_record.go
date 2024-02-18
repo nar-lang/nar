@@ -38,9 +38,17 @@ func (e *PRecord) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, 
 	return e.setSuccessor(typed.NewPRecord(ctx, e.location, annotatedDeclaredType, fields))
 }
 
+func (e *PRecord) Fields() []*PRecordField {
+	return e.fields
+}
+
 type PRecordField struct {
 	location ast.Location
 	name     ast.Identifier
+}
+
+func (f PRecordField) Name() ast.Identifier {
+	return f.name
 }
 
 func NewPRecordField(loc ast.Location, name ast.Identifier) *PRecordField {

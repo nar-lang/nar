@@ -53,3 +53,7 @@ func (e *POption) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, 
 	}
 	return e.setSuccessor(typed.NewPOption(ctx, e.location, annotatedDeclaredType, def, args))
 }
+
+func (e *POption) Values() []Pattern {
+	return e.values
+}

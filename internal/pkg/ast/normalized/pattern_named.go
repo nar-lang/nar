@@ -28,3 +28,7 @@ func (e *PNamed) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, m
 	}
 	return e.setSuccessor(typed.NewPNamed(ctx, e.location, annotatedDeclaredType, e.name))
 }
+
+func (e *PNamed) Name() ast.Identifier {
+	return e.name
+}

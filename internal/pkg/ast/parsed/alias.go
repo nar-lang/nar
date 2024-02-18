@@ -10,7 +10,7 @@ type Alias interface {
 	Statement
 	Name() ast.Identifier
 	inferType(moduleName ast.QualifiedIdentifier, args []Type) (Type, ast.FullIdentifier, error)
-	hidden() bool
+	Hidden() bool
 	aliasType() Type
 }
 
@@ -36,7 +36,7 @@ func (a *alias) aliasType() Type {
 	return a.type_
 }
 
-func (a *alias) hidden() bool {
+func (a *alias) Hidden() bool {
 	return a.hidden_
 }
 

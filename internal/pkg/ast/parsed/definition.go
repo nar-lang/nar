@@ -13,7 +13,7 @@ type Definition interface {
 		normalizedModule *normalized.Module,
 	) (normalized.Definition, map[ast.Identifier]normalized.Pattern, []error)
 	Name() ast.Identifier
-	hidden() bool
+	Hidden() bool
 	Body() Expression
 	Params() []Pattern
 }
@@ -54,7 +54,7 @@ func (def *definition) Body() Expression {
 	return def.body
 }
 
-func (def *definition) hidden() bool {
+func (def *definition) Hidden() bool {
 	return def.hidden_
 }
 
