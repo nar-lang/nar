@@ -25,13 +25,14 @@ type Definition interface {
 
 func NewDefinition(
 	location ast.Location, id uint64, hidden bool,
-	name ast.Identifier, params []Pattern, body Expression,
-	declaredType Type,
+	name ast.Identifier, nameLocation ast.Location,
+	params []Pattern, body Expression, declaredType Type,
 ) Definition {
 	return &definition{
 		location:     location,
 		id_:          id,
 		name_:        name,
+		nameLocation: nameLocation,
 		params_:      params,
 		body_:        body,
 		declaredType: declaredType,
@@ -48,6 +49,7 @@ type definition struct {
 	location     ast.Location
 	hidden       bool
 	successor    *typed.Definition
+	nameLocation ast.Location
 }
 
 func (def *definition) Params() []Pattern {
@@ -101,7 +103,7 @@ func (def *definition) annotate(
 		}
 	}
 
-	typedDef := typed.NewDefinition(def.location, def.id_, def.hidden, def.name_)
+	typedDef := typed.NewDefinition(def.location, def.id_, def.hidden, def.name_, def.nameLocation)
 	localTypeParams := typeParamsMap{}
 
 	annotatedDeclaredType, err := annotateTypeSafe(typedDef.SolvingContext(), def.declaredType, typeParamsMap{}, true)

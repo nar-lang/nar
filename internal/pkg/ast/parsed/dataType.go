@@ -145,7 +145,7 @@ func (d *dataTypeOption) constructor(moduleName ast.QualifiedIdentifier, dataNam
 		d.values,
 	)
 
-	def := NewDefinition(d.location, d.hidden || hidden, d.name, params, body, type_)
+	def := NewDefinition(d.location, d.hidden || hidden, d.name, d.location, params, body, type_)
 	d.successor = def
 	return def
 }

@@ -22,6 +22,7 @@ func NewDefinition(
 	location ast.Location,
 	hidden bool,
 	name ast.Identifier,
+	nameLocation ast.Location,
 	params []Pattern,
 	body Expression,
 	declaredType Type,
@@ -33,6 +34,7 @@ func NewDefinition(
 		params:       params,
 		body:         body,
 		declaredType: declaredType,
+		nameLocation: nameLocation,
 	}
 }
 
@@ -44,6 +46,7 @@ type definition struct {
 	body         Expression
 	declaredType Type
 	successor    normalized.Definition
+	nameLocation ast.Location
 }
 
 func (def *definition) Params() []Pattern {
@@ -106,7 +109,7 @@ func (def *definition) normalize(
 	}
 
 	nDef := normalized.NewDefinition(
-		def.location, normalized.LastDefinitionId, def.hidden_, def.name_, params, body, declaredType)
+		def.location, normalized.LastDefinitionId, def.hidden_, def.name_, def.nameLocation, params, body, declaredType)
 	def.successor = nDef
 	return nDef, paramLocals, errors
 }

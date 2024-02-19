@@ -17,7 +17,7 @@ func NewEquationBestLoc(left Type, right Type, enclosing ast.Location) Equation 
 	} else if enclosing.Contains(right.Location()) {
 		stmt = right
 	} else {
-		stmt = NewDefinition(enclosing, 0, false, "---")
+		stmt = NewDefinition(enclosing, 0, false, "---", enclosing)
 	}
 
 	return Equation{

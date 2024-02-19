@@ -1614,6 +1614,8 @@ func parseDefinition(src *source, modName ast.QualifiedIdentifier) (parsed.Defin
 	}
 	hidden := readExact(src, KwHidden)
 	native := readExact(src, KwNative)
+
+	nameCursor := src.cursor
 	name := readIdentifier(src, false)
 	var type_ parsed.Type
 	var body parsed.Expression
@@ -1621,6 +1623,7 @@ func parseDefinition(src *source, modName ast.QualifiedIdentifier) (parsed.Defin
 	if nil == name {
 		return nil, newError(*src, "expected data name here")
 	}
+	nameLocation := loc(src, nameCursor)
 
 	typeCursor := src.cursor
 	params, ret, err := parseSignature(src)
@@ -1691,7 +1694,7 @@ func parseDefinition(src *source, modName ast.QualifiedIdentifier) (parsed.Defin
 			}
 		}
 	}
-	return parsed.NewDefinition(loc(src, cursor), hidden, ast.Identifier(*name), params, body, type_), err
+	return parsed.NewDefinition(loc(src, cursor), hidden, ast.Identifier(*name), nameLocation, params, body, type_), err
 }
 
 func parseModule(src *source) (module *parsed.Module, errors []error) {

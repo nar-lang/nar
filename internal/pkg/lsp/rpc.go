@@ -62,6 +62,7 @@ func (s *server) Initialize(params *protocol.InitializeParams) (protocol.Initial
 				TriggerCharacters:   []string{"("},
 				RetriggerCharacters: []string{","},
 			},
+			RenameProvider: &protocol.RenameOptions{},
 		},
 		ServerInfo: &protocol.PServerInfoMsg_initialize{
 			Name:    "Nar Language Server",
@@ -181,7 +182,7 @@ func (s *server) TextDocument_references(
 		_, _, stmt := s.statementAtLocation(loc, m)
 
 		appendDefinition := func(def *typed.Definition) {
-			result = append(result, *locToLocation(def.Location()))
+			result = append(result, *locToLocation(def.NameLocation()))
 			for _, m := range s.parsedModules {
 				m.Iterate(func(e parsed.Statement) {
 					nStmt := e.Successor()
@@ -601,4 +602,98 @@ func (s *server) TextDocument_signatureHelp(
 		})
 	}
 	return signature, nil
+}
+
+func (s *server) TextDocument_rename(
+	params *protocol.RenameParams,
+) (*protocol.WorkspaceEdit, error) {
+	loc, mod, ok := s.locationUnderCursor(params.TextDocument.URI, params.Position.Line, params.Position.Character)
+	result := &protocol.WorkspaceEdit{
+		Changes: map[protocol.DocumentURI][]protocol.TextEdit{},
+	}
+	appendDefinition := func(def *typed.Definition) {
+		if def != nil {
+			result.Changes[pathToUri(def.Location().FilePath())] = append(
+				result.Changes[pathToUri(def.Location().FilePath())],
+				protocol.TextEdit{
+					Range:   locToRange(def.NameLocation()),
+					NewText: params.NewName,
+				})
+			for _, m := range s.parsedModules {
+				m.Iterate(func(e parsed.Statement) {
+					nStmt := e.Successor()
+					if nStmt != nil {
+						if g, ok := nStmt.Successor().(*typed.Global); ok {
+							if g.Definition().Id() == def.Id() {
+								result.Changes[pathToUri(def.Location().FilePath())] = append(
+									result.Changes[pathToUri(def.Location().FilePath())],
+									protocol.TextEdit{
+										Range:   locToRange(e.Location()),
+										NewText: params.NewName,
+									})
+							}
+						}
+					}
+				})
+			}
+		}
+	}
+	appendPattern := func(pattern typed.Pattern) {
+		if pattern != nil {
+			result.Changes[pathToUri(pattern.Location().FilePath())] = append(
+				result.Changes[pathToUri(pattern.Location().FilePath())],
+				protocol.TextEdit{
+					Range:   locToRange(pattern.Location()),
+					NewText: params.NewName,
+				})
+			for _, m := range s.parsedModules {
+				if pattern.Location().FilePath() == m.Location().FilePath() {
+					m.Iterate(func(stmt parsed.Statement) {
+						nStmt := stmt.Successor()
+						if nStmt != nil {
+							tStmt := nStmt.Successor()
+							if l, ok := tStmt.(*typed.Local); ok {
+								if l.Target() == pattern {
+									result.Changes[pathToUri(pattern.Location().FilePath())] = append(
+										result.Changes[pathToUri(pattern.Location().FilePath())],
+										protocol.TextEdit{
+											Range:   locToRange(stmt.Location()),
+											NewText: params.NewName,
+										})
+								}
+							}
+						}
+					})
+				}
+			}
+		}
+	}
+
+	if ok {
+		_, _, stmt := s.statementAtLocation(loc, mod)
+		if stmt != nil {
+			switch stmt.(type) {
+			case *typed.Global:
+				def := stmt.(*typed.Global).Definition()
+				if def != nil {
+					appendDefinition(def)
+				}
+				break
+			case *typed.Local:
+				target := stmt.(*typed.Local).Target()
+				if target != nil {
+					appendPattern(target)
+				}
+			case *typed.Definition:
+				def := stmt.(*typed.Definition)
+				appendDefinition(def)
+				break
+			case typed.Pattern:
+				pattern := stmt.(typed.Pattern)
+				appendPattern(pattern)
+				break
+			}
+		}
+	}
+	return result, nil
 }

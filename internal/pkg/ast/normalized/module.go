@@ -50,7 +50,7 @@ func (module *Module) extractLambda(
 	LastDefinitionId++
 	localParams := common.Map(func(x ast.Identifier) Pattern { return NewPNamed(loc, nil, x) }, usedLocals)
 	params = append(localParams, params...)
-	def = NewDefinition(loc, LastDefinitionId, true, lambdaName, params, body, nil)
+	def = NewDefinition(loc, LastDefinitionId, true, lambdaName, loc, params, body, nil)
 	module.definitions = append(module.definitions, def)
 
 	replacement = NewGlobal(loc, module.name, def.name())

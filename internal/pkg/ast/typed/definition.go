@@ -10,6 +10,7 @@ import (
 type Definition struct {
 	id           uint64
 	name         ast.Identifier
+	nameLocation ast.Location
 	location     ast.Location
 	params       []Pattern
 	body         Expression
@@ -25,13 +26,15 @@ func NewDefinition(
 	id uint64,
 	hidden bool,
 	name ast.Identifier,
+	nameLocation ast.Location,
 ) *Definition {
 	def := &Definition{
-		id:       id,
-		name:     name,
-		location: location,
-		hidden:   hidden,
-		ctx:      newSolvingContext(),
+		id:           id,
+		name:         name,
+		location:     location,
+		nameLocation: nameLocation,
+		hidden:       hidden,
+		ctx:          newSolvingContext(),
 	}
 	def.type_ = def.ctx.newTypeAnnotation(def)
 	return def
@@ -258,4 +261,8 @@ func (def *Definition) SolvingContext() *SolvingContext {
 
 func (def *Definition) Name() ast.Identifier {
 	return def.name
+}
+
+func (def *Definition) NameLocation() ast.Location {
+	return def.nameLocation
 }
