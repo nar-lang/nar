@@ -109,3 +109,7 @@ func (t *TFunc) balance(sz int) *TFunc {
 
 	return NewTFunc(t.location, t.params[0:sz], NewTFunc(t.location, t.params[sz:], t.return_)).(*TFunc)
 }
+
+func (t *TFunc) Params() []Type {
+	return t.params
+}

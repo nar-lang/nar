@@ -56,3 +56,7 @@ func (e *Apply) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, mo
 	}
 	return e.setSuccessor(typed.NewApply(ctx, e.location, fn, args))
 }
+
+func (e *Apply) Func() Expression {
+	return e.func_
+}

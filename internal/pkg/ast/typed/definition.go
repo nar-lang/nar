@@ -255,3 +255,7 @@ func (def *Definition) SetDeclaredType(declaredType Type) {
 func (def *Definition) SolvingContext() *SolvingContext {
 	return def.ctx
 }
+
+func (def *Definition) Name() ast.Identifier {
+	return def.name
+}

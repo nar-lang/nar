@@ -58,6 +58,10 @@ func (s *server) Initialize(params *protocol.InitializeParams) (protocol.Initial
 			CompletionProvider: &protocol.CompletionOptions{
 				TriggerCharacters: []string{"."},
 			},
+			SignatureHelpProvider: &protocol.SignatureHelpOptions{
+				TriggerCharacters:   []string{"("},
+				RetriggerCharacters: []string{","},
+			},
 		},
 		ServerInfo: &protocol.PServerInfoMsg_initialize{
 			Name:    "Nar Language Server",
@@ -120,7 +124,7 @@ func (s *server) TextDocument_definition(
 	params *protocol.DefinitionParams,
 ) (result *protocol.Location, err error) {
 	if loc, m, ok := s.locationUnderCursor(params.TextDocument.URI, params.Position.Line, params.Position.Character); ok {
-		_, _, stmt, _ := s.statementAtLocation(loc, m)
+		_, _, stmt := s.statementAtLocation(loc, m)
 		switch stmt.(type) {
 		case *typed.Global:
 			def := stmt.(*typed.Global).Definition()
@@ -148,7 +152,7 @@ func (s *server) TextDocument_typeDefinition(
 	params *protocol.TypeDefinitionParams,
 ) (result *protocol.Location, err error) {
 	if loc, m, ok := s.locationUnderCursor(params.TextDocument.URI, params.Position.Line, params.Position.Character); ok {
-		_, _, stmt, _ := s.statementAtLocation(loc, m)
+		_, _, stmt := s.statementAtLocation(loc, m)
 		switch stmt.(type) {
 		case *typed.Global:
 			t := stmt.(*typed.Global).Type()
@@ -174,7 +178,7 @@ func (s *server) TextDocument_references(
 	params *protocol.ReferenceParams,
 ) (result []protocol.Location, err error) {
 	if loc, m, ok := s.locationUnderCursor(params.TextDocument.URI, params.Position.Line, params.Position.Character); ok {
-		_, _, stmt, _ := s.statementAtLocation(loc, m)
+		_, _, stmt := s.statementAtLocation(loc, m)
 
 		appendDefinition := func(def *typed.Definition) {
 			result = append(result, *locToLocation(def.Location()))
@@ -259,8 +263,8 @@ func (s *server) TextDocument_references(
 }
 
 func (s *server) TextDocument_hover(params *protocol.HoverParams) (*protocol.Hover, error) {
-	if loc, m, ok := s.locationUnderCursor(params.TextDocument.URI, params.Position.Line, params.Position.Character); ok {
-		_, _, stmt, mod := s.statementAtLocation(loc, m)
+	if loc, mod, ok := s.locationUnderCursor(params.TextDocument.URI, params.Position.Line, params.Position.Character); ok {
+		_, _, stmt := s.statementAtLocation(loc, mod)
 		if stmt != nil {
 			return &protocol.Hover{
 				Contents: protocol.MarkupContent{
@@ -544,4 +548,57 @@ func (s *server) TextDocument_completion(
 	}, common.Keys(localItems)), ", "))
 
 	return &protocol.CompletionList{IsIncomplete: false, Items: list}, nil
+}
+
+func (s *server) TextDocument_signatureHelp(
+	params *protocol.SignatureHelpParams,
+) (*protocol.SignatureHelp, error) {
+
+	extractSignature := func(loc ast.Location) *protocol.SignatureHelp {
+		str := loc.Text()
+		eq := strings.Index(str, "=")
+		if eq >= 0 {
+			str = str[:eq]
+		}
+		return &protocol.SignatureHelp{
+			Signatures: []protocol.SignatureInformation{
+				{
+					Label: str,
+				},
+			},
+		}
+	}
+
+	extractSignatureFromDef := func(modName ast.QualifiedIdentifier, defName ast.Identifier) *protocol.SignatureHelp {
+		if defMod, ok := s.parsedModules[modName]; ok {
+			def, ok := common.Find(func(d parsed.Definition) bool { return d.Name() == defName }, defMod.Definitions())
+			if ok {
+				return extractSignature(def.Location())
+			}
+		}
+		return nil
+	}
+
+	var signature *protocol.SignatureHelp
+	if loc, m, ok := s.locationUnderCursor(params.TextDocument.URI, params.Position.Line, params.Position.Character); ok {
+		m.Iterate(func(stmt parsed.Statement) {
+			if stmt.Location().Contains(loc) {
+				nStmt := stmt.Successor()
+				switch nStmt.(type) {
+				case *normalized.Apply:
+					apply := nStmt.(*normalized.Apply)
+					switch apply.Func().(type) {
+					case *normalized.Global:
+						signature = extractSignatureFromDef(apply.Func().(*normalized.Global).DefinitionName())
+					case *normalized.Local:
+						local := apply.Func().(*normalized.Local).Target()
+						signature = extractSignature(local.Location())
+					}
+				case *normalized.POption:
+					signature = extractSignatureFromDef(nStmt.(*normalized.POption).DefinitionName())
+				}
+			}
+		})
+	}
+	return signature, nil
 }

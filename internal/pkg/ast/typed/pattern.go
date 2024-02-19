@@ -9,7 +9,7 @@ type Pattern interface {
 	bytecoder
 	_pattern()
 	Type() Type
-	GetDeclaredType() Type
+	DeclaredType() Type
 	appendEquations(eqs Equations, loc *ast.Location, localDefs localTypesMap, ctx *SolvingContext, stack []*Definition) (Equations, error)
 	mapTypes(subst map[uint64]Type) error
 	simplify() simplePattern
@@ -39,7 +39,7 @@ func (p *patternBase) Type() Type {
 	return p.type_
 }
 
-func (p *patternBase) GetDeclaredType() Type {
+func (p *patternBase) DeclaredType() Type {
 	return p.declaredType
 }
 

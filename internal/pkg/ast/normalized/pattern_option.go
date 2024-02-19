@@ -57,3 +57,7 @@ func (e *POption) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, 
 func (e *POption) Values() []Pattern {
 	return e.values
 }
+
+func (e *POption) DefinitionName() (ast.QualifiedIdentifier, ast.Identifier) {
+	return e.moduleName, e.definitionName
+}

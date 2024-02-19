@@ -95,3 +95,7 @@ func (e *Apply) appendBytecode(ops []bytecode.Op, locations []ast.Location, bina
 	}
 	return bytecode.AppendApply(len(e.args), e.location, ops, locations)
 }
+
+func (e *Apply) Func() Expression {
+	return e.func_
+}

@@ -49,3 +49,6 @@ func (e *Local) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, mo
 	}
 	return e.setSuccessor(typed.NewLocal(ctx, e.location, e.name, e.target.Successor().(typed.Pattern)))
 }
+func (e *Local) Target() Pattern {
+	return e.target
+}

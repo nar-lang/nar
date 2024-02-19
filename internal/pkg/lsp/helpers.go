@@ -22,7 +22,7 @@ func (s *server) locationUnderCursor(docURI protocol.DocumentURI, line, char uin
 func (s *server) statementAtLocation(
 	loc ast.Location, m *parsed.Module,
 ) (
-	parsed.Statement, normalized.Statement, typed.Statement, *parsed.Module,
+	parsed.Statement, normalized.Statement, typed.Statement,
 ) {
 	var pStmt parsed.Statement
 	m.Iterate(func(x parsed.Statement) {
@@ -36,7 +36,7 @@ func (s *server) statementAtLocation(
 		if nStmt != nil {
 			tStmt = nStmt.Successor()
 		}
-		return pStmt, nStmt, tStmt, m
+		return pStmt, nStmt, tStmt
 	}
-	return nil, nil, nil, nil
+	return nil, nil, nil
 }

@@ -42,3 +42,7 @@ func (e *Global) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, m
 	}
 	return e.setSuccessor(typed.NewGlobal(ctx, e.location, e.moduleName, e.definitionName, targetDef))
 }
+
+func (e *Global) DefinitionName() (ast.QualifiedIdentifier, ast.Identifier) {
+	return e.moduleName, e.definitionName
+}
