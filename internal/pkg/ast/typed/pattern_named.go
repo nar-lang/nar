@@ -2,7 +2,7 @@ package typed
 
 import (
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type PNamed struct {
@@ -35,8 +35,8 @@ func (p *PNamed) Code(currentModule ast.QualifiedIdentifier) string {
 	return s
 }
 
-func (p *PNamed) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
-	return bytecode.AppendMakePattern(bytecode.PatternKindNamed, string(p.name), 0, p.location, ops, locations, binary)
+func (p *PNamed) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+	return bytecode.AppendMakePattern(bytecode.PatternKindNamed, string(p.name), 0, p.location.Bytecode(), ops, locations, binary)
 }
 
 func (p *PNamed) appendEquations(eqs Equations, loc *ast.Location, localDefs localTypesMap, ctx *SolvingContext, stack []*Definition) (Equations, error) {

@@ -3,8 +3,8 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	"nar-compiler/pkg/bytecode"
 )
 
 type Const struct {
@@ -39,12 +39,12 @@ func (e *Const) appendEquations(eqs Equations, loc *ast.Location, localDefs loca
 	return append(eqs, NewEquation(e, e.type_, getConstType(ctx, e.value, e))), nil
 }
 
-func (e *Const) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (e *Const) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	v := e.value
 	if iv, ok := v.(ast.CInt); ok {
 		if ex, ok := e.type_.(*TNative); ok && ex.name == common.NarBaseMathFloat {
 			v = ast.CFloat{Value: float64(iv.Value)}
 		}
 	}
-	return bytecode.AppendLoadConstValue(v, bytecode.StackKindObject, e.location, ops, locations, binary)
+	return v.AppendBytecode(bytecode.StackKindObject, e.location, ops, locations, binary)
 }

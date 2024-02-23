@@ -3,8 +3,8 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type PList struct {
@@ -76,7 +76,7 @@ func (p *PList) Children() []Statement {
 	return append(p.patternBase.Children(), common.Map(func(x Pattern) Statement { return x }, p.items)...)
 }
 
-func (p *PList) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (p *PList) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	var err error
 	for _, item := range p.items {
 		ops, locations = item.appendBytecode(ops, locations, binary)
@@ -84,7 +84,7 @@ func (p *PList) appendBytecode(ops []bytecode.Op, locations []ast.Location, bina
 			return nil, nil
 		}
 	}
-	return bytecode.AppendMakePattern(bytecode.PatternKindList, "", len(p.items), p.location, ops, locations, binary)
+	return bytecode.AppendMakePatternLong(bytecode.PatternKindList, uint32(len(p.items)), p.location.Bytecode(), ops, locations, binary)
 }
 
 func (p *PList) appendEquations(eqs Equations, loc *ast.Location, localDefs localTypesMap, ctx *SolvingContext, stack []*Definition) (Equations, error) {

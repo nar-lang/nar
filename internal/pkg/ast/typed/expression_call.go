@@ -3,8 +3,8 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type Call struct {
@@ -13,12 +13,15 @@ type Call struct {
 	args []Expression
 }
 
-func NewCall(ctx *SolvingContext, loc ast.Location, name ast.FullIdentifier, args []Expression) Expression {
+func NewCall(ctx *SolvingContext, loc ast.Location, name ast.FullIdentifier, args []Expression) (Expression, error) {
+	if len(args) > 255 {
+		return nil, common.NewErrorAt(loc, "too many arguments (max 255)")
+	}
 	return ctx.annotateExpression(&Call{
 		expressionBase: newExpressionBase(loc),
 		name:           name,
 		args:           args,
-	})
+	}), nil
 }
 
 func (e *Call) checkPatterns() error {
@@ -70,10 +73,10 @@ func (e *Call) appendEquations(eqs Equations, loc *ast.Location, localDefs local
 	return eqs, nil
 }
 
-func (e *Call) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (e *Call) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	for _, arg := range e.args {
 		ops, locations = arg.appendBytecode(ops, locations, binary)
 	}
-	ops, locations = bytecode.AppendCall(string(e.name), len(e.args), e.location, ops, locations, binary)
+	ops, locations = bytecode.AppendCall(string(e.name), uint8(len(e.args)), e.location.Bytecode(), ops, locations, binary)
 	return ops, locations
 }

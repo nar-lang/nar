@@ -47,5 +47,9 @@ func (e *Call) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, mod
 	if err != nil {
 		return nil, err
 	}
-	return e.setSuccessor(typed.NewCall(ctx, e.location, e.name, args))
+	call, err := typed.NewCall(ctx, e.location, e.name, args)
+	if err != nil {
+		return nil, err
+	}
+	return e.setSuccessor(call)
 }

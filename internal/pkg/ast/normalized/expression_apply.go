@@ -54,7 +54,11 @@ func (e *Apply) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, mo
 	if err != nil {
 		return nil, err
 	}
-	return e.setSuccessor(typed.NewApply(ctx, e.location, fn, args))
+	apply, err := typed.NewApply(ctx, e.location, fn, args)
+	if err != nil {
+		return nil, err
+	}
+	return e.setSuccessor(apply)
 }
 
 func (e *Apply) Func() Expression {

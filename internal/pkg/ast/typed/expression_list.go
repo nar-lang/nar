@@ -3,8 +3,8 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type List struct {
@@ -78,7 +78,7 @@ func (e *List) appendEquations(eqs Equations, loc *ast.Location, localDefs local
 	return eqs, nil
 }
 
-func (e *List) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (e *List) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	var err error
 	for _, item := range e.items {
 		ops, locations = item.appendBytecode(ops, locations, binary)
@@ -86,5 +86,5 @@ func (e *List) appendBytecode(ops []bytecode.Op, locations []ast.Location, binar
 			return nil, nil
 		}
 	}
-	return bytecode.AppendMakeObject(bytecode.ObjectKindList, len(e.items), e.location, ops, locations)
+	return bytecode.AppendMakeObject(bytecode.ObjectKindList, len(e.items), e.location.Bytecode(), ops, locations)
 }

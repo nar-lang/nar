@@ -3,8 +3,8 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type Definition struct {
@@ -181,21 +181,22 @@ func (def *Definition) Code(currentModule ast.QualifiedIdentifier) string {
 
 func (def *Definition) Bytecode(pathId ast.FullIdentifier, binary *bytecode.Binary) bytecode.Func {
 	var ops []bytecode.Op
-	var locations []ast.Location
+	var locations []bytecode.Location
 
 	if nc, ok := def.body.(*Call); ok && pathId == nc.name {
-		ops, locations = bytecode.AppendCall(string(nc.name), len(nc.args), nc.location, ops, locations, binary)
+		ops, locations = bytecode.AppendCall(string(nc.name), uint8(len(nc.args)), nc.location.Bytecode(), ops, locations, binary)
 	} else {
 		for i := len(def.params) - 1; i >= 0; i-- {
 			p := def.params[i]
 			ops, locations = p.appendBytecode(ops, locations, binary)
-			ops, locations = bytecode.AppendMatch(0, p.Location(), ops, locations)
-			ops, locations = bytecode.AppendSwapPop(p.Location(), bytecode.SwapPopModePop, ops, locations)
+			ops, locations = bytecode.AppendJump(0, true, p.Location().Bytecode(), ops, locations)
+			ops, locations = bytecode.AppendSwapPop(p.Location().Bytecode(), bytecode.SwapPopModePop, ops, locations)
 		}
 		ops, locations = def.body.appendBytecode(ops, locations, binary)
 	}
 
 	return bytecode.Func{
+		Name:      binary.HashString(string(def.name)), //TODO: make full name
 		NumArgs:   uint32(len(def.params)),
 		Ops:       ops,
 		FilePath:  def.location.FilePath(),

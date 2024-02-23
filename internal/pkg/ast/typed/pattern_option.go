@@ -2,8 +2,8 @@ package typed
 
 import (
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type POption struct {
@@ -15,12 +15,15 @@ type POption struct {
 func NewPOption(
 	ctx *SolvingContext, loc ast.Location, declaredType Type,
 	definition *Definition, args []Pattern,
-) Pattern {
+) (Pattern, error) {
+	if len(args) > 255 {
+		return nil, common.NewErrorAt(loc, "too many arguments (max 255)")
+	}
 	return ctx.annotatePattern(&POption{
 		patternBase: newPatternBase(loc, declaredType),
 		definition:  definition,
 		args:        args,
-	})
+	}), nil
 }
 
 func (p *POption) name() ast.DataOptionIdentifier {
@@ -79,7 +82,7 @@ func (p *POption) Children() []Statement {
 	return append(p.patternBase.Children(), common.Map(func(x Pattern) Statement { return x }, p.args)...)
 }
 
-func (p *POption) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (p *POption) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	var err error
 	for _, x := range p.args {
 		ops, locations = x.appendBytecode(ops, locations, binary)
@@ -90,7 +93,7 @@ func (p *POption) appendBytecode(ops []bytecode.Op, locations []ast.Location, bi
 	return bytecode.AppendMakePattern(
 		bytecode.PatternKindDataOption,
 		string(p.name()),
-		len(p.args), p.location, ops, locations, binary)
+		uint8(len(p.args)), p.location.Bytecode(), ops, locations, binary)
 }
 
 func (p *POption) appendEquations(eqs Equations, loc *ast.Location, localDefs localTypesMap, ctx *SolvingContext, stack []*Definition) (Equations, error) {

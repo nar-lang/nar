@@ -2,7 +2,7 @@ package typed
 
 import (
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
+	"nar-compiler/pkg/bytecode"
 )
 
 type PConst struct {
@@ -41,9 +41,9 @@ func (p *PConst) Code(currentModule ast.QualifiedIdentifier) string {
 	return s
 }
 
-func (p *PConst) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
-	ops, locations = bytecode.AppendLoadConstValue(p.value, bytecode.StackKindPattern, p.location, ops, locations, binary)
-	return bytecode.AppendMakePattern(bytecode.PatternKindConst, "", 0, p.location, ops, locations, binary)
+func (p *PConst) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+	ops, locations = p.value.AppendBytecode(bytecode.StackKindPattern, p.location, ops, locations, binary)
+	return bytecode.AppendMakePattern(bytecode.PatternKindConst, "", 0, p.location.Bytecode(), ops, locations, binary)
 }
 
 func (p *PConst) appendEquations(eqs Equations, loc *ast.Location, localDefs localTypesMap, ctx *SolvingContext, stack []*Definition) (Equations, error) {

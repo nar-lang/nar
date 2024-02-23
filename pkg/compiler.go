@@ -3,12 +3,12 @@ package narc
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/ast/normalized"
 	"nar-compiler/internal/pkg/ast/parsed"
 	"nar-compiler/internal/pkg/ast/typed"
 	"nar-compiler/internal/pkg/common"
 	"nar-compiler/internal/pkg/processors"
+	"nar-compiler/pkg/bytecode"
 	"os"
 	"path/filepath"
 )
@@ -23,8 +23,8 @@ func Compile(
 	typedModules := map[ast.QualifiedIdentifier]*typed.Module{}
 
 	bin := bytecode.Binary{
-		Exports:   map[ast.FullIdentifier]bytecode.Pointer{},
-		FuncsMap:  map[ast.FullIdentifier]bytecode.Pointer{},
+		Exports:   map[bytecode.FullIdentifier]bytecode.Pointer{},
+		FuncsMap:  map[bytecode.FullIdentifier]bytecode.Pointer{},
 		StringMap: map[string]bytecode.StringHash{},
 		ConstMap:  map[bytecode.PackedConst]bytecode.ConstHash{},
 	}
@@ -80,7 +80,7 @@ func Compile(
 			if err != nil {
 				log.Err(common.NewSystemError(err))
 			} else {
-				err := bin.Build(file, debug)
+				err := bin.Build(file, common.CompilerVersion, debug)
 				if err != nil {
 					log.Err(common.NewSystemError(err))
 				}

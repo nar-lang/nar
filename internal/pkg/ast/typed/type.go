@@ -2,7 +2,7 @@ package typed
 
 import (
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type Type interface {
@@ -31,6 +31,6 @@ func (t *typeBase) Location() ast.Location {
 	return t.location
 }
 
-func (t *typeBase) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (t *typeBase) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	return nil, nil
 }

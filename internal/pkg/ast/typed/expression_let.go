@@ -3,7 +3,7 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type Let struct {
@@ -82,10 +82,10 @@ func (e *Let) appendEquations(eqs Equations, loc *ast.Location, localDefs localT
 	return eqs, nil
 }
 
-func (e *Let) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (e *Let) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	ops, locations = e.value.appendBytecode(ops, locations, binary)
 	ops, locations = e.pattern.appendBytecode(ops, locations, binary)
-	ops, locations = bytecode.AppendMatch(0, e.location, ops, locations)
-	ops, locations = bytecode.AppendSwapPop(e.location, bytecode.SwapPopModePop, ops, locations)
+	ops, locations = bytecode.AppendJump(0, true, e.location.Bytecode(), ops, locations)
+	ops, locations = bytecode.AppendSwapPop(e.location.Bytecode(), bytecode.SwapPopModePop, ops, locations)
 	return e.body.appendBytecode(ops, locations, binary)
 }

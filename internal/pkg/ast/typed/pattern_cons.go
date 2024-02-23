@@ -3,8 +3,8 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type PCons struct {
@@ -61,7 +61,7 @@ func (p *PCons) Children() []Statement {
 	return append(p.patternBase.Children(), p.head, p.tail)
 }
 
-func (p *PCons) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (p *PCons) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	var err error
 	ops, locations = p.tail.appendBytecode(ops, locations, binary)
 	if err != nil {
@@ -71,7 +71,7 @@ func (p *PCons) appendBytecode(ops []bytecode.Op, locations []ast.Location, bina
 	if err != nil {
 		return nil, nil
 	}
-	return bytecode.AppendMakePattern(bytecode.PatternKindCons, "", 0, p.location, ops, locations, binary)
+	return bytecode.AppendMakePattern(bytecode.PatternKindCons, "", 0, p.location.Bytecode(), ops, locations, binary)
 }
 
 func (p *PCons) appendEquations(eqs Equations, loc *ast.Location, localDefs localTypesMap, ctx *SolvingContext, stack []*Definition) (Equations, error) {

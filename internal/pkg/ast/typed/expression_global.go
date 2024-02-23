@@ -3,8 +3,8 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type Global struct {
@@ -62,13 +62,13 @@ func (e *Global) appendEquations(eqs Equations, loc *ast.Location, localDefs loc
 	return eqs, nil
 }
 
-func (e *Global) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (e *Global) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	id := common.MakeFullIdentifier(e.moduleName, e.definitionName)
-	funcIndex, ok := binary.FuncsMap[id]
+	funcIndex, ok := binary.FuncsMap[bytecode.FullIdentifier(id)]
 	if !ok {
 		panic(common.NewErrorOf(e, "global definition `%s` not found", id).Error())
 	}
-	ops, locations = bytecode.AppendLoadGlobal(funcIndex, e.location, ops, locations)
+	ops, locations = bytecode.AppendLoadGlobal(funcIndex, e.location.Bytecode(), ops, locations)
 	return ops, locations
 }
 

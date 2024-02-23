@@ -38,15 +38,14 @@ enums:
     1: load_local
     2: load_global
     3: load_const
-    4: swap_pop
-    5: apply
-    6: call
-    7: match
-    8: jump
-    9: make_object
-    10: make_pattern
-    11: access
-    12: update
+    4: apply
+    5: call
+    6: jump
+    7: make_object
+    8: make_pattern
+    9: access
+    10: update
+    11: swap_pop
   const_kind:
     1: unit
     2: char
@@ -128,8 +127,11 @@ types:
         type: u1
         enum: swap_pop_mode
         if: kind == op_kind::swap_pop
+      - id: b_conditional
+        type: u1
+        if: kind == op_kind::jump
       - contents: [ 0x00 ]
-        if: kind == op_kind::load_local or kind == op_kind::load_global or kind == op_kind::match or kind == op_kind::jump or kind == op_kind::access or kind == op_kind::update
+        if: kind == op_kind::load_local or kind == op_kind::load_global or kind == op_kind::jump or kind == op_kind::access or kind == op_kind::update
 
       - id: c_const_kind
         type: u1
@@ -151,7 +153,7 @@ types:
         if: kind == op_kind::load_global
       - id: a_jump_delta
         type: u4
-        if: kind == op_kind::jump or kind == op_kind::match
+        if: kind == op_kind::jump
       - id: a_num_items
         type: u4
         if: kind == op_kind::make_object

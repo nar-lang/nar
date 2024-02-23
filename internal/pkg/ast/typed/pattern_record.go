@@ -3,8 +3,8 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	"nar-compiler/pkg/bytecode"
 )
 
 type PRecord struct {
@@ -60,12 +60,12 @@ func (p *PRecord) Children() []Statement {
 	return append(p.patternBase.Children(), common.Map(func(x *PRecordField) Statement { return x.type_ }, p.fields)...)
 }
 
-func (p *PRecord) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (p *PRecord) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	for _, f := range p.fields {
-		ops, locations = bytecode.AppendLoadConstValue(
-			ast.CString{Value: string(f.name)}, bytecode.StackKindPattern, f.location, ops, locations, binary)
+		ops, locations = ast.CString{Value: string(f.name)}.AppendBytecode(
+			bytecode.StackKindPattern, f.location, ops, locations, binary)
 	}
-	return bytecode.AppendMakePattern(bytecode.PatternKindRecord, "", len(p.fields), p.location, ops, locations, binary)
+	return bytecode.AppendMakePatternLong(bytecode.PatternKindRecord, uint32(len(p.fields)), p.location.Bytecode(), ops, locations, binary)
 }
 
 func (p *PRecord) appendEquations(eqs Equations, loc *ast.Location, localDefs localTypesMap, ctx *SolvingContext, stack []*Definition) (Equations, error) {

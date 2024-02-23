@@ -3,8 +3,8 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type Select struct {
@@ -107,7 +107,7 @@ func (e *Select) appendEquations(eqs Equations, loc *ast.Location, localDefs loc
 	return eqs, nil
 }
 
-func (e *Select) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (e *Select) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	ops, locations = e.condition.appendBytecode(ops, locations, binary)
 	var jumpToEndIndices []int
 	var prevMatchOpIndex int
@@ -119,10 +119,10 @@ func (e *Select) appendBytecode(ops []bytecode.Op, locations []ast.Location, bin
 
 		ops, locations = cs.pattern.appendBytecode(ops, locations, binary)
 		prevMatchOpIndex = len(ops)
-		ops, locations = bytecode.AppendMatch(0, cs.location, ops, locations)
+		ops, locations = bytecode.AppendJump(0, true, cs.location.Bytecode(), ops, locations)
 		ops, locations = cs.expression.appendBytecode(ops, locations, binary)
 		jumpToEndIndices = append(jumpToEndIndices, len(ops))
-		ops, locations = bytecode.AppendJump(0, cs.location, ops, locations)
+		ops, locations = bytecode.AppendJump(0, false, cs.location.Bytecode(), ops, locations)
 	}
 
 	selectEndIndex := len(ops)
@@ -131,7 +131,7 @@ func (e *Select) appendBytecode(ops []bytecode.Op, locations []ast.Location, bin
 		ops[jumpOpIndex] = ops[jumpOpIndex].WithDelta(int32(selectEndIndex - jumpOpIndex - 1))
 	}
 
-	return bytecode.AppendSwapPop(e.location, bytecode.SwapPopModeBoth, ops, locations)
+	return bytecode.AppendSwapPop(e.location.Bytecode(), bytecode.SwapPopModeBoth, ops, locations)
 }
 
 type SelectCase struct {

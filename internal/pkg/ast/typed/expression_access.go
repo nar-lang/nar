@@ -3,7 +3,7 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type Access struct {
@@ -53,11 +53,11 @@ func (e *Access) appendEquations(eqs Equations, loc *ast.Location, localDefs loc
 	return eqs, nil
 }
 
-func (e *Access) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (e *Access) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	var err error
 	ops, locations = e.record.appendBytecode(ops, locations, binary)
 	if err != nil {
 		return nil, nil
 	}
-	return bytecode.AppendAccess(string(e.fieldName), e.location, ops, locations, binary)
+	return bytecode.AppendAccess(string(e.fieldName), e.location.Bytecode(), ops, locations, binary)
 }

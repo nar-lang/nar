@@ -3,8 +3,8 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type Apply struct {
@@ -13,12 +13,16 @@ type Apply struct {
 	args  []Expression
 }
 
-func NewApply(ctx *SolvingContext, loc ast.Location, func_ Expression, args []Expression) Expression {
+func NewApply(ctx *SolvingContext, loc ast.Location, func_ Expression, args []Expression) (Expression, error) {
+	if len(args) > 255 {
+		return nil, common.NewErrorAt(loc, "too many arguments (max 255)")
+	}
+
 	return ctx.annotateExpression(&Apply{
 		expressionBase: newExpressionBase(loc),
 		func_:          func_,
 		args:           args,
-	})
+	}), nil
 }
 
 func (e *Apply) checkPatterns() error {
@@ -81,7 +85,7 @@ func (e *Apply) appendEquations(eqs Equations, loc *ast.Location, localDefs loca
 	return eqs, nil
 }
 
-func (e *Apply) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (e *Apply) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	var err error
 	for _, arg := range e.args {
 		ops, locations = arg.appendBytecode(ops, locations, binary)
@@ -93,7 +97,7 @@ func (e *Apply) appendBytecode(ops []bytecode.Op, locations []ast.Location, bina
 	if err != nil {
 		return nil, nil
 	}
-	return bytecode.AppendApply(len(e.args), e.location, ops, locations)
+	return bytecode.AppendApply(uint8(len(e.args)), e.location.Bytecode(), ops, locations)
 }
 
 func (e *Apply) Func() Expression {

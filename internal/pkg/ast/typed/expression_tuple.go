@@ -3,8 +3,8 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type Tuple struct {
@@ -78,9 +78,9 @@ func (e Tuple) appendEquations(eqs Equations, loc *ast.Location, localDefs local
 	return eqs, nil
 }
 
-func (e Tuple) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (e Tuple) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	for _, item := range e.items {
 		ops, locations = item.appendBytecode(ops, locations, binary)
 	}
-	return bytecode.AppendMakeObject(bytecode.ObjectKindTuple, len(e.items), e.location, ops, locations)
+	return bytecode.AppendMakeObject(bytecode.ObjectKindTuple, len(e.items), e.location.Bytecode(), ops, locations)
 }

@@ -3,8 +3,8 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type Update struct {
@@ -125,17 +125,17 @@ func (e *Update) appendEquations(eqs Equations, loc *ast.Location, localDefs loc
 	return eqs, nil
 }
 
-func (e *Update) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (e *Update) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	if e.moduleName != "" {
 		id := common.MakeFullIdentifier(e.moduleName, e.recordName)
-		ops, locations = bytecode.AppendLoadGlobal(binary.FuncsMap[id], e.location, ops, locations)
+		ops, locations = bytecode.AppendLoadGlobal(binary.FuncsMap[bytecode.FullIdentifier(id)], e.location.Bytecode(), ops, locations)
 	} else {
-		ops, locations = bytecode.AppendLoadLocal(string(e.recordName), e.location, ops, locations, binary)
+		ops, locations = bytecode.AppendLoadLocal(string(e.recordName), e.location.Bytecode(), ops, locations, binary)
 	}
 
 	for _, f := range e.fields {
 		ops, locations = f.value.appendBytecode(ops, locations, binary)
-		ops, locations = bytecode.AppendUpdate(string(f.name), f.location, ops, locations, binary)
+		ops, locations = bytecode.AppendUpdate(string(f.name), f.location.Bytecode(), ops, locations, binary)
 	}
 
 	return ops, locations

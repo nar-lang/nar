@@ -2,7 +2,7 @@ package typed
 
 import (
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
+	"nar-compiler/pkg/bytecode"
 )
 
 type Statement interface {
@@ -12,7 +12,7 @@ type Statement interface {
 }
 
 type bytecoder interface {
-	appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location)
+	appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location)
 }
 
 type localTypesMap map[ast.Identifier]Type

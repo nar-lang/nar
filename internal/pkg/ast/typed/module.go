@@ -2,8 +2,8 @@ package typed
 
 import (
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	bytecode "nar-compiler/pkg/bytecode"
 	"slices"
 )
 
@@ -71,11 +71,11 @@ func (module *Module) CheckPatterns() (errors []error) {
 func (module *Module) Compose(modules map[ast.QualifiedIdentifier]*Module, debug bool, binary *bytecode.Binary) error {
 	binary.HashString("")
 
-	if slices.Contains(binary.CompiledPaths, module.name) {
+	if slices.Contains(binary.CompiledPaths, bytecode.QualifiedIdentifier(module.name)) {
 		return nil
 	}
 
-	binary.CompiledPaths = append(binary.CompiledPaths, module.name)
+	binary.CompiledPaths = append(binary.CompiledPaths, bytecode.QualifiedIdentifier(module.name))
 
 	for depModule := range module.dependencies {
 		m, ok := modules[depModule]
@@ -89,18 +89,18 @@ func (module *Module) Compose(modules map[ast.QualifiedIdentifier]*Module, debug
 
 	for _, def := range module.definitions {
 		extId := common.MakeFullIdentifier(module.name, def.name)
-		binary.FuncsMap[extId] = bytecode.Pointer(len(binary.Funcs))
+		binary.FuncsMap[bytecode.FullIdentifier(extId)] = bytecode.Pointer(len(binary.Funcs))
 		binary.Funcs = append(binary.Funcs, bytecode.Func{})
 	}
 
 	for _, def := range module.definitions {
 		pathId := common.MakeFullIdentifier(module.name, def.name)
 
-		ptr := binary.FuncsMap[pathId]
+		ptr := binary.FuncsMap[bytecode.FullIdentifier(pathId)]
 		if binary.Funcs[ptr].Ops == nil {
 			binary.Funcs[ptr] = def.Bytecode(pathId, binary)
 			if !def.hidden || debug {
-				binary.Exports[pathId] = ptr
+				binary.Exports[bytecode.FullIdentifier(pathId)] = ptr
 			}
 		}
 	}

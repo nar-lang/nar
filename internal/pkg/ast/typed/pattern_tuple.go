@@ -3,8 +3,8 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type PTuple struct {
@@ -12,11 +12,14 @@ type PTuple struct {
 	items []Pattern
 }
 
-func NewPTuple(ctx *SolvingContext, loc ast.Location, declaredType Type, items []Pattern) Pattern {
+func NewPTuple(ctx *SolvingContext, loc ast.Location, declaredType Type, items []Pattern) (Pattern, error) {
+	if len(items) > 255 {
+		return nil, common.NewErrorAt(loc, "too many items in tuple (max 255)")
+	}
 	return ctx.annotatePattern(&PTuple{
 		patternBase: newPatternBase(loc, declaredType),
 		items:       items,
-	})
+	}), nil
 }
 
 func (p *PTuple) simplify() simplePattern {
@@ -64,7 +67,7 @@ func (p *PTuple) Children() []Statement {
 	return append(p.patternBase.Children(), common.Map(func(x Pattern) Statement { return x }, p.items)...)
 }
 
-func (p *PTuple) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (p *PTuple) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	var err error
 	for _, item := range p.items {
 		ops, locations = item.appendBytecode(ops, locations, binary)
@@ -72,7 +75,7 @@ func (p *PTuple) appendBytecode(ops []bytecode.Op, locations []ast.Location, bin
 			return nil, nil
 		}
 	}
-	return bytecode.AppendMakePattern(bytecode.PatternKindTuple, "", len(p.items), p.location, ops, locations, binary)
+	return bytecode.AppendMakePattern(bytecode.PatternKindTuple, "", uint8(len(p.items)), p.location.Bytecode(), ops, locations, binary)
 }
 
 func (p *PTuple) appendEquations(eqs Equations, loc *ast.Location, localDefs localTypesMap, ctx *SolvingContext, stack []*Definition) (Equations, error) {

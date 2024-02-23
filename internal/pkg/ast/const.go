@@ -1,14 +1,22 @@
 package ast
 
-import "fmt"
+import (
+	"fmt"
+	"nar-compiler/pkg/bytecode"
+)
 
 type ConstValue interface {
 	Coder
 	EqualsTo(o ConstValue) bool
+	AppendBytecode(stackKind bytecode.StackKind, loc Location, ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location)
 }
 
 type CChar struct {
 	Value rune
+}
+
+func (c CChar) AppendBytecode(stackKind bytecode.StackKind, loc Location, ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+	return bytecode.AppendLoadConstCharValue(c.Value, stackKind, loc.Bytecode(), ops, locations, binary)
 }
 
 func (c CChar) EqualsTo(o ConstValue) bool {
@@ -26,6 +34,10 @@ type CInt struct {
 	Value int64
 }
 
+func (c CInt) AppendBytecode(stackKind bytecode.StackKind, loc Location, ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+	return bytecode.AppendLoadConstIntValue(c.Value, stackKind, loc.Bytecode(), ops, locations, binary)
+}
+
 func (c CInt) EqualsTo(o ConstValue) bool {
 	if y, ok := o.(*CInt); ok {
 		return c.Value == y.Value
@@ -39,6 +51,10 @@ func (c CInt) Code(currentModule QualifiedIdentifier) string {
 
 type CFloat struct {
 	Value float64
+}
+
+func (c CFloat) AppendBytecode(stackKind bytecode.StackKind, loc Location, ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+	return bytecode.AppendLoadConstFloatValue(c.Value, stackKind, loc.Bytecode(), ops, locations, binary)
 }
 
 func (c CFloat) EqualsTo(o ConstValue) bool {
@@ -56,6 +72,10 @@ type CString struct {
 	Value string
 }
 
+func (c CString) AppendBytecode(stackKind bytecode.StackKind, loc Location, ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+	return bytecode.AppendLoadConstStringValue(c.Value, stackKind, loc.Bytecode(), ops, locations, binary)
+}
+
 func (CString) _constValue() {}
 
 func (c CString) EqualsTo(o ConstValue) bool {
@@ -70,6 +90,10 @@ func (c CString) Code(currentModule QualifiedIdentifier) string {
 }
 
 type CUnit struct {
+}
+
+func (c CUnit) AppendBytecode(stackKind bytecode.StackKind, loc Location, ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+	return bytecode.AppendLoadConstUnitValue(stackKind, loc.Bytecode(), ops, locations, binary)
 }
 
 func (CUnit) _constValue() {}

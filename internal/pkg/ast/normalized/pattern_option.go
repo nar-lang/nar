@@ -51,7 +51,11 @@ func (e *POption) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, 
 	if err != nil {
 		return nil, err
 	}
-	return e.setSuccessor(typed.NewPOption(ctx, e.location, annotatedDeclaredType, def, args))
+	option, err := typed.NewPOption(ctx, e.location, annotatedDeclaredType, def, args)
+	if err != nil {
+		return nil, err
+	}
+	return e.setSuccessor(option)
 }
 
 func (e *POption) Values() []Pattern {

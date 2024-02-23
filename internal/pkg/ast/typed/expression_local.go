@@ -2,8 +2,8 @@ package typed
 
 import (
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
 	"nar-compiler/internal/pkg/common"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type Local struct {
@@ -46,8 +46,8 @@ func (e *Local) appendEquations(eqs Equations, loc *ast.Location, localDefs loca
 	return eqs, nil
 }
 
-func (e *Local) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
-	return bytecode.AppendLoadLocal(string(e.name), e.location, ops, locations, binary)
+func (e *Local) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+	return bytecode.AppendLoadLocal(string(e.name), e.location.Bytecode(), ops, locations, binary)
 }
 
 func (e *Local) Target() Pattern {

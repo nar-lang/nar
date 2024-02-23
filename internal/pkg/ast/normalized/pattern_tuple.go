@@ -35,7 +35,11 @@ func (e *PTuple) annotate(ctx *typed.SolvingContext, typeParams typeParamsMap, m
 	if err != nil {
 		return nil, err
 	}
-	return e.setSuccessor(typed.NewPTuple(ctx, e.location, annotatedDeclaredType, items))
+	tuple, err := typed.NewPTuple(ctx, e.location, annotatedDeclaredType, items)
+	if err != nil {
+		return nil, err
+	}
+	return e.setSuccessor(tuple)
 }
 
 func (e *PTuple) Items() []Pattern {

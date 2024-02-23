@@ -3,7 +3,7 @@ package typed
 import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
-	"nar-compiler/internal/pkg/ast/bytecode"
+	bytecode "nar-compiler/pkg/bytecode"
 )
 
 type PAlias struct {
@@ -45,13 +45,13 @@ func (p *PAlias) Code(currentModule ast.QualifiedIdentifier) string {
 	return s
 }
 
-func (p *PAlias) appendBytecode(ops []bytecode.Op, locations []ast.Location, binary *bytecode.Binary) ([]bytecode.Op, []ast.Location) {
+func (p *PAlias) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
 	var err error
 	ops, locations = p.nested.appendBytecode(ops, locations, binary)
 	if err != nil {
 		return nil, nil
 	}
-	return bytecode.AppendMakePattern(bytecode.PatternKindAlias, string(p.alias), 0, p.location, ops, locations, binary)
+	return bytecode.AppendMakePattern(bytecode.PatternKindAlias, string(p.alias), 0, p.location.Bytecode(), ops, locations, binary)
 }
 
 func (p *PAlias) appendEquations(eqs Equations, loc *ast.Location, localDefs localTypesMap, ctx *SolvingContext, stack []*Definition) (Equations, error) {

@@ -1,6 +1,9 @@
 package ast
 
-import "fmt"
+import (
+	"fmt"
+	"nar-compiler/pkg/bytecode"
+)
 
 type Location struct {
 	filePath    string
@@ -107,4 +110,9 @@ func (loc Location) Size() uint32 {
 
 func (loc Location) FileContent() []rune {
 	return loc.fileContent
+}
+
+func (loc Location) Bytecode() bytecode.Location {
+	l, c, _, _ := loc.GetLineAndColumn()
+	return bytecode.Location{Line: uint32(l), Column: uint32(c)}
 }
