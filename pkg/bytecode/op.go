@@ -107,9 +107,9 @@ func buildOp(kind OpKind, b uint8, c uint8, a uint32) Op {
 }
 
 func AppendLoadLocal(
-	name string, loc Location, ops []Op, locations []Location, binary *Binary,
+	name string, loc Location, ops []Op, locations []Location, binary *Binary, hash *BinaryHash,
 ) ([]Op, []Location) {
-	return append(ops, buildOp(OpKindLoadLocal, 0, 0, uint32(binary.HashString(name)))),
+	return append(ops, buildOp(OpKindLoadLocal, 0, 0, uint32(hash.HashString(name, binary)))),
 		append(locations, loc)
 }
 
@@ -138,27 +138,29 @@ func AppendLoadConstCharValue(
 
 func AppendLoadConstIntValue(
 	v int64, stack StackKind, loc Location,
-	ops []Op, locations []Location, binary *Binary,
+	ops []Op, locations []Location, binary *Binary, hash *BinaryHash,
 ) ([]Op, []Location) {
-	return append(ops, buildOp(OpKindLoadConst, uint8(stack), uint8(ConstKindInt), uint32(binary.HashConst(PackedInt{Value: v})))),
+	x := uint32(hash.HashConst(PackedInt{Value: v}, binary))
+	return append(ops, buildOp(OpKindLoadConst, uint8(stack), uint8(ConstKindInt), x)),
 		append(locations, loc)
 }
 
 func AppendLoadConstFloatValue(
 	v float64, stack StackKind, loc Location,
-	ops []Op, locations []Location, binary *Binary,
+	ops []Op, locations []Location, binary *Binary, hash *BinaryHash,
 ) ([]Op, []Location) {
 
-	return append(ops, buildOp(OpKindLoadConst, uint8(stack), uint8(ConstKindFloat), uint32(binary.HashConst(PackedFloat{Value: v})))),
+	x := uint32(hash.HashConst(PackedFloat{Value: v}, binary))
+	return append(ops, buildOp(OpKindLoadConst, uint8(stack), uint8(ConstKindFloat), x)),
 		append(locations, loc)
 }
 
 func AppendLoadConstStringValue(
 	v string, stack StackKind, loc Location,
-	ops []Op, locations []Location, binary *Binary,
+	ops []Op, locations []Location, binary *Binary, hash *BinaryHash,
 ) ([]Op, []Location) {
-
-	return append(ops, buildOp(OpKindLoadConst, uint8(stack), uint8(ConstKindString), uint32(binary.HashString(v)))),
+	x := uint32(hash.HashString(v, binary))
+	return append(ops, buildOp(OpKindLoadConst, uint8(stack), uint8(ConstKindString), x)),
 		append(locations, loc)
 }
 
@@ -168,9 +170,11 @@ func AppendApply(numArgs uint8, loc Location, ops []Op, locations []Location,
 		append(locations, loc)
 }
 
-func AppendCall(name string, numArgs uint8, loc Location, ops []Op, locations []Location, binary *Binary,
+func AppendCall(
+	name string, numArgs uint8, loc Location,
+	ops []Op, locations []Location, binary *Binary, hash *BinaryHash,
 ) ([]Op, []Location) {
-	return append(ops, buildOp(OpKindCall, numArgs, 0, uint32(binary.HashString(name)))),
+	return append(ops, buildOp(OpKindCall, numArgs, 0, uint32(hash.HashString(name, binary)))),
 		append(locations, loc)
 }
 
@@ -193,9 +197,9 @@ func AppendMakeObject(kind ObjectKind, numArgs int, loc Location,
 
 func AppendMakePattern(
 	kind PatternKind, name string, numNested uint8,
-	loc Location, ops []Op, locations []Location, binary *Binary,
+	loc Location, ops []Op, locations []Location, binary *Binary, hash *BinaryHash,
 ) ([]Op, []Location) {
-	return append(ops, buildOp(OpKindMakePattern, uint8(kind), numNested, uint32(binary.HashString(name)))),
+	return append(ops, buildOp(OpKindMakePattern, uint8(kind), numNested, uint32(hash.HashString(name, binary)))),
 		append(locations, loc)
 }
 
@@ -207,16 +211,16 @@ func AppendMakePatternLong(
 		append(locations, loc)
 }
 
-func AppendAccess(filed string, loc Location, ops []Op, locations []Location, binary *Binary,
+func AppendAccess(filed string, loc Location, ops []Op, locations []Location, binary *Binary, hash *BinaryHash,
 ) ([]Op, []Location) {
-	return append(ops, buildOp(OpKindAccess, 0, 0, uint32(binary.HashString(filed)))),
+	return append(ops, buildOp(OpKindAccess, 0, 0, uint32(hash.HashString(filed, binary)))),
 		append(locations, loc)
 }
 
 func AppendUpdate(field string, loc Location,
-	ops []Op, locations []Location, binary *Binary,
+	ops []Op, locations []Location, binary *Binary, hash *BinaryHash,
 ) ([]Op, []Location) {
-	return append(ops, buildOp(OpKindUpdate, 0, 0, uint32(binary.HashString(field)))),
+	return append(ops, buildOp(OpKindUpdate, 0, 0, uint32(hash.HashString(field, binary)))),
 		append(locations, loc)
 }
 

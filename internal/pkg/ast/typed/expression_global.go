@@ -62,9 +62,9 @@ func (e *Global) appendEquations(eqs Equations, loc *ast.Location, localDefs loc
 	return eqs, nil
 }
 
-func (e *Global) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+func (e *Global) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	id := common.MakeFullIdentifier(e.moduleName, e.definitionName)
-	funcIndex, ok := binary.FuncsMap[bytecode.FullIdentifier(id)]
+	funcIndex, ok := hash.FuncsMap[bytecode.FullIdentifier(id)]
 	if !ok {
 		panic(common.NewErrorOf(e, "global definition `%s` not found", id).Error())
 	}

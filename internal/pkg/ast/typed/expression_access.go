@@ -53,11 +53,11 @@ func (e *Access) appendEquations(eqs Equations, loc *ast.Location, localDefs loc
 	return eqs, nil
 }
 
-func (e *Access) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+func (e *Access) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	var err error
-	ops, locations = e.record.appendBytecode(ops, locations, binary)
+	ops, locations = e.record.appendBytecode(ops, locations, binary, hash)
 	if err != nil {
 		return nil, nil
 	}
-	return bytecode.AppendAccess(string(e.fieldName), e.location.Bytecode(), ops, locations, binary)
+	return bytecode.AppendAccess(string(e.fieldName), e.location.Bytecode(), ops, locations, binary, hash)
 }

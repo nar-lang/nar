@@ -38,7 +38,7 @@ func filename(uri URI) (string, error) {
 		return "", nil
 	}
 
-	// This conservative check for the common case
+	// This conservative check for the logger case
 	// of a simple non-empty absolute POSIX filename
 	// avoids the allocation of a net.URL.
 	if strings.HasPrefix(string(uri), "file:///") {

@@ -60,10 +60,9 @@ func (p *PRecord) Children() []Statement {
 	return append(p.patternBase.Children(), common.Map(func(x *PRecordField) Statement { return x.type_ }, p.fields)...)
 }
 
-func (p *PRecord) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+func (p *PRecord) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	for _, f := range p.fields {
-		ops, locations = ast.CString{Value: string(f.name)}.AppendBytecode(
-			bytecode.StackKindPattern, f.location, ops, locations, binary)
+		ops, locations = ast.CString{Value: string(f.name)}.AppendBytecode(bytecode.StackKindPattern, f.location, ops, locations, binary, nil)
 	}
 	return bytecode.AppendMakePatternLong(bytecode.PatternKindRecord, uint32(len(p.fields)), p.location.Bytecode(), ops, locations, binary)
 }

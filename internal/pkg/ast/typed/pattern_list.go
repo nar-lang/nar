@@ -76,10 +76,10 @@ func (p *PList) Children() []Statement {
 	return append(p.patternBase.Children(), common.Map(func(x Pattern) Statement { return x }, p.items)...)
 }
 
-func (p *PList) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+func (p *PList) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	var err error
 	for _, item := range p.items {
-		ops, locations = item.appendBytecode(ops, locations, binary)
+		ops, locations = item.appendBytecode(ops, locations, binary, hash)
 		if err != nil {
 			return nil, nil
 		}

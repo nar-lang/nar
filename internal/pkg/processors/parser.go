@@ -5,27 +5,15 @@ import (
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/ast/parsed"
 	"nar-compiler/internal/pkg/common"
-	"os"
+	"nar-compiler/pkg/logger"
 	"slices"
 	"strconv"
 	"strings"
 	"unicode"
 )
 
-func ParseWithContent(filePath string, fileContent string) (*parsed.Module, []error) {
-	src := &source{
-		filePath: filePath,
-		text:     []rune(fileContent),
-	}
-	return parseModule(src)
-}
-
-func Parse(filePath string) (*parsed.Module, []error) {
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, []error{common.NewSystemError(fmt.Errorf("failed to read module `%s`: %w", filePath, err))}
-	}
-	return ParseWithContent(filePath, string(data))
+func Parse(filePath string, fileContent []rune) (*parsed.Module, []error) {
+	return parseModule(&source{filePath: filePath, text: fileContent})
 }
 
 const (
@@ -92,7 +80,7 @@ type source struct {
 	filePath string
 	cursor   uint32
 	text     []rune
-	log      *common.LogWriter
+	log      *logger.LogWriter
 }
 
 func loc(src *source, start uint32) ast.Location {

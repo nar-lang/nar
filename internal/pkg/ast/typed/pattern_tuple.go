@@ -67,15 +67,15 @@ func (p *PTuple) Children() []Statement {
 	return append(p.patternBase.Children(), common.Map(func(x Pattern) Statement { return x }, p.items)...)
 }
 
-func (p *PTuple) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+func (p *PTuple) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	var err error
 	for _, item := range p.items {
-		ops, locations = item.appendBytecode(ops, locations, binary)
+		ops, locations = item.appendBytecode(ops, locations, binary, hash)
 		if err != nil {
 			return nil, nil
 		}
 	}
-	return bytecode.AppendMakePattern(bytecode.PatternKindTuple, "", uint8(len(p.items)), p.location.Bytecode(), ops, locations, binary)
+	return bytecode.AppendMakePattern(bytecode.PatternKindTuple, "", uint8(len(p.items)), p.location.Bytecode(), ops, locations, binary, hash)
 }
 
 func (p *PTuple) appendEquations(eqs Equations, loc *ast.Location, localDefs localTypesMap, ctx *SolvingContext, stack []*Definition) (Equations, error) {

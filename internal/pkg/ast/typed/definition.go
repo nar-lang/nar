@@ -179,24 +179,24 @@ func (def *Definition) Code(currentModule ast.QualifiedIdentifier) string {
 	return fmt.Sprintf("def %s%s%s = %s", def.name, params, typeString, def.body.Code(currentModule))
 }
 
-func (def *Definition) Bytecode(pathId ast.FullIdentifier, binary *bytecode.Binary) bytecode.Func {
+func (def *Definition) Bytecode(pathId ast.FullIdentifier, modName ast.QualifiedIdentifier, binary *bytecode.Binary, hash *bytecode.BinaryHash) bytecode.Func {
 	var ops []bytecode.Op
 	var locations []bytecode.Location
 
 	if nc, ok := def.body.(*Call); ok && pathId == nc.name {
-		ops, locations = bytecode.AppendCall(string(nc.name), uint8(len(nc.args)), nc.location.Bytecode(), ops, locations, binary)
+		ops, locations = bytecode.AppendCall(string(nc.name), uint8(len(nc.args)), nc.location.Bytecode(), ops, locations, binary, hash)
 	} else {
 		for i := len(def.params) - 1; i >= 0; i-- {
 			p := def.params[i]
-			ops, locations = p.appendBytecode(ops, locations, binary)
+			ops, locations = p.appendBytecode(ops, locations, binary, hash)
 			ops, locations = bytecode.AppendJump(0, true, p.Location().Bytecode(), ops, locations)
 			ops, locations = bytecode.AppendSwapPop(p.Location().Bytecode(), bytecode.SwapPopModePop, ops, locations)
 		}
-		ops, locations = def.body.appendBytecode(ops, locations, binary)
+		ops, locations = def.body.appendBytecode(ops, locations, binary, hash)
 	}
 
 	return bytecode.Func{
-		Name:      binary.HashString(string(def.name)), //TODO: make full name
+		Name:      hash.HashString(string(common.MakeFullIdentifier(modName, def.name)), binary),
 		NumArgs:   uint32(len(def.params)),
 		Ops:       ops,
 		FilePath:  def.location.FilePath(),

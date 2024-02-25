@@ -46,8 +46,8 @@ func (e *Local) appendEquations(eqs Equations, loc *ast.Location, localDefs loca
 	return eqs, nil
 }
 
-func (e *Local) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
-	return bytecode.AppendLoadLocal(string(e.name), e.location.Bytecode(), ops, locations, binary)
+func (e *Local) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
+	return bytecode.AppendLoadLocal(string(e.name), e.location.Bytecode(), ops, locations, binary, hash)
 }
 
 func (e *Local) Target() Pattern {

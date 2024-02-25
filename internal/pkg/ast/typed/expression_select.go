@@ -107,8 +107,8 @@ func (e *Select) appendEquations(eqs Equations, loc *ast.Location, localDefs loc
 	return eqs, nil
 }
 
-func (e *Select) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
-	ops, locations = e.condition.appendBytecode(ops, locations, binary)
+func (e *Select) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
+	ops, locations = e.condition.appendBytecode(ops, locations, binary, hash)
 	var jumpToEndIndices []int
 	var prevMatchOpIndex int
 	for i, cs := range e.cases {
@@ -117,10 +117,10 @@ func (e *Select) appendBytecode(ops []bytecode.Op, locations []bytecode.Location
 			ops[prevMatchOpIndex] = ops[prevMatchOpIndex].WithDelta(int32(len(ops) - prevMatchOpIndex - 1))
 		}
 
-		ops, locations = cs.pattern.appendBytecode(ops, locations, binary)
+		ops, locations = cs.pattern.appendBytecode(ops, locations, binary, hash)
 		prevMatchOpIndex = len(ops)
 		ops, locations = bytecode.AppendJump(0, true, cs.location.Bytecode(), ops, locations)
-		ops, locations = cs.expression.appendBytecode(ops, locations, binary)
+		ops, locations = cs.expression.appendBytecode(ops, locations, binary, hash)
 		jumpToEndIndices = append(jumpToEndIndices, len(ops))
 		ops, locations = bytecode.AppendJump(0, false, cs.location.Bytecode(), ops, locations)
 	}

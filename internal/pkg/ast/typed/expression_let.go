@@ -82,10 +82,10 @@ func (e *Let) appendEquations(eqs Equations, loc *ast.Location, localDefs localT
 	return eqs, nil
 }
 
-func (e *Let) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
-	ops, locations = e.value.appendBytecode(ops, locations, binary)
-	ops, locations = e.pattern.appendBytecode(ops, locations, binary)
+func (e *Let) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
+	ops, locations = e.value.appendBytecode(ops, locations, binary, hash)
+	ops, locations = e.pattern.appendBytecode(ops, locations, binary, hash)
 	ops, locations = bytecode.AppendJump(0, true, e.location.Bytecode(), ops, locations)
 	ops, locations = bytecode.AppendSwapPop(e.location.Bytecode(), bytecode.SwapPopModePop, ops, locations)
-	return e.body.appendBytecode(ops, locations, binary)
+	return e.body.appendBytecode(ops, locations, binary, hash)
 }

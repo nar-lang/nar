@@ -68,37 +68,39 @@ func (module *Module) CheckPatterns() (errors []error) {
 	return
 }
 
-func (module *Module) Compose(modules map[ast.QualifiedIdentifier]*Module, debug bool, binary *bytecode.Binary) error {
-	binary.HashString("")
+func (module *Module) Compose(
+	modules map[ast.QualifiedIdentifier]*Module, debug bool, binary *bytecode.Binary, hash *bytecode.BinaryHash,
+) error {
+	hash.HashString("", binary)
 
-	if slices.Contains(binary.CompiledPaths, bytecode.QualifiedIdentifier(module.name)) {
+	if slices.Contains(hash.CompiledPaths, bytecode.QualifiedIdentifier(module.name)) {
 		return nil
 	}
 
-	binary.CompiledPaths = append(binary.CompiledPaths, bytecode.QualifiedIdentifier(module.name))
+	hash.CompiledPaths = append(hash.CompiledPaths, bytecode.QualifiedIdentifier(module.name))
 
 	for depModule := range module.dependencies {
 		m, ok := modules[depModule]
 		if !ok {
 			return common.NewErrorOf(module, "module '%s' not found", depModule)
 		}
-		if err := m.Compose(modules, debug, binary); err != nil {
+		if err := m.Compose(modules, debug, binary, hash); err != nil {
 			return err
 		}
 	}
 
 	for _, def := range module.definitions {
 		extId := common.MakeFullIdentifier(module.name, def.name)
-		binary.FuncsMap[bytecode.FullIdentifier(extId)] = bytecode.Pointer(len(binary.Funcs))
+		hash.FuncsMap[bytecode.FullIdentifier(extId)] = bytecode.Pointer(len(binary.Funcs))
 		binary.Funcs = append(binary.Funcs, bytecode.Func{})
 	}
 
 	for _, def := range module.definitions {
 		pathId := common.MakeFullIdentifier(module.name, def.name)
 
-		ptr := binary.FuncsMap[bytecode.FullIdentifier(pathId)]
+		ptr := hash.FuncsMap[bytecode.FullIdentifier(pathId)]
 		if binary.Funcs[ptr].Ops == nil {
-			binary.Funcs[ptr] = def.Bytecode(pathId, binary)
+			binary.Funcs[ptr] = def.Bytecode(pathId, module.name, binary, hash)
 			if !def.hidden || debug {
 				binary.Exports[bytecode.FullIdentifier(pathId)] = ptr
 			}

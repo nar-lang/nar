@@ -85,15 +85,15 @@ func (e *Apply) appendEquations(eqs Equations, loc *ast.Location, localDefs loca
 	return eqs, nil
 }
 
-func (e *Apply) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+func (e *Apply) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	var err error
 	for _, arg := range e.args {
-		ops, locations = arg.appendBytecode(ops, locations, binary)
+		ops, locations = arg.appendBytecode(ops, locations, binary, hash)
 		if err != nil {
 			return nil, nil
 		}
 	}
-	ops, locations = e.func_.appendBytecode(ops, locations, binary)
+	ops, locations = e.func_.appendBytecode(ops, locations, binary, hash)
 	if err != nil {
 		return nil, nil
 	}

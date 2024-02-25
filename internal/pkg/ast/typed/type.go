@@ -31,6 +31,6 @@ func (t *typeBase) Location() ast.Location {
 	return t.location
 }
 
-func (t *typeBase) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+func (t *typeBase) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	return nil, nil
 }

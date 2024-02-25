@@ -125,17 +125,17 @@ func (e *Update) appendEquations(eqs Equations, loc *ast.Location, localDefs loc
 	return eqs, nil
 }
 
-func (e *Update) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+func (e *Update) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	if e.moduleName != "" {
 		id := common.MakeFullIdentifier(e.moduleName, e.recordName)
-		ops, locations = bytecode.AppendLoadGlobal(binary.FuncsMap[bytecode.FullIdentifier(id)], e.location.Bytecode(), ops, locations)
+		ops, locations = bytecode.AppendLoadGlobal(hash.FuncsMap[bytecode.FullIdentifier(id)], e.location.Bytecode(), ops, locations)
 	} else {
-		ops, locations = bytecode.AppendLoadLocal(string(e.recordName), e.location.Bytecode(), ops, locations, binary)
+		ops, locations = bytecode.AppendLoadLocal(string(e.recordName), e.location.Bytecode(), ops, locations, binary, hash)
 	}
 
 	for _, f := range e.fields {
-		ops, locations = f.value.appendBytecode(ops, locations, binary)
-		ops, locations = bytecode.AppendUpdate(string(f.name), f.location.Bytecode(), ops, locations, binary)
+		ops, locations = f.value.appendBytecode(ops, locations, binary, hash)
+		ops, locations = bytecode.AppendUpdate(string(f.name), f.location.Bytecode(), ops, locations, binary, hash)
 	}
 
 	return ops, locations

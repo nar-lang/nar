@@ -8,8 +8,8 @@ import (
 	"nar-compiler/internal/pkg/common"
 	"nar-compiler/internal/pkg/lsp/protocol"
 	"nar-compiler/internal/pkg/processors"
+	"nar-compiler/pkg/logger"
 	"os"
-	"path/filepath"
 	"runtime/debug"
 	"time"
 )
@@ -49,7 +49,6 @@ func (s *server) compiler(ctx context.Context) {
 
 		for uri := range forcedDocs {
 			delete(forcedDocs, uri)
-			s.getPackageOfDocument(uri, true)
 		}
 
 		for name, mod := range s.parsedModules {
@@ -68,7 +67,7 @@ func (s *server) compiler(ctx context.Context) {
 
 		for uri := range modifiedDocs {
 			delete(modifiedDocs, uri)
-			pkgName := s.getPackageOfDocument(uri, false)
+			pkgName := s.packageRootToName[s.documentToPackageRoot[uri]]
 			if pkgName != "" {
 				modifiedPackages[pkgName] = struct{}{}
 			}
@@ -82,53 +81,6 @@ func (s *server) compiler(ctx context.Context) {
 	}
 }
 
-func findPackageRoot(path string) string {
-	for path != "." && path != "/" {
-		path = filepath.Dir(path)
-		if _, err := os.Stat(filepath.Join(path, "nar.json")); !os.IsNotExist(err) {
-			return path
-		}
-	}
-	return ""
-}
-
-func (s *server) getPackageOfDocument(uri protocol.DocumentURI, forceReload bool) ast.PackageIdentifier {
-	pkgRoot, ok := s.documentToPackageRoot[uri]
-	if !ok {
-		path := uriToPath(uri)
-		pkgRoot = findPackageRoot(path)
-		if pkgRoot != "" {
-			s.documentToPackageRoot[uri] = pkgRoot
-		}
-	}
-	if pkgRoot == "" {
-		return ""
-	}
-
-	pkgName, ok := s.packageRootToName[pkgRoot]
-	if !ok || forceReload {
-		if forceReload {
-			delete(s.loadedPackages, pkgName)
-		}
-		progress := func(_ float32, msg string) {
-			s.notify("window/showMessage", protocol.ShowMessageParams{
-				Type: protocol.Info, Message: msg,
-			})
-		}
-		pkg, err := processors.LoadPackage(
-			pkgRoot, s.cacheDir, "", progress, false, s.loadedPackages)
-		if err != nil {
-			s.log.Err(err)
-		}
-		if pkg != nil {
-			pkgName = pkg.Package.Name
-			s.packageRootToName[pkgRoot] = pkgName
-		}
-	}
-
-	return pkgName
-}
-
 func (s *server) compile(pkgNames []ast.PackageIdentifier) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -136,48 +88,40 @@ func (s *server) compile(pkgNames []ast.PackageIdentifier) {
 
 		}
 	}()
-	log := &common.LogWriter{}
+	log := &logger.LogWriter{}
+	packages, err := s.locator.Packages()
+	if err != nil {
+		log.Err(err)
+	} else {
+		affectedModuleNames := processors.Compile(log, packages, s.parsedModules, s.normalizedModules, s.typedModules)
 
-	affectedModuleNames := processors.Compile(
-		pkgNames,
-		s.loadedPackages,
-		s.parsedModules,
-		s.normalizedModules,
-		s.typedModules,
-		log,
-		func(modulePath string) string {
-			if doc, ok := s.openedDocuments[pathToUri(modulePath)]; ok {
-				return doc.Text
-			}
-			return ""
-		})
+		diagnosticData := s.extractDiagnosticsData(log)
+		if len(diagnosticData) == 0 {
+			s.log.Flush(os.Stdout)
+		}
 
-	diagnosticData := s.extractDiagnosticsData(log)
-	if len(diagnosticData) == 0 {
-		s.log.Flush(os.Stdout)
-	}
-
-	for _, moduleName := range affectedModuleNames {
-		if mod, ok := s.parsedModules[moduleName]; ok {
-			uri := pathToUri(mod.Location().FilePath())
-			if _, reported := diagnosticData[uri]; !reported {
-				s.notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
-					URI:         uri,
-					Diagnostics: []protocol.Diagnostic{},
-				})
+		for _, moduleName := range affectedModuleNames {
+			if mod, ok := s.parsedModules[moduleName]; ok {
+				uri := pathToUri(mod.Location().FilePath())
+				if _, reported := diagnosticData[uri]; !reported {
+					s.notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
+						URI:         uri,
+						Diagnostics: []protocol.Diagnostic{},
+					})
+				}
 			}
 		}
-	}
 
-	for uri, dsx := range diagnosticData {
-		s.notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
-			URI:         uri,
-			Diagnostics: dsx,
-		})
+		for uri, dsx := range diagnosticData {
+			s.notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
+				URI:         uri,
+				Diagnostics: dsx,
+			})
+		}
 	}
 }
 
-func (s *server) extractDiagnosticsData(log *common.LogWriter) map[protocol.DocumentURI][]protocol.Diagnostic {
+func (s *server) extractDiagnosticsData(log *logger.LogWriter) map[protocol.DocumentURI][]protocol.Diagnostic {
 	diagnosticsData := map[protocol.DocumentURI][]protocol.Diagnostic{}
 
 	insertDiagnostic := func(e common.ErrorWithLocation, severity protocol.DiagnosticSeverity) {

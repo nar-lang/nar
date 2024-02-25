@@ -12,7 +12,7 @@ type Statement interface {
 }
 
 type bytecoder interface {
-	appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location)
+	appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location)
 }
 
 type localTypesMap map[ast.Identifier]Type

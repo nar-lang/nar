@@ -33,8 +33,8 @@ func (p *PAny) Code(currentModule ast.QualifiedIdentifier) string {
 	return s
 }
 
-func (p *PAny) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
-	return bytecode.AppendMakePattern(bytecode.PatternKindAny, "", 0, p.location.Bytecode(), ops, locations, binary)
+func (p *PAny) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
+	return bytecode.AppendMakePattern(bytecode.PatternKindAny, "", 0, p.location.Bytecode(), ops, locations, binary, hash)
 }
 
 func (p *PAny) appendEquations(eqs Equations, loc *ast.Location, localDefs localTypesMap, ctx *SolvingContext, stack []*Definition) (Equations, error) {

@@ -73,10 +73,10 @@ func (e *Call) appendEquations(eqs Equations, loc *ast.Location, localDefs local
 	return eqs, nil
 }
 
-func (e *Call) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+func (e *Call) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	for _, arg := range e.args {
-		ops, locations = arg.appendBytecode(ops, locations, binary)
+		ops, locations = arg.appendBytecode(ops, locations, binary, hash)
 	}
-	ops, locations = bytecode.AppendCall(string(e.name), uint8(len(e.args)), e.location.Bytecode(), ops, locations, binary)
+	ops, locations = bytecode.AppendCall(string(e.name), uint8(len(e.args)), e.location.Bytecode(), ops, locations, binary, hash)
 	return ops, locations
 }

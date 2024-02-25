@@ -6,6 +6,8 @@ import (
 	"nar-compiler/internal/pkg/ast/parsed"
 	"nar-compiler/internal/pkg/ast/typed"
 	"nar-compiler/internal/pkg/common"
+	"nar-compiler/pkg/locator"
+	"nar-compiler/pkg/logger"
 	"slices"
 	"strconv"
 )
@@ -13,67 +15,43 @@ import (
 var Version = strconv.Itoa(int(common.CompilerVersion)/100) + "." + strconv.Itoa(int(common.CompilerVersion)%100)
 
 func Compile(
-	pkgNames []ast.PackageIdentifier,
-	loadedPackages map[ast.PackageIdentifier]*ast.LoadedPackage,
+	log *logger.LogWriter,
+	packages []locator.Package,
 	parsedModules map[ast.QualifiedIdentifier]*parsed.Module,
 	normalizedModules map[ast.QualifiedIdentifier]*normalized.Module,
 	typedModules map[ast.QualifiedIdentifier]*typed.Module,
-	log *common.LogWriter,
-	fileMapper func(modulePath string) string,
 ) (affectedModuleNames []ast.QualifiedIdentifier) {
-	affectedPackages := map[ast.PackageIdentifier]struct{}{}
-	for _, pkgName := range pkgNames {
-		pkg := loadedPackages[pkgName]
-		affectedPackages[pkg.Package.Name] = struct{}{}
-		for _, dep := range pkg.Package.Dependencies {
-			for _, p := range loadedPackages {
-				if _, ok := p.Urls[dep]; ok {
-					affectedPackages[p.Package.Name] = struct{}{}
-					break
-				}
-			}
-		}
-	}
-
 	affectedModules := map[ast.QualifiedIdentifier]struct{}{}
-	for pkgName := range affectedPackages {
-		pkg := loadedPackages[pkgName]
 
-		referencedPackages := map[ast.PackageIdentifier]struct{}{}
-		referencedPackages[pkg.Package.Name] = struct{}{}
-		for _, dep := range pkg.Package.Dependencies {
-			for _, p := range loadedPackages {
-				if _, ok := p.Urls[dep]; ok {
-					referencedPackages[p.Package.Name] = struct{}{}
-					break
-				}
-			}
-		}
+	for _, pkg := range packages {
+		sourceMap := pkg.Sources()
+		keys := common.Keys(sourceMap)
+		slices.Sort(keys)
 
-		for _, modulePath := range pkg.Sources {
+		for _, path := range keys {
 			var parsedModule *parsed.Module
 			for _, m := range parsedModules {
-				if m.Location().FilePath() == modulePath {
+				if m.Location().FilePath() == path {
 					parsedModule = m
 				}
 			}
 			if parsedModule == nil {
 				var errors []error
-				if doc := fileMapper(modulePath); doc != "" {
-					parsedModule, errors = ParseWithContent(modulePath, doc)
-				} else {
-					parsedModule, errors = Parse(modulePath)
-				}
-
+				parsedModule, errors = Parse(path, sourceMap[path])
 				for _, e := range errors {
 					log.Err(e)
 				}
 				if parsedModule == nil {
 					continue
 				}
+				parsedModule.SetPackageName(ast.PackageIdentifier(pkg.Info().Name))
 
-				parsedModule.SetPackageName(pkg.Package.Name)
+				referencedPackages := map[ast.PackageIdentifier]struct{}{}
+				for p := range pkg.Info().Dependencies {
+					referencedPackages[ast.PackageIdentifier(p)] = struct{}{}
+				}
 				parsedModule.SetReferencedPackages(referencedPackages)
+
 				if existedModule, ok := parsedModules[parsedModule.Name()]; ok {
 					log.Err(common.NewErrorOf(parsedModule, "module name collision: `%s`", existedModule.Name()))
 				}

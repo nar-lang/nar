@@ -9,8 +9,9 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 	"nar-compiler/internal/pkg/ast/parsed"
 	"nar-compiler/internal/pkg/ast/typed"
-	"nar-compiler/internal/pkg/common"
 	"nar-compiler/internal/pkg/lsp/protocol"
+	"nar-compiler/pkg/locator"
+	"nar-compiler/pkg/logger"
 	"os"
 	"reflect"
 	"runtime/debug"
@@ -21,8 +22,7 @@ const Version = "1.0"
 
 type server struct {
 	id        int
-	cacheDir  string
-	log       *common.LogWriter
+	log       *logger.LogWriter
 	trace     protocol.TraceValues
 	cancelCtx context.CancelFunc
 
@@ -34,13 +34,15 @@ type server struct {
 	inChan           chan []byte
 	compileChan      chan docChange
 
-	openedDocuments       map[protocol.DocumentURI]*protocol.TextDocumentItem
 	documentToPackageRoot map[protocol.DocumentURI]string
 	packageRootToName     map[string]ast.PackageIdentifier
-	loadedPackages        map[ast.PackageIdentifier]*ast.LoadedPackage
+	locator               locator.Locator
+	provides              map[string]*provider
+	cacheProvider         locator.Provider
 	parsedModules         map[ast.QualifiedIdentifier]*parsed.Module
 	normalizedModules     map[ast.QualifiedIdentifier]*normalized.Module
 	typedModules          map[ast.QualifiedIdentifier]*typed.Module
+	openedDocuments       map[protocol.DocumentURI]struct{}
 }
 
 type docChange struct {
@@ -65,12 +67,11 @@ func NewServer(cacheDir string, writeResponse func([]byte)) LanguageServer {
 		responseChan:          make(chan rpcResponse, 16),
 		notificationChan:      make(chan rpcNotification, 128),
 		compileChan:           make(chan docChange, 1024),
-		log:                   &common.LogWriter{},
-		cacheDir:              cacheDir,
-		openedDocuments:       map[protocol.DocumentURI]*protocol.TextDocumentItem{},
+		log:                   &logger.LogWriter{},
+		cacheProvider:         locator.NewDirectoryProvider(cacheDir),
 		documentToPackageRoot: map[protocol.DocumentURI]string{},
 		packageRootToName:     map[string]ast.PackageIdentifier{},
-		loadedPackages:        map[ast.PackageIdentifier]*ast.LoadedPackage{},
+		provides:              map[string]*provider{},
 		parsedModules:         map[ast.QualifiedIdentifier]*parsed.Module{},
 		normalizedModules:     map[ast.QualifiedIdentifier]*normalized.Module{},
 		typedModules:          map[ast.QualifiedIdentifier]*typed.Module{},
@@ -80,7 +81,6 @@ func NewServer(cacheDir string, writeResponse func([]byte)) LanguageServer {
 	go s.compiler(ctx)
 	return s
 }
-
 func (s *server) Close() {
 	s.cancelCtx()
 	close(s.responseChan)

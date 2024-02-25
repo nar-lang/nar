@@ -84,15 +84,14 @@ func (e *Record) appendEquations(eqs Equations, loc *ast.Location, localDefs loc
 	return eqs, nil
 }
 
-func (e *Record) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+func (e *Record) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	var err error
 	for _, f := range e.fields {
-		ops, locations = f.value.appendBytecode(ops, locations, binary)
+		ops, locations = f.value.appendBytecode(ops, locations, binary, hash)
 		if err != nil {
 			return nil, nil
 		}
-		ops, locations = ast.CString{Value: string(f.name)}.AppendBytecode(
-			bytecode.StackKindObject, f.location, ops, locations, binary)
+		ops, locations = ast.CString{Value: string(f.name)}.AppendBytecode(bytecode.StackKindObject, f.location, ops, locations, binary, nil)
 		if err != nil {
 			return nil, nil
 		}

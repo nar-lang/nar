@@ -78,10 +78,10 @@ func (e *List) appendEquations(eqs Equations, loc *ast.Location, localDefs local
 	return eqs, nil
 }
 
-func (e *List) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+func (e *List) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	var err error
 	for _, item := range e.items {
-		ops, locations = item.appendBytecode(ops, locations, binary)
+		ops, locations = item.appendBytecode(ops, locations, binary, hash)
 		if err != nil {
 			return nil, nil
 		}

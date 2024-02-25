@@ -924,7 +924,7 @@ type DiagnosticOptions struct {
 	Identifier string `json:"identifier,omitempty"`
 	// Whether the language has inter file dependencies meaning that
 	// editing code in one file can result in a different diagnostic
-	// set in another file. Inter file dependencies are common for
+	// set in another file. Inter file dependencies are logger for
 	// most programming languages and typically uncommon for linters.
 	InterFileDependencies bool `json:"interFileDependencies"`
 	// The server provides support for workspace diagnostics as well.
@@ -2411,7 +2411,7 @@ type LocationLink struct {
 	TargetSelectionRange Range `json:"targetSelectionRange"`
 }
 
-// The log message parameters.
+// The logger message parameters.
 type LogMessageParams struct {
 	// The message type. See {@link MessageType}
 	Type MessageType `json:"type"`
@@ -3641,7 +3641,7 @@ type RelatedUnchangedDocumentDiagnosticReport struct {
 }
 
 // A relative pattern is a helper to construct glob patterns that are matched
-// relatively to a base URI. The common value for a `baseUri` is a workspace
+// relatively to a base URI. The logger value for a `baseUri` is a workspace
 // folder root, but it can be another absolute URI as well.
 //
 // @since 3.17.0
@@ -5463,7 +5463,7 @@ const (
 	Warning MessageType = 2
 	// An information message.
 	Info MessageType = 3
-	// A log message.
+	// A logger message.
 	Log MessageType = 4
 	// The moniker kind.
 	//

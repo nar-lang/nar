@@ -87,37 +87,28 @@ func (s *server) S_setTraceNotification(params *protocol.SetTraceParams) error {
 }
 
 func (s *server) TextDocument_didOpen(params *protocol.DidOpenTextDocumentParams) error {
-	s.openedDocuments[params.TextDocument.URI] = &params.TextDocument
-	s.compileChan <- docChange{params.TextDocument.URI, true}
+	if pvd, ok := s.getProvider(params.TextDocument.URI); ok {
+		pvd.OverrideFile(params.TextDocument.URI, []rune(params.TextDocument.Text))
+		s.compileChan <- docChange{uri: params.TextDocument.URI, force: true}
+		s.openedDocuments[params.TextDocument.URI] = struct{}{}
+	}
 	return nil
 }
 
 func (s *server) TextDocument_didChange(params *protocol.DidChangeTextDocumentParams) error {
-	s.openedDocuments[params.TextDocument.URI].Text = params.ContentChanges[0].Text
-	s.compileChan <- docChange{params.TextDocument.URI, false}
+	if pvd, ok := s.getProvider(params.TextDocument.URI); ok {
+		pvd.OverrideFile(params.TextDocument.URI, []rune(params.ContentChanges[0].Text))
+		s.compileChan <- docChange{uri: params.TextDocument.URI, force: false}
+	}
 	return nil
 
 }
 
 func (s *server) TextDocument_didClose(params *protocol.DidCloseTextDocumentParams) error {
-	if pr, ok := s.documentToPackageRoot[params.TextDocument.URI]; ok {
-		if pid, ok := s.packageRootToName[pr]; ok {
-			if p, ok := s.loadedPackages[pid]; ok {
-				for id, mod := range s.parsedModules {
-					if mod.PackageName() == p.Package.Name {
-						delete(s.parsedModules, id)
-						delete(s.normalizedModules, id)
-						delete(s.typedModules, id)
-					}
-				}
-				delete(s.loadedPackages, pid)
-			}
-			delete(s.packageRootToName, pr)
-		}
-		delete(s.documentToPackageRoot, params.TextDocument.URI)
+	if pvd, ok := s.getProvider(params.TextDocument.URI); ok {
+		pvd.OverrideFile(params.TextDocument.URI, nil)
 	}
 	delete(s.openedDocuments, params.TextDocument.URI)
-
 	return nil
 }
 

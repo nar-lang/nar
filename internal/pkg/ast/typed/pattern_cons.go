@@ -61,17 +61,17 @@ func (p *PCons) Children() []Statement {
 	return append(p.patternBase.Children(), p.head, p.tail)
 }
 
-func (p *PCons) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+func (p *PCons) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	var err error
-	ops, locations = p.tail.appendBytecode(ops, locations, binary)
+	ops, locations = p.tail.appendBytecode(ops, locations, binary, hash)
 	if err != nil {
 		return nil, nil
 	}
-	ops, locations = p.head.appendBytecode(ops, locations, binary)
+	ops, locations = p.head.appendBytecode(ops, locations, binary, hash)
 	if err != nil {
 		return nil, nil
 	}
-	return bytecode.AppendMakePattern(bytecode.PatternKindCons, "", 0, p.location.Bytecode(), ops, locations, binary)
+	return bytecode.AppendMakePattern(bytecode.PatternKindCons, "", 0, p.location.Bytecode(), ops, locations, binary, hash)
 }
 
 func (p *PCons) appendEquations(eqs Equations, loc *ast.Location, localDefs localTypesMap, ctx *SolvingContext, stack []*Definition) (Equations, error) {

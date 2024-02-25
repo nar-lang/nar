@@ -78,9 +78,9 @@ func (e Tuple) appendEquations(eqs Equations, loc *ast.Location, localDefs local
 	return eqs, nil
 }
 
-func (e Tuple) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+func (e Tuple) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	for _, item := range e.items {
-		ops, locations = item.appendBytecode(ops, locations, binary)
+		ops, locations = item.appendBytecode(ops, locations, binary, hash)
 	}
 	return bytecode.AppendMakeObject(bytecode.ObjectKindTuple, len(e.items), e.location.Bytecode(), ops, locations)
 }

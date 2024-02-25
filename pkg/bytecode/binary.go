@@ -2,6 +2,7 @@ package bytecode
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 	"slices"
@@ -17,37 +18,19 @@ type Location struct {
 	Line, Column uint32
 }
 
+func NewBinary() *Binary {
+	return &Binary{
+		Exports: map[FullIdentifier]Pointer{},
+	}
+}
+
 type Binary struct {
-	Funcs   []Func
-	Strings []string
-	Consts  []PackedConst
-	Exports map[FullIdentifier]Pointer
-
-	FuncsMap  map[FullIdentifier]Pointer
-	StringMap map[string]StringHash
-	ConstMap  map[PackedConst]ConstHash
-
-	CompiledPaths []QualifiedIdentifier
-}
-
-func (b *Binary) HashString(v string) StringHash {
-	if h, ok := b.StringMap[v]; ok {
-		return h
-	}
-	hash := StringHash(len(b.StringMap))
-	b.StringMap[v] = hash
-	b.Strings = append(b.Strings, v)
-	return hash
-}
-
-func (b *Binary) HashConst(v PackedConst) ConstHash {
-	if h, ok := b.ConstMap[v]; ok {
-		return h
-	}
-	hash := ConstHash(len(b.ConstMap))
-	b.ConstMap[v] = hash
-	b.Consts = append(b.Consts, v)
-	return hash
+	Funcs    []Func
+	Strings  []string
+	Consts   []PackedConst
+	Exports  map[FullIdentifier]Pointer
+	Entry    FullIdentifier
+	Packages []QualifiedIdentifier
 }
 
 type Func struct {
@@ -78,6 +61,7 @@ func (b *Binary) Build(writer io.Writer, compilerVersion uint32, debug bool) (er
 	w(uint32(BinaryFormatVersion))
 	w(uint32(compilerVersion))
 	w(bool(debug))
+	ws(string(b.Entry))
 
 	w(uint32(len(b.Funcs)))
 	for _, fn := range b.Funcs {
@@ -117,6 +101,14 @@ func (b *Binary) Build(writer io.Writer, compilerVersion uint32, debug bool) (er
 		ws(string(n))
 		w(uint32(b.Exports[n]))
 	}
+
+	ws(string(b.Entry))
+	slices.Sort(b.Packages)
+	w(uint32(len(b.Packages)))
+	for _, p := range b.Packages {
+		ws(string(p))
+	}
+
 	return nil
 }
 
@@ -142,10 +134,19 @@ func Load(reader io.Reader) (bin *Binary, err error) {
 	}
 	var formatVersion uint32
 	e(binary.Read(reader, order, &formatVersion))
+	if formatVersion != BinaryFormatVersion {
+		return nil, fmt.Errorf("unsupported binary format version: %d", formatVersion)
+	}
 	var compilerVersion uint32
 	e(binary.Read(reader, order, &compilerVersion))
 	var debug bool
 	e(binary.Read(reader, order, &debug))
+
+	entry, err := rs(reader, order)
+	if err != nil {
+		return nil, err
+	}
+	bin.Entry = FullIdentifier(entry)
 
 	var numFuncs uint32
 	e(binary.Read(reader, order, &numFuncs))
@@ -213,6 +214,18 @@ func Load(reader io.Reader) (bin *Binary, err error) {
 		bin.Exports[FullIdentifier(name)] = Pointer(ptr)
 	}
 
+	entry, err = rs(reader, order)
+	e(err)
+	bin.Entry = FullIdentifier(entry)
+
+	var numPackages uint32
+	e(binary.Read(reader, order, &numPackages))
+	bin.Packages = make([]QualifiedIdentifier, 0, numPackages)
+	for i := uint32(0); i < numPackages; i++ {
+		p, err := rs(reader, order)
+		e(err)
+		bin.Packages = append(bin.Packages, QualifiedIdentifier(p))
+	}
 	return
 }
 

@@ -82,10 +82,10 @@ func (p *POption) Children() []Statement {
 	return append(p.patternBase.Children(), common.Map(func(x Pattern) Statement { return x }, p.args)...)
 }
 
-func (p *POption) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+func (p *POption) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	var err error
 	for _, x := range p.args {
-		ops, locations = x.appendBytecode(ops, locations, binary)
+		ops, locations = x.appendBytecode(ops, locations, binary, hash)
 		if err != nil {
 			return nil, nil
 		}
@@ -93,7 +93,7 @@ func (p *POption) appendBytecode(ops []bytecode.Op, locations []bytecode.Locatio
 	return bytecode.AppendMakePattern(
 		bytecode.PatternKindDataOption,
 		string(p.name()),
-		uint8(len(p.args)), p.location.Bytecode(), ops, locations, binary)
+		uint8(len(p.args)), p.location.Bytecode(), ops, locations, binary, hash)
 }
 
 func (p *POption) appendEquations(eqs Equations, loc *ast.Location, localDefs localTypesMap, ctx *SolvingContext, stack []*Definition) (Equations, error) {

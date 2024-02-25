@@ -99,13 +99,13 @@ func (e *Constructor) appendEquations(eqs Equations, loc *ast.Location, localDef
 	return eqs, nil
 }
 
-func (e *Constructor) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary) ([]bytecode.Op, []bytecode.Location) {
+func (e *Constructor) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	for _, arg := range e.args {
-		ops, locations = arg.appendBytecode(ops, locations, binary)
+		ops, locations = arg.appendBytecode(ops, locations, binary, hash)
 	}
 	ops, locations = ast.CString{
 		Value: string(common.MakeDataOptionIdentifier(e.dataName, e.optionName)),
-	}.AppendBytecode(bytecode.StackKindObject, e.location, ops, locations, binary)
+	}.AppendBytecode(bytecode.StackKindObject, e.location, ops, locations, binary, nil)
 	ops, locations = bytecode.AppendMakeObject(bytecode.ObjectKindOption, len(e.args), e.location.Bytecode(), ops, locations)
 	return ops, locations
 }
