@@ -126,6 +126,14 @@ func (module *Module) Iterate(f func(statement Statement)) {
 	}
 }
 
+func (module *Module) isReferenced(submodule *Module) bool {
+	if submodule.packageName == module.packageName {
+		return true
+	}
+	_, referenced := module.referencedPackages[submodule.packageName]
+	return referenced
+}
+
 func (module *Module) findInfixFn(
 	modules map[ast.QualifiedIdentifier]*Module, name ast.InfixIdentifier,
 ) (Infix, *Module, []ast.FullIdentifier) {
@@ -148,7 +156,7 @@ func (module *Module) findInfixFn(
 		var rModule *Module
 		var rIdent []ast.FullIdentifier
 		for _, submodule := range modules {
-			if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+			if module.isReferenced(submodule) {
 				if foundInfix, foundModule, foundId := submodule.findInfixFn(nil, name); foundId != nil {
 					rInfix = foundInfix
 					rModule = foundModule
@@ -201,7 +209,7 @@ func (module *Module) findType(
 		//3. search in all modules by qualified Name
 		if modName != "" {
 			if submodule, ok := modules[ast.QualifiedIdentifier(modName)]; ok {
-				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+				if module.isReferenced(submodule) {
 					return submodule.findType(nil, typeName, args, loc)
 				}
 			}
@@ -209,7 +217,7 @@ func (module *Module) findType(
 			//4. search in all modules by short Name
 			modName = "." + modName
 			for modId, submodule := range modules {
-				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+				if module.isReferenced(submodule) {
 					if strings.HasSuffix(string(modId), modName) {
 						foundType, foundModule, foundId, err := submodule.findType(nil, typeName, args, loc)
 						if err != nil {
@@ -232,7 +240,7 @@ func (module *Module) findType(
 		if unicode.IsUpper([]rune(typeName)[0]) {
 			modDotName := string("." + typeName)
 			for modId, submodule := range modules {
-				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+				if module.isReferenced(submodule) {
 					if strings.HasSuffix(string(modId), modDotName) || modId == typeName {
 						foundType, foundModule, foundId, err := submodule.findType(nil, typeName, args, loc)
 						if err != nil {
@@ -254,7 +262,7 @@ func (module *Module) findType(
 		if modName == "" {
 			//6. search all modules
 			for _, submodule := range modules {
-				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+				if module.isReferenced(submodule) {
 					foundType, foundModule, foundId, err := submodule.findType(nil, typeName, args, loc)
 					if err != nil {
 						return nil, nil, nil, err
@@ -321,7 +329,7 @@ func (module *Module) findDefinition(
 		//3. search in all modules by qualified Name
 		if modName != "" {
 			if submodule, ok := modules[ast.QualifiedIdentifier(modName)]; ok {
-				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+				if module.isReferenced(submodule) {
 					return submodule.findDefinition(nil, defName)
 				}
 			}
@@ -329,7 +337,7 @@ func (module *Module) findDefinition(
 			//4. search in all modules by short Name
 			modName = "." + modName
 			for modId, submodule := range modules {
-				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+				if module.isReferenced(submodule) {
 					if strings.HasSuffix(string(modId), modName) {
 						if d, m, i := submodule.findDefinition(nil, defName); len(i) != 0 {
 							rDef = d
@@ -348,7 +356,7 @@ func (module *Module) findDefinition(
 		if len(defName) > 0 && unicode.IsUpper([]rune(defName)[0]) {
 			modDotName := string("." + defName)
 			for modId, submodule := range modules {
-				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+				if module.isReferenced(submodule) {
 					if strings.HasSuffix(string(modId), modDotName) || modId == defName {
 						if d, m, i := submodule.findDefinition(nil, defName); len(i) != 0 {
 							rDef = d
@@ -366,7 +374,7 @@ func (module *Module) findDefinition(
 		if modName == "" {
 			//6. search all modules
 			for _, submodule := range modules {
-				if _, referenced := module.referencedPackages[submodule.packageName]; referenced {
+				if module.isReferenced(submodule) {
 					if d, m, i := submodule.findDefinition(nil, defName); len(i) != 0 {
 						rDef = d
 						rModule = m

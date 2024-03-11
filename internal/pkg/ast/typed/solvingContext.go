@@ -1,7 +1,6 @@
 package typed
 
 import (
-	"fmt"
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/common"
 	"strings"
@@ -183,30 +182,13 @@ func (tg *typeGroup) specialize(type_ Type, loc ast.Location) (Equations, error)
 	return tg.specific.merge(type_, loc)
 }
 
-func (ctx *SolvingContext) insertAll(eqs Equations, verbose bool) (Equations, error) {
+func (ctx *SolvingContext) insertAll(eqs Equations) (Equations, error) {
 	for i := 0; i < len(eqs); i++ {
 		eq := eqs[i]
-		if verbose {
-			println(eqs.String())
-			println("inserting #", i, ": ", eq.String(i))
-		}
 		extra, err := ctx.insert(eq)
 		eqs = appendUsefulEquations(eqs, extra)
 		if err != nil {
 			return eqs, err
-		}
-		if verbose {
-			for _, g := range ctx.groups {
-				t := ""
-				if g.specific != nil {
-					t = g.specific.Code("")
-				}
-				println(fmt.Sprintf("%d: [%s] %s", g.id,
-					strings.Join(common.Map(func(ub uint64) string {
-						return fmt.Sprintf("%d", ub)
-					}, common.Keys(g.unbound)), ", "),
-					t))
-			}
 		}
 	}
 	return eqs, nil

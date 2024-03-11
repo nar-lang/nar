@@ -105,7 +105,7 @@ func (e *Constructor) appendBytecode(ops []bytecode.Op, locations []bytecode.Loc
 	}
 	ops, locations = ast.CString{
 		Value: string(common.MakeDataOptionIdentifier(e.dataName, e.optionName)),
-	}.AppendBytecode(bytecode.StackKindObject, e.location, ops, locations, binary, nil)
+	}.AppendBytecode(bytecode.StackKindObject, e.location, ops, locations, binary, hash)
 	ops, locations = bytecode.AppendMakeObject(bytecode.ObjectKindOption, len(e.args), e.location.Bytecode(), ops, locations)
 	return ops, locations
 }

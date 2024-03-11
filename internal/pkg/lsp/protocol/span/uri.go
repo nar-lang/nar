@@ -40,7 +40,7 @@ func filename(uri URI) (string, error) {
 
 	// This conservative check for the logger case
 	// of a simple non-empty absolute POSIX filename
-	// avoids the allocation of a net.URL.
+	// avoids the memory of a net.URL.
 	if strings.HasPrefix(string(uri), "file:///") {
 		rest := string(uri)[len("file://"):] // leave one slash
 		for i := 0; i < len(rest); i++ {

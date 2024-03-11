@@ -91,7 +91,7 @@ func (e *Record) appendBytecode(ops []bytecode.Op, locations []bytecode.Location
 		if err != nil {
 			return nil, nil
 		}
-		ops, locations = ast.CString{Value: string(f.name)}.AppendBytecode(bytecode.StackKindObject, f.location, ops, locations, binary, nil)
+		ops, locations = ast.CString{Value: string(f.name)}.AppendBytecode(bytecode.StackKindObject, f.location, ops, locations, binary, hash)
 		if err != nil {
 			return nil, nil
 		}

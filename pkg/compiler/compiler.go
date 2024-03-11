@@ -1,4 +1,4 @@
-package narc
+package compiler
 
 import (
 	"fmt"
@@ -9,11 +9,12 @@ import (
 	"nar-compiler/internal/pkg/common"
 	"nar-compiler/internal/pkg/processors"
 	"nar-compiler/pkg/bytecode"
+	"nar-compiler/pkg/linker"
 	"nar-compiler/pkg/locator"
 	"nar-compiler/pkg/logger"
 )
 
-func Compile(log *logger.LogWriter, lc locator.Locator, debug bool) *bytecode.Binary {
+func Compile(log *logger.LogWriter, lc locator.Locator, link linker.Linker, debug bool) *bytecode.Binary {
 	parsedModules := map[ast.QualifiedIdentifier]*parsed.Module{}
 	normalizedModules := map[ast.QualifiedIdentifier]*normalized.Module{}
 	typedModules := map[ast.QualifiedIdentifier]*typed.Module{}
@@ -25,6 +26,10 @@ func Compile(log *logger.LogWriter, lc locator.Locator, debug bool) *bytecode.Bi
 	if err != nil {
 		log.Err(err)
 		return bin
+	}
+
+	for _, pkg := range packages {
+		bin.Packages[bytecode.QualifiedIdentifier(pkg.Info().Name)] = int32(pkg.Info().Version)
 	}
 
 	affectedModuleNames := processors.Compile(
@@ -47,6 +52,19 @@ func Compile(log *logger.LogWriter, lc locator.Locator, debug bool) *bytecode.Bi
 		}
 	}
 
+	if !log.Err() {
+		if link != nil {
+			err := link.Link(log, bin, lc, debug)
+			if err != nil {
+				log.Err(err)
+			}
+		}
+	}
+
 	log.Trace("compilation finished")
 	return bin
+}
+
+func Version() int {
+	return common.CompilerVersion
 }

@@ -1,4 +1,4 @@
-package narc
+package lsp
 
 import (
 	"bufio"
@@ -118,4 +118,8 @@ func readMessage(reader *bufio.Reader) ([]byte, error) {
 		loaded += n
 	}
 	return buf, nil
+}
+
+func Version() int {
+	return lsp.Version
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Provider interface {
@@ -25,7 +26,7 @@ func (f *fileSystemProvider) ExportedPackages() ([]Package, error) {
 	if err := f.loadSources(); err != nil {
 		return nil, err
 	}
-	return []Package{NewLoadedPackage(*f.pkgInfo, f.pkgSrcs)}, nil
+	return []Package{NewLoadedPackage(*f.pkgInfo, f.pkgSrcs, filepath.Join(f.path, "native"))}, nil
 }
 
 func (f *fileSystemProvider) LoadPackage(name string) (Package, bool, error) {
@@ -36,7 +37,17 @@ func (f *fileSystemProvider) LoadPackage(name string) (Package, bool, error) {
 		if err := f.loadSources(); err != nil {
 			return nil, false, err
 		}
-		return NewLoadedPackage(*f.pkgInfo, f.pkgSrcs), true, nil
+		return NewLoadedPackage(*f.pkgInfo, f.pkgSrcs, filepath.Join(f.path, "native")), true, nil
+	}
+	if strings.HasPrefix(name, ".") {
+		provider := NewFileSystemPackageProvider(filepath.Join(f.path, name))
+		packages, err := provider.ExportedPackages()
+		if err != nil {
+			return nil, false, err
+		}
+		if len(packages) > 0 {
+			return packages[0], true, nil
+		}
 	}
 	return nil, false, nil
 }
@@ -51,11 +62,11 @@ func (f *fileSystemProvider) loadInfo() error {
 		infoFilePath := filepath.Join(f.path, "nar.json")
 		infoBytes, err := os.ReadFile(infoFilePath)
 		if err != nil {
-			return fmt.Errorf("failed to read package info: %w", err)
+			return fmt.Errorf("failed to read %s: %w", infoFilePath, err)
 		}
 		var info PackageInfo
 		if err = json.Unmarshal(infoBytes, &info); err != nil {
-			return fmt.Errorf("failed to unmarshal package info: %w", err)
+			return fmt.Errorf("failed to unmarshal %s: %w", infoFilePath, err)
 		}
 		f.pkgInfo = &info
 	}
@@ -65,30 +76,24 @@ func (f *fileSystemProvider) loadInfo() error {
 func (f *fileSystemProvider) loadSources() error {
 	if f.pkgSrcs == nil {
 		f.pkgSrcs = map[string][]rune{}
-		err := filepath.Walk(filepath.Join(f.path, "src"), func(filePath string, info os.FileInfo, err error) error {
+		root := filepath.Join(f.path, "src")
+		filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
-				return fmt.Errorf("failed to walk path: %w", err)
+				return err
 			}
-			if info.IsDir() {
+			if d.IsDir() {
 				return nil
 			}
-			if filepath.Ext(filePath) != ".nar" {
+			if filepath.Ext(path) != ".nar" {
 				return nil
 			}
-			relPath, err := filepath.Rel(f.path, filePath)
-			if err != nil {
-				return fmt.Errorf("failed to get relative path: %w", err)
-			}
-			content, err := os.ReadFile(filePath)
+			content, err := os.ReadFile(path)
 			if err != nil {
 				return fmt.Errorf("failed to read file: %w", err)
 			}
-			f.pkgSrcs[relPath] = []rune(string(content))
+			f.pkgSrcs[path] = []rune(string(content))
 			return nil
 		})
-		if err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -99,7 +104,7 @@ func NewFileSystemPackageProvider(path string) Provider {
 
 func NewMemoryPackageProvider(info PackageInfo, sources map[string][]rune) Provider {
 	return &memoryProvider{
-		pkg: NewLoadedPackage(info, sources),
+		pkg: NewLoadedPackage(info, sources, ""),
 	}
 }
 
@@ -119,7 +124,7 @@ func (m *memoryProvider) LoadPackage(name string) (Package, bool, error) {
 }
 
 func NewDirectoryProvider(root string) Provider {
-	return &directoryProvider{root: root}
+	return &directoryProvider{root: root, pkgInfos: map[string]*fileSystemProvider{}}
 }
 
 type directoryProvider struct {

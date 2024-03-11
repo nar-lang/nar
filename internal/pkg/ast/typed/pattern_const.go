@@ -42,7 +42,7 @@ func (p *PConst) Code(currentModule ast.QualifiedIdentifier) string {
 }
 
 func (p *PConst) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
-	ops, locations = p.value.AppendBytecode(bytecode.StackKindPattern, p.location, ops, locations, binary, nil)
+	ops, locations = p.value.AppendBytecode(bytecode.StackKindPattern, p.location, ops, locations, binary, hash)
 	return bytecode.AppendMakePattern(bytecode.PatternKindConst, "", 0, p.location.Bytecode(), ops, locations, binary, hash)
 }
 

@@ -22,5 +22,5 @@ package linkers
 //	return nil
 //}
 //
-//func (l EmptyLinker) Cleanup() {
+//func (l EmptyLinker)Cleanup() {
 //}

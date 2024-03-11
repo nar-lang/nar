@@ -8,7 +8,9 @@ import (
 	"slices"
 )
 
-const BinaryFormatVersion uint32 = 100
+func Version() int { return 100 }
+
+const signature = 'N'<<8 | 'A'<<16 | 'R'<<24
 
 type QualifiedIdentifier string
 
@@ -20,17 +22,19 @@ type Location struct {
 
 func NewBinary() *Binary {
 	return &Binary{
-		Exports: map[FullIdentifier]Pointer{},
+		Exports:  map[FullIdentifier]Pointer{},
+		Packages: map[QualifiedIdentifier]int32{},
 	}
 }
 
 type Binary struct {
-	Funcs    []Func
-	Strings  []string
-	Consts   []PackedConst
-	Exports  map[FullIdentifier]Pointer
-	Entry    FullIdentifier
-	Packages []QualifiedIdentifier
+	CompilerVersion uint32
+	Funcs           []Func
+	Strings         []string
+	Consts          []PackedConst
+	Exports         map[FullIdentifier]Pointer
+	Entry           FullIdentifier
+	Packages        map[QualifiedIdentifier]int32
 }
 
 type Func struct {
@@ -41,7 +45,7 @@ type Func struct {
 	Locations []Location
 }
 
-func (b *Binary) Build(writer io.Writer, compilerVersion uint32, debug bool) (err error) {
+func (b *Binary) Write(writer io.Writer, debug bool) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = r.(error)
@@ -58,8 +62,9 @@ func (b *Binary) Build(writer io.Writer, compilerVersion uint32, debug bool) (er
 		w(uint32(len(bs)))
 		w(bs)
 	}
-	w(uint32(BinaryFormatVersion))
-	w(uint32(compilerVersion))
+	w(uint32(signature))
+	w(uint32(Version()))
+	w(uint32(b.CompilerVersion))
 	w(bool(debug))
 	ws(string(b.Entry))
 
@@ -102,17 +107,21 @@ func (b *Binary) Build(writer io.Writer, compilerVersion uint32, debug bool) (er
 		w(uint32(b.Exports[n]))
 	}
 
-	ws(string(b.Entry))
-	slices.Sort(b.Packages)
+	packageNames := make([]QualifiedIdentifier, 0, len(b.Packages))
+	for p := range b.Packages {
+		packageNames = append(packageNames, p)
+	}
+	slices.Sort(packageNames)
 	w(uint32(len(b.Packages)))
-	for _, p := range b.Packages {
+	for _, p := range packageNames {
 		ws(string(p))
+		w(int32(b.Packages[p]))
 	}
 
 	return nil
 }
 
-func Load(reader io.Reader) (bin *Binary, err error) {
+func Read(reader io.Reader) (bin *Binary, err error) {
 	bin = &Binary{}
 	e := func(err error) {
 		if err != nil {
@@ -132,13 +141,17 @@ func Load(reader io.Reader) (bin *Binary, err error) {
 		e(binary.Read(reader, order, bs))
 		return string(bs), nil
 	}
+	var sign uint32
+	e(binary.Read(reader, order, &sign))
+	if sign != signature {
+		return nil, fmt.Errorf("invalid file format")
+	}
 	var formatVersion uint32
 	e(binary.Read(reader, order, &formatVersion))
-	if formatVersion != BinaryFormatVersion {
+	if int(formatVersion) != Version() {
 		return nil, fmt.Errorf("unsupported binary format version: %d", formatVersion)
 	}
-	var compilerVersion uint32
-	e(binary.Read(reader, order, &compilerVersion))
+	e(binary.Read(reader, order, &bin.CompilerVersion))
 	var debug bool
 	e(binary.Read(reader, order, &debug))
 
@@ -214,17 +227,15 @@ func Load(reader io.Reader) (bin *Binary, err error) {
 		bin.Exports[FullIdentifier(name)] = Pointer(ptr)
 	}
 
-	entry, err = rs(reader, order)
-	e(err)
-	bin.Entry = FullIdentifier(entry)
-
 	var numPackages uint32
 	e(binary.Read(reader, order, &numPackages))
-	bin.Packages = make([]QualifiedIdentifier, 0, numPackages)
+	bin.Packages = make(map[QualifiedIdentifier]int32, numPackages)
 	for i := uint32(0); i < numPackages; i++ {
-		p, err := rs(reader, order)
+		name, err := rs(reader, order)
 		e(err)
-		bin.Packages = append(bin.Packages, QualifiedIdentifier(p))
+		var version int32
+		e(binary.Read(reader, order, &version))
+		bin.Packages[QualifiedIdentifier(name)] = version
 	}
 	return
 }

@@ -57,7 +57,7 @@ func (p *provider) load() error {
 
 	maps.Copy(p.merged, pkg[0].Sources())
 	maps.Copy(p.merged, p.overrides)
-	p.pkg = locator.NewLoadedPackage(pkg[0].Info(), p.merged)
+	p.pkg = locator.NewLoadedPackage(pkg[0].Info(), p.merged, filepath.Join(p.path, "native"))
 	return nil
 }
 

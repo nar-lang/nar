@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-const Version = "1.0"
+const Version = 100
 
 type server struct {
 	id        int

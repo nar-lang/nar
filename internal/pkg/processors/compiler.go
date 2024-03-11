@@ -9,10 +9,7 @@ import (
 	"nar-compiler/pkg/locator"
 	"nar-compiler/pkg/logger"
 	"slices"
-	"strconv"
 )
-
-var Version = strconv.Itoa(int(common.CompilerVersion)/100) + "." + strconv.Itoa(int(common.CompilerVersion)%100)
 
 func Compile(
 	log *logger.LogWriter,

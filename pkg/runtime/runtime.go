@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"fmt"
+	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/pkg/bytecode"
 )
 
@@ -9,282 +10,236 @@ import (
 //TODO: make string objects for every string in binary, and dont copy for every instance
 
 func NewRuntime(program *bytecode.Binary) *Runtime {
-	runtime := &Runtime{
-		program: program,
-		defs:    map[bytecode.FullIdentifier]Object{},
-		scopes:  map[ModuleName]any{},
-		arena:   newArena(256),
+	rt := &Runtime{
+		program:           program,
+		defs:              map[bytecode.FullIdentifier]Object{},
+		cachedExpressions: map[bytecode.Pointer]Object{},
+		arenas:            make([]typedArena, instanceKindCount),
 	}
-	return runtime
+
+	initialCapacity := 64
+	for i := range rt.arenas {
+		rt.arenas[i] = newTypedArenaWithKind(InstanceKind(i), initialCapacity)
+	}
+	rt.Clean(true)
+	return rt
 }
 
 type Runtime struct {
-	program          *bytecode.Binary
-	defs             map[bytecode.FullIdentifier]Object
-	scopes           map[ModuleName]any
-	awaitingDeps     []awaitingCallback
-	arena            *Arena
-	initialArenaSize uint64
+	program           *bytecode.Binary
+	defs              map[bytecode.FullIdentifier]Object
+	arenas            []typedArena
+	callStack         []bytecode.StringHash
+	locals            []local
+	cachedExpressions map[bytecode.Pointer]Object
 }
 
-type ModuleName string
-
-type DefName string
-
-type awaitingCallback struct {
-	deps     []ModuleName
-	callback func()
-}
-
-func (r *Runtime) Register(moduleName ModuleName, definitions map[DefName]Object, scope any) {
-	for name, def := range definitions {
-		r.defs[bytecode.FullIdentifier(moduleName)+"."+bytecode.FullIdentifier(name)] = def
-	}
-	r.scopes[moduleName] = scope
-	r.checkAwaitingDeps()
-}
-
-func (r *Runtime) AfterRegistered(callback func(), deps ...ModuleName) {
-	r.awaitingDeps = append(r.awaitingDeps, awaitingCallback{deps: deps, callback: callback})
-	r.checkAwaitingDeps()
-}
-
-func (r *Runtime) checkAwaitingDeps() {
-	for i := 0; i < len(r.awaitingDeps); i++ {
-		ad := r.awaitingDeps[i]
-		ready := true
-		for _, dep := range ad.deps {
-			if _, ok := r.scopes[dep]; !ok {
-				ready = false
-				break
-			}
-		}
-		if ready {
-			r.awaitingDeps = append(r.awaitingDeps[:i], r.awaitingDeps[i+1:]...)
-			i--
-			ad.callback()
-		}
+func (rt *Runtime) Dispose() {
+	for _, arena := range rt.arenas {
+		arena.clean(true)
 	}
 }
 
-func (r *Runtime) Scope(moduleName ModuleName) (any, bool) {
-	s, ok := r.scopes[moduleName]
-	return s, ok
+func (rt *Runtime) RegisterDef(moduleName bytecode.QualifiedIdentifier, name ast.Identifier, def Object) {
+	rt.defs[bytecode.FullIdentifier(moduleName)+"."+bytecode.FullIdentifier(name)] = def
 }
 
-func (r *Runtime) NewArena() *Arena {
-	return newArena(64)
-}
-
-func (r *Runtime) Execute(defName bytecode.FullIdentifier, args ...Object) (Object, error) {
-	return r.ExecuteInArena(r.arena, defName, args...)
-}
-
-func (r *Runtime) ExecuteInArena(arena *Arena, defName bytecode.FullIdentifier, args ...Object) (Object, error) {
-	if len(arena.callStack) > 0 || len(arena.patternStack) > 0 {
-		return invalidObject, fmt.Errorf("arena is already in use or was not cleared")
+func (rt *Runtime) Apply(defName bytecode.FullIdentifier, args ...Object) (Object, error) {
+	if len(rt.callStack) > 0 {
+		return invalidObject, fmt.Errorf("function is being called already")
 	}
-	fnIndex, ok := r.program.Exports[defName]
+	fnIndex, ok := rt.program.Exports[defName]
 	if !ok {
 		return invalidObject, fmt.Errorf("definition `%s` is not exported by loaded binary", defName)
 	}
-	if kDebug && fnIndex >= bytecode.Pointer(len(r.program.Funcs)) {
+	if kDebug && fnIndex >= bytecode.Pointer(len(rt.program.Funcs)) {
 		return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid function pointer)")
 	}
-	fn := r.program.Funcs[fnIndex]
-	if uint32(len(args)) != fn.NumArgs {
-		return invalidObject, fmt.Errorf("function `%s` requires %d arguments, but %d given", defName, fn.NumArgs, len(args))
-	}
-	err := r.executeFunc(arena, fn)
-	if err != nil {
-		return invalidObject, err
-	}
-	return arena.objectStack[len(arena.objectStack)-1], nil
+	fn := rt.program.Funcs[fnIndex]
+	afn := rt.newClosure(fn)
+	return rt.ApplyFunc(afn, args...)
 }
 
-func (r *Runtime) ExecuteFunc(afn Object, args ...Object) (Object, error) {
-	return r.ExecuteFuncInArena(r.arena, afn, args...)
-}
-
-func (r *Runtime) ExecuteFuncInArena(arena *Arena, fn Object, args ...Object) (Object, error) {
-	afn, err := fn.asClosure()
+func (rt *Runtime) ApplyFunc(fn Object, args ...Object) (Object, error) {
+	afn, err := toClosure(rt, fn)
 	if err != nil {
 		return invalidObject, err
 	}
-	curried, err := afn.curried.AsObjectList()
+	curried, err := ToList(rt, afn.curried)
 	if err != nil {
 		return invalidObject, err
 	}
-	arena.objectStack = append(arena.objectStack, curried...)
-	arena.objectStack = append(arena.objectStack, args...)
-	numArgs := len(args) + len(curried)
-	if afn.fn.NumArgs == uint32(numArgs) {
-		err = r.executeFunc(arena, afn.fn)
+	args = append(curried, args...)
+	if int(afn.fn.NumArgs) == len(args) {
+		return rt.execute(afn.fn, args)
+	} else if int(afn.fn.NumArgs) < len(args) {
+		restLen := len(args) - int(afn.fn.NumArgs)
+		rest := make([]Object, restLen)
+		copy(rest, args[len(args)-restLen:])
+		args = args[:len(args)-restLen]
+		result, err := rt.execute(afn.fn, args)
 		if err != nil {
 			return invalidObject, err
 		}
-		result, err := pop(&arena.objectStack)
-		if err != nil {
-			return invalidObject, err
-		}
-		return result, nil
+		return rt.ApplyFunc(result, rest...)
 	} else {
-		resultArgs, err := popX(&arena.objectStack, numArgs)
-		if err != nil {
-			return invalidObject, err
-		}
-		resultClosure := arena.newClosure(afn.fn, resultArgs...)
-		return resultClosure, nil
+		return rt.newClosure(afn.fn, args...), nil
 	}
 }
 
-func (r *Runtime) executeFunc(arena *Arena, fn bytecode.Func) error {
-	arena.callStack = append(arena.callStack, fn.Name)
+func (rt *Runtime) execute(fn bytecode.Func, objectStack []Object) (Object, error) {
+	var patternStack []Object
+	rt.callStack = append(rt.callStack, fn.Name)
 	numLocals := 0
 	numOps := len(fn.Ops)
 	for index := 0; index < numOps; index++ {
 		opKind, b, c, a := fn.Ops[index].Decompose()
 		switch opKind {
 		case bytecode.OpKindLoadLocal:
-			if kDebug && a >= uint32(len(r.program.Strings)) {
-				return fmt.Errorf("loaded binary is corrupted (invalid local name)")
+			if kDebug && a >= uint32(len(rt.program.Strings)) {
+				return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid local name)")
 			}
-			name := r.program.Strings[a]
+			name := TString(rt.program.Strings[a])
 			found := false
-			for i := len(arena.locals) - 1; i >= len(arena.locals)-numLocals; i-- {
-				if arena.locals[i].name == name {
-					arena.objectStack = append(arena.objectStack, arena.locals[i].value)
+			for i := len(rt.locals) - 1; i >= len(rt.locals)-numLocals; i-- {
+				if rt.locals[i].name == name {
+					objectStack = append(objectStack, rt.locals[i].value)
 					found = true
 					break
 				}
 			}
 			if kDebug && !found {
-				return fmt.Errorf("loaded binary is corrupted (undefined local `%s`)", name)
+				return invalidObject, fmt.Errorf("loaded binary is corrupted (undefined local `%s`)", name)
 			}
 		case bytecode.OpKindLoadGlobal:
-			if kDebug && a >= uint32(len(r.program.Funcs)) {
-				return fmt.Errorf("loaded binary is corrupted (invalid global pointer)")
+			if kDebug && a >= uint32(len(rt.program.Funcs)) {
+				return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid global pointer)")
 			}
-			glob := r.program.Funcs[a]
+			glob := rt.program.Funcs[a]
 			if glob.NumArgs == 0 {
-				if cached, ok := arena.cachedExpressions[bytecode.Pointer(a)]; !ok {
-					var err error
-					err = r.executeFunc(arena, glob)
+				if cached, ok := rt.cachedExpressions[bytecode.Pointer(a)]; !ok {
+					result, err := rt.execute(glob, nil)
 					if err != nil {
-						return err
+						return invalidObject, err
 					}
-					if kDebug && len(arena.objectStack) == 0 {
-						return fmt.Errorf("stack is empty after executing `%s`", r.program.Strings[glob.Name])
-
-					}
-					arena.cachedExpressions[bytecode.Pointer(a)] = arena.objectStack[len(arena.objectStack)-1]
+					rt.cachedExpressions[bytecode.Pointer(a)] = result
+					objectStack = append(objectStack, result)
 				} else {
-					arena.objectStack = append(arena.objectStack, cached)
+					objectStack = append(objectStack, cached)
 				}
 			} else {
-				arena.objectStack = append(arena.objectStack, arena.newClosure(glob))
+				objectStack = append(objectStack, rt.newClosure(glob))
 			}
 		case bytecode.OpKindLoadConst:
 			var value Object
-			switch bytecode.ConstKind(b) {
+			switch bytecode.ConstKind(c) {
 			case bytecode.ConstKindUnit:
-				value = arena.NewUnit()
+				value = rt.NewUnit()
 			case bytecode.ConstKindChar:
-				value = arena.NewChar(rune(a))
+				value = rt.NewChar(TChar(a))
 			case bytecode.ConstKindInt:
-				if kDebug && a >= uint32(len(r.program.Consts)) {
-					return fmt.Errorf("loaded binary is corrupted (invalid const index)")
+				if kDebug && a >= uint32(len(rt.program.Consts)) {
+					return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid const index)")
 				}
-				value = arena.NewInt(r.program.Consts[a].Int())
+				value = rt.NewInt(TInt(rt.program.Consts[a].Int()))
 			case bytecode.ConstKindFloat:
-				if kDebug && a >= uint32(len(r.program.Consts)) {
-					return fmt.Errorf("loaded binary is corrupted (invalid const index)")
+				if kDebug && a >= uint32(len(rt.program.Consts)) {
+					return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid const index)")
 				}
-				value = arena.NewFloat(r.program.Consts[a].Float())
+				value = rt.NewFloat(TFloat(rt.program.Consts[a].Float()))
 			case bytecode.ConstKindString:
-				if kDebug && a >= uint32(len(r.program.Strings)) {
-					return fmt.Errorf("loaded binary is corrupted (invalid string index)")
+				if kDebug && a >= uint32(len(rt.program.Strings)) {
+					return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid string index)")
 				}
-				value = arena.NewString(r.program.Strings[a])
+				value = rt.NewString(TString(rt.program.Strings[a]))
 			default:
 				if kDebug {
-					return fmt.Errorf("loaded binary is corrupted (invalid const kind)")
+					return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid const kind)")
 				}
 			}
-			switch bytecode.StackKind(c) {
+			switch bytecode.StackKind(b) {
 			case bytecode.StackKindObject:
-				arena.objectStack = append(arena.objectStack, value)
+				objectStack = append(objectStack, value)
 			case bytecode.StackKindPattern:
-				arena.patternStack = append(arena.patternStack, value)
+				patternStack = append(patternStack, value)
 			default:
 				if kDebug {
-					return fmt.Errorf("loaded binary is corrupted (invalid stack kind)")
+					return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid stack kind)")
 				}
 			}
 		case bytecode.OpKindApply:
-			x, err := pop(&arena.objectStack)
+			x, err := pop(&objectStack)
 			if err != nil {
-				return err
+				return invalidObject, err
 			}
-			afn, err := x.asClosure()
+			afn, err := toClosure(rt, x)
 			if err != nil {
-				return err
+				return invalidObject, err
 			}
 			numArgs := int(b)
-			start := len(arena.objectStack) - numArgs
-			if kDebug && start < 0 {
-				return fmt.Errorf("stack underflow when trying to apply function")
-			}
-			curried, err := afn.curried.AsObjectList()
+			args, err := popX(&objectStack, numArgs)
 			if err != nil {
-				return err
+				return invalidObject, err
 			}
-			if len(curried) > 0 {
-				arena.objectStack = append(arena.objectStack[:start], append(curried, arena.objectStack[start:]...)...)
+			curried, err := ToList(rt, afn.curried)
+			if err != nil {
+				return invalidObject, err
 			}
-			if int(afn.fn.NumArgs) == numArgs {
-				err = r.executeFunc(arena, afn.fn)
+			args = append(curried, args...)
+			if int(afn.fn.NumArgs) == len(args) {
+				result, err := rt.execute(afn.fn, args)
 				if err != nil {
-					return err
+					return invalidObject, err
 				}
+				objectStack = append(objectStack, result)
 			} else {
-				arena.objectStack = append(
-					arena.objectStack[:start],
-					arena.newClosure(afn.fn, arena.NewObjectList(arena.objectStack[start:]...)))
+				objectStack = append(objectStack, rt.newClosure(afn.fn, args...))
 			}
 		case bytecode.OpKindCall:
-			if kDebug && a >= uint32(len(r.program.Strings)) {
-				return fmt.Errorf("loaded binary is corrupted (invalid string index)")
+			if kDebug && a >= uint32(len(rt.program.Strings)) {
+				return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid string index)")
 			}
-			name := r.program.Strings[a]
-			def, ok := r.defs[bytecode.FullIdentifier(name)]
+			name := rt.program.Strings[a]
+			def, ok := rt.defs[bytecode.FullIdentifier(name)]
 			if !ok {
-				return fmt.Errorf("definition `%s` is not registered", name)
+				return invalidObject, fmt.Errorf("definition `%s` is not registered", name)
 			}
-			var err error
-			arena.objectStack, err = def.call(arena.objectStack)
-			if err != nil {
-				return err
+			if def.Kind() == InstanceKindFunction {
+				ptr, arity, err := ToFunc(rt, def)
+				if err != nil {
+					return invalidObject, err
+				}
+				args, err := popX(&objectStack, int(arity))
+				if err != nil {
+					return invalidObject, err
+				}
+				result, err := callFunc(ptr, args)
+				if err != nil {
+					return invalidObject, err
+				}
+				objectStack = append(objectStack, result)
+			} else {
+				return invalidObject, fmt.Errorf("definition `%s` is not a function", name)
+				//objectStack = append(objectStack, def)
 			}
 		case bytecode.OpKindJump:
 			if b == 0 {
 				index += int(a)
 			} else {
-				pattern, err := pop(&arena.patternStack)
+				pt, err := pop(&patternStack)
 				if err != nil {
-					return err
+					return invalidObject, err
 				}
-				obj, err := pop(&arena.objectStack)
-				if err != nil {
-					return err
+				if len(objectStack) == 0 {
+					return invalidObject, fmt.Errorf("stack is empty")
 				}
-				match, err := r.match(arena, pattern, obj, &numLocals)
+				match, err := rt.match(pt, objectStack[len(objectStack)-1], &numLocals)
 				if err != nil {
-					return err
+					return invalidObject, err
 				}
 				if !match {
 					if kDebug && a == 0 {
-						return fmt.Errorf("pattern match with jump delta 0 should not fail")
+						return invalidObject, fmt.Errorf("pattern match with jump delta 0 should not fail")
 					}
 					index += int(a)
 				}
@@ -292,234 +247,257 @@ func (r *Runtime) executeFunc(arena *Arena, fn bytecode.Func) error {
 		case bytecode.OpKindMakeObject:
 			switch bytecode.ObjectKind(b) {
 			case bytecode.ObjectKindList:
-				items, err := popX(&arena.objectStack, int(a))
+				items, err := popX(&objectStack, int(a))
 				if err != nil {
-					return err
+					return invalidObject, err
 				}
-				arena.objectStack = append(arena.objectStack, arena.NewObjectList(items...))
+				objectStack = append(objectStack, rt.NewList(items...))
 			case bytecode.ObjectKindTuple:
-				items, err := popX(&arena.objectStack, int(a))
+				items, err := popX(&objectStack, int(a))
 				if err != nil {
-					return err
+					return invalidObject, err
 				}
-				arena.objectStack = append(arena.objectStack, arena.NewObjectTuple(items...))
+				objectStack = append(objectStack, rt.NewTuple(items...))
 			case bytecode.ObjectKindRecord:
-				items, err := popX(&arena.objectStack, int(a*2))
+				items, err := popX(&objectStack, int(a*2))
 				if err != nil {
-					return err
+					return invalidObject, err
 				}
-				arena.objectStack = append(arena.objectStack, arena.newObjectRecord(items...))
+				objectStack = append(objectStack, rt.newObjectRecordRaw(items...))
 			case bytecode.ObjectKindOption:
-				nameObj, err := pop(&arena.objectStack)
+				nameObj, err := pop(&objectStack)
 				if err != nil {
-					return err
+					return invalidObject, err
 				}
-				name, err := nameObj.AsString()
+				name, err := ToString(rt, nameObj)
 				if err != nil {
-					return err
+					return invalidObject, err
 				}
-				values, err := popX(&arena.objectStack, int(a))
+				values, err := popX(&objectStack, int(a))
 				if err != nil {
-					return err
+					return invalidObject, err
 				}
-				arena.objectStack = append(arena.objectStack, arena.NewObjectOption(name, values...))
+				objectStack = append(objectStack, rt.NewOption(name, values...))
 			default:
 				if kDebug {
-					return fmt.Errorf("loaded binary is corrupted (invalid object kind)")
+					return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid object kind)")
 				}
 			}
 		case bytecode.OpKindMakePattern:
-			name := arena.NewString("")
+			name := rt.NewString("")
 			var items []Object
 			var err error
-			switch bytecode.PatternKind(b) {
+			kind := bytecode.PatternKind(b)
+			switch kind {
 			case bytecode.PatternKindAlias:
-				if kDebug && a >= uint32(len(r.program.Strings)) {
-					return fmt.Errorf("loaded binary is corrupted (invalid string index)")
+				if kDebug && a >= uint32(len(rt.program.Strings)) {
+					return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid string index)")
 				}
-				name = arena.NewString(r.program.Strings[a])
-				items, err = popX(&arena.patternStack, 1)
+				name = rt.NewString(TString(rt.program.Strings[a]))
+				items, err = popX(&patternStack, 1)
 			case bytecode.PatternKindAny:
 				break
 			case bytecode.PatternKindCons:
-				items, err = popX(&arena.patternStack, 2)
+				items, err = popX(&patternStack, 2)
 			case bytecode.PatternKindConst:
-				if kDebug && len(arena.objectStack) == 0 {
-					return fmt.Errorf("stack is empty when trying to make const")
-				}
-				items, err = popX(&arena.patternStack, 1)
+				items, err = popX(&patternStack, 1)
 			case bytecode.PatternKindDataOption:
-				if kDebug && a >= uint32(len(r.program.Strings)) {
-					return fmt.Errorf("loaded binary is corrupted (invalid string index)")
+				if kDebug && a >= uint32(len(rt.program.Strings)) {
+					return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid string index)")
 				}
-				name = arena.NewString(r.program.Strings[a])
-				items, err = popX(&arena.patternStack, int(c))
+				name = rt.NewString(TString(rt.program.Strings[a]))
+				items, err = popX(&patternStack, int(c))
 			case bytecode.PatternKindList:
-				items, err = popX(&arena.patternStack, int(c)) //TODO: use a register for list length
+				items, err = popX(&patternStack, int(c)) //TODO: use a register for list length
 			case bytecode.PatternKindNamed:
-				if kDebug && a >= uint32(len(r.program.Strings)) {
-					return fmt.Errorf("loaded binary is corrupted (invalid string index)")
+				if kDebug && a >= uint32(len(rt.program.Strings)) {
+					return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid string index)")
 				}
-				name = arena.NewString(r.program.Strings[a])
+				name = rt.NewString(TString(rt.program.Strings[a]))
 			case bytecode.PatternKindRecord:
-				items, err = popX(&arena.patternStack, int(c*2)) //TODO: use a register for list length
+				items, err = popX(&patternStack, int(c*2)) //TODO: use a register for list length
 			case bytecode.PatternKindTuple:
-				items, err = popX(&arena.patternStack, int(c))
+				items, err = popX(&patternStack, int(c))
 			default:
 				if kDebug {
-					return fmt.Errorf("loaded binary is corrupted (invalid pattern kind)")
+					return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid pattern kind)")
 				}
 			}
 			if err != nil {
-				return err
+				return invalidObject, err
 			}
-			p, err := arena.newPattern(name, items)
+			p, err := rt.newPattern(name, items, kind)
 			if err != nil {
-				return err
+				return invalidObject, err
 			}
-			arena.patternStack = append(arena.patternStack, p)
+			patternStack = append(patternStack, p)
 		case bytecode.OpKindAccess:
-			if kDebug && a >= uint32(len(r.program.Strings)) {
-				return fmt.Errorf("loaded binary is corrupted (invalid string index)")
+			if kDebug && a >= uint32(len(rt.program.Strings)) {
+				return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid string index)")
 			}
-			if kDebug && len(arena.objectStack) == 0 {
-				return fmt.Errorf("stack is empty when trying to access record field")
-			}
-			name := r.program.Strings[a]
-			record := arena.objectStack[len(arena.objectStack)-1]
-			arena.objectStack = arena.objectStack[:len(arena.objectStack)-1]
-			field, ok, err := record.FindField(name)
+			record, err := pop(&objectStack)
 			if err != nil {
-				return err
+				return invalidObject, err
+			}
+			name := rt.program.Strings[a]
+			field, ok, err := FindRecordField(rt, record, TString(name))
+			if err != nil {
+				return invalidObject, err
 			}
 			if kDebug && !ok {
-				return fmt.Errorf("record does not have field `%s`", name)
+				return invalidObject, fmt.Errorf("record does not have field `%s`", name)
 			}
-			arena.objectStack = append(arena.objectStack, field)
+			objectStack = append(objectStack, field)
 		case bytecode.OpKindUpdate:
-			if kDebug && a >= uint32(len(r.program.Strings)) {
-				return fmt.Errorf("loaded binary is corrupted (invalid string index)")
+			if kDebug && a >= uint32(len(rt.program.Strings)) {
+				return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid string index)")
 			}
-			if kDebug && len(arena.objectStack) < 2 {
-				return fmt.Errorf("stack underflow when trying to update record field")
-			}
-			key := r.program.Strings[a]
-			value := arena.objectStack[len(arena.objectStack)-1]
-			record := arena.objectStack[len(arena.objectStack)-2]
-			arena.objectStack = arena.objectStack[:len(arena.objectStack)-2]
-			updated, err := record.UpdateField(arena.NewString(key), value)
+			key := rt.program.Strings[a]
+			value, err := pop(&objectStack)
 			if err != nil {
-				return err
+				return invalidObject, err
 			}
-			arena.objectStack = append(arena.objectStack, updated)
+			record, err := pop(&objectStack)
+			if err != nil {
+				return invalidObject, err
+			}
+			updated, err := UpdateRecordField(rt, record, rt.NewString(TString(key)), value)
+			if err != nil {
+				return invalidObject, err
+			}
+			objectStack = append(objectStack, updated)
 		case bytecode.OpKindSwapPop:
 			switch bytecode.SwapPopMode(b) {
 			case bytecode.SwapPopModeBoth:
-				if kDebug && len(arena.objectStack) < 2 {
-					return fmt.Errorf("stack underflow when trying to swap and pop")
+				tail, err := popX(&objectStack, 2)
+				if err != nil {
+					return invalidObject, err
 				}
-				arena.objectStack = append(arena.objectStack[:len(arena.objectStack)-2], arena.objectStack[len(arena.objectStack)-1])
+				objectStack = append(objectStack, tail[1])
 			case bytecode.SwapPopModePop:
-				if kDebug && len(arena.objectStack) == 0 {
-					return fmt.Errorf("stack is empty when trying to pop")
+				_, err := pop(&objectStack)
+				if err != nil {
+					return invalidObject, err
 				}
-				arena.objectStack = arena.objectStack[:len(arena.objectStack)-1]
 			default:
 				if kDebug {
-					return fmt.Errorf("loaded binary is corrupted (invalid swap pop mode)")
+					return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid swap pop mode)")
 				}
 			}
 		default:
 			if kDebug {
-				return fmt.Errorf("loaded binary is corrupted (invalid op kind)")
+				return invalidObject, fmt.Errorf("loaded binary is corrupted (invalid op kind)")
 			}
 		}
 	}
-	_, err := popX(&arena.locals, numLocals)
+	_, err := popX(&rt.locals, numLocals)
 	if err != nil {
-		return err
+		return invalidObject, err
 	}
-	_, err = pop(&arena.callStack)
+	_, err = pop(&rt.callStack)
 	if err != nil {
-		return err
+		return invalidObject, err
 	}
-	return nil
+	result, err := pop(&objectStack)
+	if err != nil {
+		return invalidObject, err
+	}
+	if kDebug && len(objectStack) != 0 {
+		return invalidObject, fmt.Errorf("stack is not empty after execution")
+	}
+	return result, nil
 }
 
-func (r *Runtime) match(arena *Arena, pattern Object, obj Object, numLocals *int) (bool, error) {
-	p, err := pattern.asPattern()
+func (rt *Runtime) match(pattern Object, obj Object, numLocals *int) (bool, error) {
+	p, err := toPattern(rt, pattern)
 	if err != nil {
 		return false, err
 	}
 	switch p.kind {
 	case bytecode.PatternKindAlias:
-		name, err := p.name.AsString()
+		name, err := ToString(rt, p.name)
 		if err != nil {
 			return false, err
 		}
-		arena.locals = append(arena.locals, local{name: name, value: obj})
+		rt.locals = append(rt.locals, local{name: name, value: obj})
 		*numLocals = *numLocals + 1
-		nested, err := p.items.AsObjectList()
+		nested, err := ToList(rt, p.items)
 		if err != nil {
 			return false, err
 		}
 		if kDebug && len(nested) != 1 {
 			return false, fmt.Errorf("alias pattern should have exactly one nested pattern")
 		}
-		return r.match(arena, nested[0], obj, numLocals)
+		return rt.match(nested[0], obj, numLocals)
 	case bytecode.PatternKindAny:
 		return true, nil
 	case bytecode.PatternKindCons:
-		nested, err := p.items.AsObjectList()
+		nested, err := ToList(rt, p.items)
 		if err != nil {
 			return false, err
 		}
 		if kDebug && len(nested) != 2 {
 			return false, fmt.Errorf("cons pattern should have exactly two nested patterns")
 		}
-		list, err := obj.AsObjectList()
+		list, err := ToList(rt, obj)
 		if err != nil {
 			return false, err
 		}
 		if len(list) < 1 {
-			return false, fmt.Errorf("cons pattern should match non-empty list")
+			return false, nil
 		}
-		match, err := r.match(arena, nested[1], list[0], numLocals)
+		match, err := rt.match(nested[1], list[0], numLocals)
 		if err != nil {
 			return false, err
 		}
 		if !match {
 			return false, nil
 		}
-		return r.match(arena, nested[0], arena.NewObjectList(list[1:]...), numLocals) //TODO: optimize: do not create new list, use low level API
+		return rt.match(nested[0], rt.NewList(list[1:]...), numLocals) //TODO: optimize: do not create new list, use low level API
 	case bytecode.PatternKindConst:
-		nested, err := p.items.AsObjectList()
+		nested, err := ToList(rt, p.items)
 		if err != nil {
 			return false, err
 		}
 		if kDebug && len(nested) != 1 {
 			return false, fmt.Errorf("const pattern should have exactly one nested pattern")
 		}
-		return obj.ConstEqualsTo(nested[0])
+		return constEqualsTo(rt, nested[0], obj)
 	case bytecode.PatternKindDataOption:
-		objName, objValues, err := obj.asObjectOption()
+		objName, objValues, err := ToOption(rt, obj)
 		if err != nil {
 			return false, err
 		}
-		eq, err := objName.ConstEqualsTo(p.name)
+		eq, err := constEqualsTo(rt, p.name, objName)
 		if err != nil {
 			return false, err
 		}
 		if !eq {
 			return false, nil
 		}
-		return r.match(arena, p.items, objValues, numLocals)
-	case bytecode.PatternKindList:
-		objList, err := obj.AsObjectList()
+		ptList, err := ToList(rt, p.items)
 		if err != nil {
 			return false, err
 		}
-		patList, err := p.items.AsObjectList()
+		if len(ptList) != len(objValues) {
+			return false, fmt.Errorf("invalid option pattern match, number of values differs")
+		}
+		for i := 0; i < len(ptList); i++ {
+			match, err := rt.match(ptList[i], objValues[i], numLocals)
+			if err != nil {
+				return false, err
+			}
+			if !match {
+				return false, nil
+			}
+		}
+		return true, nil
+	case bytecode.PatternKindList:
+		objList, err := ToList(rt, obj)
+		if err != nil {
+			return false, err
+		}
+		patList, err := ToList(rt, p.items)
 		if err != nil {
 			return false, err
 		}
@@ -527,7 +505,7 @@ func (r *Runtime) match(arena *Arena, pattern Object, obj Object, numLocals *int
 			return false, nil
 		}
 		for i := 0; i < len(objList); i++ {
-			match, err := r.match(arena, patList[i], objList[i], numLocals)
+			match, err := rt.match(patList[i], objList[i], numLocals)
 			if err != nil {
 				return false, err
 			}
@@ -537,29 +515,29 @@ func (r *Runtime) match(arena *Arena, pattern Object, obj Object, numLocals *int
 		}
 		return true, nil
 	case bytecode.PatternKindNamed:
-		name, err := p.name.AsString()
+		name, err := ToString(rt, p.name)
 		if err != nil {
 			return false, err
 		}
-		arena.locals = append(arena.locals, local{name: name, value: obj})
+		rt.locals = append(rt.locals, local{name: name, value: obj})
 		*numLocals = *numLocals + 1
 		return true, nil
 	case bytecode.PatternKindRecord:
-		fieldNames, err := p.items.AsObjectList()
+		fieldNames, err := ToList(rt, p.items)
 		if err != nil {
 			return false, err
 		}
 		for _, fieldName := range fieldNames {
-			name, err := fieldName.AsString()
+			name, err := ToString(rt, fieldName)
 			if err != nil {
 				return false, err
 			}
-			field, ok, err := obj.FindField(name)
+			field, ok, err := FindRecordField(rt, obj, name)
 			if err != nil {
 				return false, err
 			}
 			if ok {
-				arena.locals = append(arena.locals, local{name: name, value: field})
+				rt.locals = append(rt.locals, local{name: name, value: field})
 				*numLocals = *numLocals + 1
 			} else {
 				return false, nil
@@ -567,11 +545,11 @@ func (r *Runtime) match(arena *Arena, pattern Object, obj Object, numLocals *int
 		}
 		return true, nil
 	case bytecode.PatternKindTuple:
-		objTuple, err := obj.AsObjectTuple()
+		objTuple, err := ToTuple(rt, obj)
 		if err != nil {
 			return false, err
 		}
-		patTuple, err := p.items.AsObjectList()
+		patTuple, err := ToList(rt, p.items)
 		if err != nil {
 			return false, err
 		}
@@ -579,7 +557,7 @@ func (r *Runtime) match(arena *Arena, pattern Object, obj Object, numLocals *int
 			return false, fmt.Errorf("tuple pattern should have exactly %d nested patterns", len(objTuple))
 		}
 		for i := 0; i < len(objTuple); i++ {
-			match, err := r.match(arena, patTuple[i], objTuple[i], numLocals)
+			match, err := rt.match(patTuple[i], objTuple[i], numLocals)
 			if err != nil {
 				return false, err
 			}
@@ -594,6 +572,23 @@ func (r *Runtime) match(arena *Arena, pattern Object, obj Object, numLocals *int
 		}
 	}
 	return false, nil
+}
+
+func (rt *Runtime) Stack() []string {
+	stack := make([]string, len(rt.callStack))
+	for i, id := range rt.callStack {
+		stack[len(stack)-i-1] = rt.program.Strings[id]
+	}
+	return stack
+}
+
+type ModuleName string
+
+type DefName string
+
+type local struct {
+	name  TString
+	value Object
 }
 
 func pop[T any](stack *[]T) (x T, err error) {

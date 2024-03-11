@@ -1,5 +1,5 @@
 package common
 
 const (
-	CompilerVersion uint32 = 100
+	CompilerVersion = 100
 )

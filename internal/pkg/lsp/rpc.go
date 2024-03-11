@@ -47,7 +47,7 @@ func (s *server) Initialize(params *protocol.InitializeParams) (protocol.Initial
 					TokenModifiers: ast.SemanticTokenModifiersLegend,
 				},
 				Range: &protocol.Or_SemanticTokensOptions_range{
-					Value: true,
+					Value: false,
 				},
 				Full: &protocol.Or_SemanticTokensOptions_full{
 					Value: protocol.PFullESemanticTokensOptions{
@@ -66,7 +66,7 @@ func (s *server) Initialize(params *protocol.InitializeParams) (protocol.Initial
 		},
 		ServerInfo: &protocol.PServerInfoMsg_initialize{
 			Name:    "Nar Language Server",
-			Version: Version,
+			Version: fmt.Sprintf("%d.%02d", Version/100, Version%100),
 		},
 	}, nil
 }
@@ -366,17 +366,9 @@ func (s *server) TextDocument_documentSymbol(
 	return
 }
 
-func (s *server) TextDocument_semanticTokens_range(
-	params *protocol.SemanticTokensParams,
-) (*protocol.SemanticTokensRangeParams, error) {
-	s.reportError("Semantic tokens requested range")
-	return nil, nil
-}
-
 func (s *server) TextDocument_semanticTokens_full(
 	params *protocol.SemanticTokensParams,
 ) (*protocol.SemanticTokens, error) {
-	s.reportError("Semantic tokens requested full")
 	return nil, nil
 }
 

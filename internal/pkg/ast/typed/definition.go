@@ -63,11 +63,6 @@ func (def *Definition) uniqueType(ctx *SolvingContext, stack []*Definition) (Typ
 }
 
 func (def *Definition) solveTypes(stack []*Definition) error {
-	verbose := false
-	if verbose {
-		println(def.name)
-	}
-
 	stack = append(stack, def)
 	eqs, err := def.appendEquations(nil, nil, localTypesMap{}, def.ctx, stack)
 	if err != nil {
@@ -75,13 +70,7 @@ func (def *Definition) solveTypes(stack []*Definition) error {
 	}
 	eqs = appendUsefulEquations(nil, eqs)
 
-	if verbose {
-		for i, a := range def.ctx.annotations {
-			println(fmt.Sprintf("%d: %s", i, a.Code("")))
-		}
-	}
-
-	eqs, err = def.ctx.insertAll(eqs, verbose)
+	eqs, err = def.ctx.insertAll(eqs)
 	if err != nil {
 		return err
 	}
@@ -91,10 +80,6 @@ func (def *Definition) solveTypes(stack []*Definition) error {
 	err = def.mapTypes(subst)
 	if err != nil {
 		return err
-	}
-
-	if verbose {
-		println(def.name, ": ", def.type_.Code(""))
 	}
 
 	stack = stack[:len(stack)-1]

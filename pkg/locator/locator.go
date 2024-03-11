@@ -2,6 +2,7 @@ package locator
 
 import (
 	"fmt"
+	"nar-compiler/pkg/bytecode"
 	"slices"
 )
 
@@ -12,11 +13,27 @@ func NewLocator(provider ...Provider) Locator {
 type Locator interface {
 	Packages() ([]Package, error)
 	FindPackage(name string) (Package, bool, error)
+	EntryPoint() (bytecode.FullIdentifier, error)
 }
 
 type locator struct {
 	providers []Provider
 	packages  map[string]Package
+}
+
+func (l *locator) EntryPoint() (bytecode.FullIdentifier, error) {
+	for _, provider := range l.providers {
+		packages, err := provider.ExportedPackages()
+		if err != nil {
+			return "", err
+		}
+		for _, pkg := range packages {
+			if pkg.Info().Main != "" {
+				return bytecode.FullIdentifier(pkg.Info().Main), nil
+			}
+		}
+	}
+	return "", nil
 }
 
 func (l *locator) Packages() ([]Package, error) {
@@ -49,6 +66,8 @@ func (l *locator) load() error {
 			}
 		}
 		l.packages[pkg.Info().Name] = pkg
+		resolvedInfo := pkg.Info()
+		resolvedInfo.Dependencies = map[string]int{}
 		for depName, depVersion := range pkg.Info().Dependencies {
 			depPkg, ok, err := l.findDep(depName, depVersion)
 			if err != nil {
@@ -63,7 +82,9 @@ func (l *locator) load() error {
 					"package `%s` with version %d not found (dependency of %s)",
 					depName, depVersion, pkg.Info().Name)
 			}
+			resolvedInfo.Dependencies[depPkg.Info().Name] = depPkg.Info().Version
 		}
+		pkg.SetInfo(resolvedInfo)
 		return nil
 	}
 

@@ -62,7 +62,7 @@ func (p *PRecord) Children() []Statement {
 
 func (p *PRecord) appendBytecode(ops []bytecode.Op, locations []bytecode.Location, binary *bytecode.Binary, hash *bytecode.BinaryHash) ([]bytecode.Op, []bytecode.Location) {
 	for _, f := range p.fields {
-		ops, locations = ast.CString{Value: string(f.name)}.AppendBytecode(bytecode.StackKindPattern, f.location, ops, locations, binary, nil)
+		ops, locations = ast.CString{Value: string(f.name)}.AppendBytecode(bytecode.StackKindPattern, f.location, ops, locations, binary, hash)
 	}
 	return bytecode.AppendMakePatternLong(bytecode.PatternKindRecord, uint32(len(p.fields)), p.location.Bytecode(), ops, locations, binary)
 }
