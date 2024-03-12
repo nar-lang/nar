@@ -13,6 +13,7 @@ import (
 	"nar-compiler/pkg/runtime"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func main() {
@@ -39,7 +40,9 @@ func main() {
 	}
 
 	if *binar != "" {
-		doRunBinar(*binar)
+		if err := doRunBinar(*binar); err != nil {
+			fmt.Println(err)
+		}
 		return
 	}
 
@@ -56,18 +59,16 @@ func main() {
 	}
 }
 
-func doRunBinar(path string) {
+func doRunBinar(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return err
 	}
 	binary, err := bytecode.Read(bytes.NewReader(data))
 	if err != nil {
-		fmt.Println(err)
-		return
+		return err
 	}
-	doRun(binary, filepath.Dir(path))
+	return doRun(binary, filepath.Dir(path))
 }
 
 func doCompile(release bool, cacheDir string, link linker.Linker, packages []string) *bytecode.Binary {
@@ -107,29 +108,23 @@ func doShowVersion() {
 		vts(bytecode.Version()))
 }
 
-func doRun(bin *bytecode.Binary, libsPath string) {
+func doRun(bin *bytecode.Binary, libsPath string) (err error) {
 	rt := runtime.NewRuntime(bin)
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println(r)
-			for _, st := range rt.Stack() {
-				fmt.Println(st)
-			}
+			err = fmt.Errorf("%v\n%s", r, strings.Join(rt.Stack(), "\n"))
 		}
 	}()
 	for name, version := range bin.Packages {
-		err := runtime.RegisterNativeLibrary(rt, string(name), int(version), libsPath)
+		err = runtime.RegisterNativeLibrary(rt, string(name), int(version), libsPath)
 		if err != nil {
-			fmt.Println(err)
 			return
 		}
 	}
 	if bin.Entry == "" {
-		fmt.Println("entry point not found")
+		err = fmt.Errorf("entry point not found")
 		return
 	}
-	_, err := rt.Apply(bin.Entry)
-	if err != nil {
-		panic(err)
-	}
+	_, err = rt.Apply(bin.Entry)
+	return
 }

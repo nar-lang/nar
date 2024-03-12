@@ -232,9 +232,10 @@ func ToFunc(rt *Runtime, o Object) (unsafe.Pointer, uint8, error) {
 	return fn.ptr, fn.arity, nil
 }
 
-func ToNative(rt *Runtime, o Object) (unsafe.Pointer, error) {
+func ToNative(rt *Runtime, o Object) (unsafe.Pointer, unsafe.Pointer, error) {
 	if o.Kind() != InstanceKindNative {
-		return nil, fmt.Errorf("expected %s, got %s", kindToString(InstanceKindNative), kindToString(o.Kind()))
+		return nil, nil, fmt.Errorf("expected %s, got %s", kindToString(InstanceKindNative), kindToString(o.Kind()))
 	}
-	return getObjectValue[unsafe.Pointer](rt, o)
+	n, err := getObjectValue[native](rt, o)
+	return n.ptr, n.cmp, err
 }

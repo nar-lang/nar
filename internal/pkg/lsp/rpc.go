@@ -527,10 +527,6 @@ func (s *server) TextDocument_completion(
 		completions...)
 	list = append(list, keywordCompletions...)
 
-	println(strings.Join(common.Map(func(x ast.Identifier) string {
-		return string(x)
-	}, common.Keys(localItems)), ", "))
-
 	return &protocol.CompletionList{IsIncomplete: false, Items: list}, nil
 }
 

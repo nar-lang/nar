@@ -140,8 +140,9 @@ func (rt *Runtime) newClosure(f bytecode.Func, curried ...Object) Object {
 		closure{fn: f, curried: rt.NewList(curried...)})
 }
 
-func (rt *Runtime) NewNative(ptr unsafe.Pointer) Object {
-	return rt.arenas[InstanceKindNative].(*typedArenaImpl[unsafe.Pointer]).add(ptr)
+func (rt *Runtime) NewNative(ptr unsafe.Pointer, cmp unsafe.Pointer) Object {
+	return rt.arenas[InstanceKindNative].(*typedArenaImpl[native]).add(
+		native{ptr: ptr, cmp: cmp})
 }
 
 func (rt *Runtime) Clean(keepCapacity bool) {

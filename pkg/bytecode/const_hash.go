@@ -46,7 +46,7 @@ func (c PackedFloat) Int() int64 {
 }
 
 func (c PackedFloat) Float() float64 {
-	return math.Float64frombits(uint64(c.Value))
+	return c.Value
 }
 
 func (c PackedFloat) Pack() uint64 {

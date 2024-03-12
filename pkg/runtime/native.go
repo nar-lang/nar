@@ -49,7 +49,7 @@ type runtimeId uint32
 
 var runtimeIds = map[*Runtime]runtimeId{}
 var runtimes []*Runtime
-var funcWrappers = map[C.nar_func_ptr_t]unsafe.Pointer{}
+var funcWrappers = map[C.nar_ptr_t]unsafe.Pointer{}
 
 func getRuntimeId(rt *Runtime) C.nar_runtime_t {
 	id, ok := runtimeIds[rt]
@@ -88,14 +88,6 @@ func RegisterNativeLibrary(runtime *Runtime, packageName string, packageVersion 
 		return fmt.Errorf("failed to init package %s with code %d", packageName, int(result))
 	}
 	return nil
-}
-
-func objToGo(obj C.nar_object_t) Object {
-	return Object(obj)
-}
-
-func objToC(obj Object) C.nar_object_t {
-	return C.nar_object_t(obj)
 }
 
 var decoder = func() *encoding.Decoder {
@@ -145,12 +137,12 @@ var encoder = func() *encoding.Encoder {
 //export register_def
 func register_def(runtime C.nar_runtime_t, module_name C.nar_string_t, def_name C.nar_string_t, def C.nar_object_t) {
 	rt := getRuntime(runtime)
-	rt.RegisterDef(bytecode.QualifiedIdentifier(stringToGo(module_name)), ast.Identifier(stringToGo(def_name)), objToGo(def))
+	rt.RegisterDef(bytecode.QualifiedIdentifier(stringToGo(module_name)), ast.Identifier(stringToGo(def_name)), Object(def))
 }
 
 //export nar_object_kind
 func nar_object_kind(_ C.nar_runtime_t, obj C.nar_object_t) C.nar_object_kind_t {
-	return C.nar_object_kind_t(objToGo(obj).Kind())
+	return C.nar_object_kind_t(Object(obj).Kind())
 }
 
 //export nar_fail
@@ -164,43 +156,43 @@ func nar_apply(runtime C.nar_runtime_t, fn C.nar_object_t, num_args C.nar_size_t
 	args_ := make([]Object, 0, num_args)
 	argsSlice := (*[1 << 30]C.nar_object_t)(unsafe.Pointer(args))
 	for i := C.nar_size_t(0); i < num_args; i++ {
-		args_ = append(args_, objToGo(argsSlice[i]))
+		args_ = append(args_, Object(argsSlice[i]))
 	}
-	res, err := rt.ApplyFunc(objToGo(fn), args_...)
+	res, err := rt.ApplyFunc(Object(fn), args_...)
 	if err != nil {
 		panic(err)
 	}
-	return objToC(res)
+	return C.nar_object_t(res)
 }
 
 //export nar_unit
 func nar_unit(runtime C.nar_runtime_t) C.nar_object_t {
 	rt := getRuntime(runtime)
-	return objToC(rt.NewUnit())
+	return C.nar_object_t(rt.NewUnit())
 }
 
 //export nar_char
 func nar_char(runtime C.nar_runtime_t, value C.nar_char_t) C.nar_object_t {
 	rt := getRuntime(runtime)
-	return objToC(rt.NewChar(TChar(value)))
+	return C.nar_object_t(rt.NewChar(TChar(value)))
 }
 
 //export nar_int
 func nar_int(runtime C.nar_runtime_t, value C.nar_int_t) C.nar_object_t {
 	rt := getRuntime(runtime)
-	return objToC(rt.NewInt(TInt(value)))
+	return C.nar_object_t(rt.NewInt(TInt(value)))
 }
 
 //export nar_float
 func nar_float(runtime C.nar_runtime_t, value C.nar_float_t) C.nar_object_t {
 	rt := getRuntime(runtime)
-	return objToC(rt.NewFloat(TFloat(value)))
+	return C.nar_object_t(rt.NewFloat(TFloat(value)))
 }
 
 //export nar_string
 func nar_string(runtime C.nar_runtime_t, value C.nar_string_t) C.nar_object_t {
 	rt := getRuntime(runtime)
-	return objToC(rt.NewString(stringToGo(value)))
+	return C.nar_object_t(rt.NewString(stringToGo(value)))
 }
 
 //export nar_record
@@ -212,27 +204,30 @@ func nar_record(runtime C.nar_runtime_t, size C.nar_size_t, keys *C.nar_string_t
 	valuesSlice := (*[1 << 30]C.nar_object_t)(unsafe.Pointer(values))
 	for i := C.nar_size_t(0); i < size; i++ {
 		fields_ = append(fields_, stringToGo(keysSlice[i]))
-		keys_ = append(keys_, objToGo(valuesSlice[i]))
+		keys_ = append(keys_, Object(valuesSlice[i]))
 	}
 
-	return objToC(rt.NewRecord(fields_, keys_))
+	return C.nar_object_t(rt.NewRecord(fields_, keys_))
 }
 
 //export nar_list
 func nar_list(runtime C.nar_runtime_t, size C.nar_size_t, items *C.nar_object_t) C.nar_object_t {
 	rt := getRuntime(runtime)
+	if size <= 0 {
+		return C.nar_object_t(rt.NewList())
+	}
 	items_ := make([]Object, 0, size)
 	itemsSlice := (*[1 << 30]C.nar_object_t)(unsafe.Pointer(items))
 	for i := C.nar_size_t(0); i < size; i++ {
-		items_ = append(items_, objToGo(itemsSlice[i]))
+		items_ = append(items_, Object(itemsSlice[i]))
 	}
-	return objToC(rt.NewList(items_...))
+	return C.nar_object_t(rt.NewList(items_...))
 }
 
 //export nar_list_cons
 func nar_list_cons(runtime C.nar_runtime_t, head C.nar_object_t, tail C.nar_object_t) C.nar_object_t {
 	rt := getRuntime(runtime)
-	return objToC(rt.newListItem(objToGo(head), objToGo(tail)))
+	return C.nar_object_t(rt.newListItem(Object(head), Object(tail)))
 }
 
 //export nar_tuple
@@ -241,15 +236,15 @@ func nar_tuple(runtime C.nar_runtime_t, size C.nar_size_t, items *C.nar_object_t
 	items_ := make([]Object, 0, size)
 	itemsSlice := (*[1 << 30]C.nar_object_t)(unsafe.Pointer(items))
 	for i := C.nar_size_t(0); i < size; i++ {
-		items_ = append(items_, objToGo(itemsSlice[i]))
+		items_ = append(items_, Object(itemsSlice[i]))
 	}
-	return objToC(rt.NewTuple(items_...))
+	return C.nar_object_t(rt.NewTuple(items_...))
 }
 
 //export nar_bool
 func nar_bool(runtime C.nar_runtime_t, value C.nar_bool_t) C.nar_object_t {
 	rt := getRuntime(runtime)
-	return objToC(rt.NewBool(value != 0))
+	return C.nar_object_t(rt.NewBool(value != 0))
 }
 
 //export nar_option
@@ -258,14 +253,14 @@ func nar_option(runtime C.nar_runtime_t, name C.nar_string_t, size C.nar_size_t,
 	items_ := make([]Object, 0, size)
 	itemsSlice := (*[1 << 30]C.nar_object_t)(unsafe.Pointer(items))
 	for i := C.nar_size_t(0); i < size; i++ {
-		items_ = append(items_, objToGo(itemsSlice[i]))
+		items_ = append(items_, Object(itemsSlice[i]))
 	}
 	optName := stringToGo(name)
-	return objToC(rt.NewOption(optName, items_...))
+	return C.nar_object_t(rt.NewOption(optName, items_...))
 }
 
 //export nar_func
-func nar_func(runtime C.nar_runtime_t, fn C.nar_func_ptr_t, arity C.nar_size_t) C.nar_object_t {
+func nar_func(runtime C.nar_runtime_t, fn C.nar_ptr_t, arity C.nar_size_t) C.nar_object_t {
 	rt := getRuntime(runtime)
 	wrapper, ok := funcWrappers[fn]
 	if !ok {
@@ -273,82 +268,82 @@ func nar_func(runtime C.nar_runtime_t, fn C.nar_func_ptr_t, arity C.nar_size_t) 
 		case 0:
 			{
 				wfn := func() Object {
-					return objToGo(C.call_func0(C.func0(fn)))
+					return Object(C.call_func0(C.func0(fn)))
 				}
 				wrapper = unsafe.Pointer(&wfn)
 			}
 		case 1:
 			{
 				wfn := func(a Object) Object {
-					return objToGo(C.call_func1(C.func1(fn), objToC(a)))
+					return Object(C.call_func1(C.func1(fn), C.nar_object_t(a)))
 				}
 				wrapper = unsafe.Pointer(&wfn)
 			}
 		case 2:
 			{
 				wfn := func(a Object, b Object) Object {
-					return objToGo(C.call_func2(C.func2(fn), objToC(a), objToC(b)))
+					return Object(C.call_func2(C.func2(fn), C.nar_object_t(a), C.nar_object_t(b)))
 				}
 				wrapper = unsafe.Pointer(&wfn)
 			}
 		case 3:
 			{
 				wfn := func(a Object, b Object, c Object) Object {
-					return objToGo(C.call_func3(C.func3(fn), objToC(a), objToC(b), objToC(c)))
+					return Object(C.call_func3(C.func3(fn), C.nar_object_t(a), C.nar_object_t(b), C.nar_object_t(c)))
 				}
 				wrapper = unsafe.Pointer(&wfn)
 			}
 		case 4:
 			{
 				wfn := func(a Object, b Object, c Object, d Object) Object {
-					return objToGo(C.call_func4(C.func4(fn), objToC(a), objToC(b), objToC(c), objToC(d)))
+					return Object(C.call_func4(C.func4(fn), C.nar_object_t(a), C.nar_object_t(b), C.nar_object_t(c), C.nar_object_t(d)))
 				}
 				wrapper = unsafe.Pointer(&wfn)
 			}
 		case 5:
 			{
 				wfn := func(a Object, b Object, c Object, d Object, e Object) Object {
-					return objToGo(C.call_func5(C.func5(fn), objToC(a), objToC(b), objToC(c), objToC(d), objToC(e)))
+					return Object(C.call_func5(C.func5(fn), C.nar_object_t(a), C.nar_object_t(b), C.nar_object_t(c), C.nar_object_t(d), C.nar_object_t(e)))
 				}
 				wrapper = unsafe.Pointer(&wfn)
 			}
 		case 6:
 			{
 				wfn := func(a Object, b Object, c Object, d Object, e Object, f Object) Object {
-					return objToGo(C.call_func6(C.func6(fn), objToC(a), objToC(b), objToC(c), objToC(d), objToC(e), objToC(f)))
+					return Object(C.call_func6(C.func6(fn), C.nar_object_t(a), C.nar_object_t(b), C.nar_object_t(c), C.nar_object_t(d), C.nar_object_t(e), C.nar_object_t(f)))
 				}
 				wrapper = unsafe.Pointer(&wfn)
 			}
 		case 7:
 			{
 				wfn := func(a Object, b Object, c Object, d Object, e Object, f Object, g Object) Object {
-					return objToGo(C.call_func7(C.func7(fn), objToC(a), objToC(b), objToC(c), objToC(d), objToC(e), objToC(f), objToC(g)))
+					return Object(C.call_func7(C.func7(fn), C.nar_object_t(a), C.nar_object_t(b), C.nar_object_t(c), C.nar_object_t(d), C.nar_object_t(e), C.nar_object_t(f), C.nar_object_t(g)))
 				}
 				wrapper = unsafe.Pointer(&wfn)
 			}
 		case 8:
 			{
 				wfn := func(a Object, b Object, c Object, d Object, e Object, f Object, g Object, h Object) Object {
-					return objToGo(C.call_func8(C.func8(fn), objToC(a), objToC(b), objToC(c), objToC(d), objToC(e), objToC(f), objToC(g), objToC(h)))
+					return Object(C.call_func8(C.func8(fn), C.nar_object_t(a), C.nar_object_t(b), C.nar_object_t(c), C.nar_object_t(d), C.nar_object_t(e), C.nar_object_t(f), C.nar_object_t(g), C.nar_object_t(h)))
 				}
 				wrapper = unsafe.Pointer(&wfn)
 			}
 		}
 		funcWrappers[fn] = wrapper
 	}
-	return objToC(rt.newFunc(wrapper, uint8(arity)))
+	return C.nar_object_t(rt.newFunc(wrapper, uint8(arity)))
 }
 
 //export nar_native
-func nar_native(runtime C.nar_runtime_t, ptr C.nar_native_t) C.nar_object_t {
+func nar_native(runtime C.nar_runtime_t, ptr C.nar_ptr_t, cmp C.nar_cmp_native_fn_t) C.nar_object_t {
 	rt := getRuntime(runtime)
-	return objToC(rt.NewNative(unsafe.Pointer(ptr)))
+	return C.nar_object_t(rt.NewNative(unsafe.Pointer(ptr), unsafe.Pointer(cmp)))
 }
 
 //export nar_to_unit
 func nar_to_unit(runtime C.nar_runtime_t, obj C.nar_object_t) {
 	rt := getRuntime(runtime)
-	_, err := ToUnit(rt, objToGo(obj))
+	_, err := ToUnit(rt, Object(obj))
 	if err != nil {
 		panic(err)
 	}
@@ -357,7 +352,7 @@ func nar_to_unit(runtime C.nar_runtime_t, obj C.nar_object_t) {
 //export nar_to_char
 func nar_to_char(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_char_t {
 	rt := getRuntime(runtime)
-	v, err := ToChar(rt, objToGo(obj))
+	v, err := ToChar(rt, Object(obj))
 	if err != nil {
 		panic(err)
 	}
@@ -367,7 +362,7 @@ func nar_to_char(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_char_t {
 //export nar_to_int
 func nar_to_int(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_int_t {
 	rt := getRuntime(runtime)
-	v, err := ToInt(rt, objToGo(obj))
+	v, err := ToInt(rt, Object(obj))
 	if err != nil {
 		panic(err)
 	}
@@ -377,7 +372,7 @@ func nar_to_int(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_int_t {
 //export nar_to_float
 func nar_to_float(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_float_t {
 	rt := getRuntime(runtime)
-	v, err := ToFloat(rt, objToGo(obj))
+	v, err := ToFloat(rt, Object(obj))
 	if err != nil {
 		panic(err)
 	}
@@ -387,7 +382,7 @@ func nar_to_float(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_float_t {
 //export nar_to_string
 func nar_to_string(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_string_t {
 	rt := getRuntime(runtime)
-	v, err := ToString(rt, objToGo(obj))
+	v, err := ToString(rt, Object(obj))
 	if err != nil {
 		panic(err)
 	}
@@ -397,7 +392,7 @@ func nar_to_string(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_string_t {
 //export nar_to_record
 func nar_to_record(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_record_t {
 	rt := getRuntime(runtime)
-	fields, err := ToRecordFields(rt, objToGo(obj))
+	fields, err := ToRecordFields(rt, Object(obj))
 	if err != nil {
 		panic(err)
 	}
@@ -410,7 +405,7 @@ func nar_to_record(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_record_t {
 	valuesSlice := (*[1 << 30]C.nar_object_t)(unsafe.Pointer(rec.values))
 	for i, f := range fields {
 		keysSlice[i] = stringToC(f.k)
-		valuesSlice[i] = objToC(f.v)
+		valuesSlice[i] = C.nar_object_t(f.v)
 	}
 	return rec
 }
@@ -418,7 +413,7 @@ func nar_to_record(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_record_t {
 //export nar_to_list
 func nar_to_list(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_list_t {
 	rt := getRuntime(runtime)
-	objects, err := ToList(rt, objToGo(obj))
+	objects, err := ToList(rt, Object(obj))
 	if err != nil {
 		panic(err)
 	}
@@ -428,7 +423,7 @@ func nar_to_list(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_list_t {
 	}
 	itemsSlice := (*[1 << 30]C.nar_object_t)(unsafe.Pointer(list.items))
 	for i, item := range objects {
-		itemsSlice[i] = objToC(item)
+		itemsSlice[i] = C.nar_object_t(item)
 	}
 	return list
 }
@@ -436,7 +431,7 @@ func nar_to_list(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_list_t {
 //export nar_to_tuple
 func nar_to_tuple(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_tuple_t {
 	rt := getRuntime(runtime)
-	objects, err := ToTuple(rt, objToGo(obj))
+	objects, err := ToTuple(rt, Object(obj))
 	if err != nil {
 		panic(err)
 	}
@@ -446,7 +441,7 @@ func nar_to_tuple(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_tuple_t {
 	}
 	itemsSlice := (*[1 << 30]C.nar_object_t)(unsafe.Pointer(tuple.items))
 	for i, item := range objects {
-		itemsSlice[i] = objToC(item)
+		itemsSlice[i] = C.nar_object_t(item)
 	}
 	return tuple
 }
@@ -454,7 +449,7 @@ func nar_to_tuple(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_tuple_t {
 //export nar_to_bool
 func nar_to_bool(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_bool_t {
 	rt := getRuntime(runtime)
-	v, err := ToBool(rt, objToGo(obj))
+	v, err := ToBool(rt, Object(obj))
 	if err != nil {
 		panic(err)
 	}
@@ -467,7 +462,7 @@ func nar_to_bool(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_bool_t {
 //export nar_to_option
 func nar_to_option(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_option_t {
 	rt := getRuntime(runtime)
-	n, optValues, err := ToOption(rt, objToGo(obj))
+	n, optValues, err := ToOption(rt, Object(obj))
 	if err != nil {
 		panic(err)
 	}
@@ -482,7 +477,7 @@ func nar_to_option(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_option_t {
 	}
 	valuesSlice := (*[1 << 30]C.nar_object_t)(unsafe.Pointer(opt.values))
 	for i, item := range optValues {
-		valuesSlice[i] = objToC(item)
+		valuesSlice[i] = C.nar_object_t(item)
 	}
 	return opt
 }
@@ -490,21 +485,24 @@ func nar_to_option(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_option_t {
 //export nar_to_func
 func nar_to_func(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_func_t {
 	rt := getRuntime(runtime)
-	f, a, err := ToFunc(rt, objToGo(obj))
+	f, a, err := ToFunc(rt, Object(obj))
 	if err != nil {
 		panic(err)
 	}
-	return C.nar_func_t{ptr: C.nar_func_ptr_t(f), arity: C.nar_size_t(a)}
+	return C.nar_func_t{ptr: C.nar_ptr_t(f), arity: C.nar_size_t(a)}
 }
 
 //export nar_to_native
 func nar_to_native(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_native_t {
 	rt := getRuntime(runtime)
-	native, err := ToNative(rt, objToGo(obj))
+	ptr, size, err := ToNative(rt, Object(obj))
 	if err != nil {
 		panic(err)
 	}
-	return C.nar_native_t(native)
+	return C.nar_native_t{
+		ptr: C.nar_ptr_t(ptr),
+		cmp: C.nar_cmp_native_fn_t(size),
+	}
 }
 
 //export nar_alloc

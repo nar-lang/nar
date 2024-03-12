@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"fmt"
-	"unsafe"
 )
 
 type typedArena interface {
@@ -67,7 +66,7 @@ func newTypedArenaWithKind(kind InstanceKind, initialCapacity int) typedArena {
 	case InstanceKindClosure:
 		return newTypedArena[closure](kind, initialCapacity)
 	case InstanceKindNative:
-		return newTypedArena[unsafe.Pointer](kind, initialCapacity)
+		return newTypedArena[native](kind, initialCapacity)
 	case instanceKindPattern:
 		return newTypedArena[pattern](kind, initialCapacity)
 	default:

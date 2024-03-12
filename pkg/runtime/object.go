@@ -113,6 +113,7 @@ type TChar rune
 type TInt int64
 type TFloat float64
 type TString string
+type TSize uint64
 
 type recordField struct {
 	key    Object
@@ -143,6 +144,11 @@ type function struct {
 type closure struct {
 	fn      bytecode.Func
 	curried Object
+}
+
+type native struct {
+	ptr unsafe.Pointer
+	cmp unsafe.Pointer
 }
 
 type pattern struct {
