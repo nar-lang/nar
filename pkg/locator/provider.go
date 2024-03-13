@@ -13,6 +13,10 @@ type Provider interface {
 	LoadPackage(name string) (Package, bool, error)
 }
 
+func NewFileSystemPackageProvider(path string) Provider {
+	return &fileSystemProvider{path: path}
+}
+
 type fileSystemProvider struct {
 	path    string
 	pkgInfo *PackageInfo
@@ -26,7 +30,7 @@ func (f *fileSystemProvider) ExportedPackages() ([]Package, error) {
 	if err := f.loadSources(); err != nil {
 		return nil, err
 	}
-	return []Package{NewLoadedPackage(*f.pkgInfo, f.pkgSrcs, filepath.Join(f.path, "native"))}, nil
+	return []Package{NewLoadedPackage(*f.pkgInfo, f.pkgSrcs, f.path)}, nil
 }
 
 func (f *fileSystemProvider) LoadPackage(name string) (Package, bool, error) {
@@ -37,7 +41,7 @@ func (f *fileSystemProvider) LoadPackage(name string) (Package, bool, error) {
 		if err := f.loadSources(); err != nil {
 			return nil, false, err
 		}
-		return NewLoadedPackage(*f.pkgInfo, f.pkgSrcs, filepath.Join(f.path, "native")), true, nil
+		return NewLoadedPackage(*f.pkgInfo, f.pkgSrcs, f.path), true, nil
 	}
 	if strings.HasPrefix(name, ".") {
 		provider := NewFileSystemPackageProvider(filepath.Join(f.path, name))
@@ -96,10 +100,6 @@ func (f *fileSystemProvider) loadSources() error {
 		})
 	}
 	return nil
-}
-
-func NewFileSystemPackageProvider(path string) Provider {
-	return &fileSystemProvider{path: path}
 }
 
 func NewMemoryPackageProvider(info PackageInfo, sources map[string][]rune) Provider {

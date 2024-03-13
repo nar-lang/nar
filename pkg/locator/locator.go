@@ -3,7 +3,9 @@ package locator
 import (
 	"fmt"
 	"nar-compiler/pkg/bytecode"
+	"path/filepath"
 	"slices"
+	"strings"
 )
 
 func NewLocator(provider ...Provider) Locator {
@@ -69,18 +71,38 @@ func (l *locator) load() error {
 		resolvedInfo := pkg.Info()
 		resolvedInfo.Dependencies = map[string]int{}
 		for depName, depVersion := range pkg.Info().Dependencies {
-			depPkg, ok, err := l.findDep(depName, depVersion)
-			if err != nil {
-				return err
-			}
-			if ok {
-				if err = addPackage(depPkg); err != nil {
-					return err
+			var depPkg Package
+			if depName == ".." || strings.HasPrefix(depName, "./") || strings.HasPrefix(depName, "../") {
+				path := pkg.Path()
+				if path != "" {
+					exp, err := NewFileSystemPackageProvider(filepath.Join(path, depName)).ExportedPackages()
+					if err != nil {
+						return err
+					}
+					if len(exp) > 0 {
+						depPkg = exp[0]
+					}
 				}
 			} else {
+				var ok bool
+				var err error
+				depPkg, ok, err = l.findDep(depName, depVersion)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					depPkg = nil
+				}
+			}
+
+			if depPkg == nil {
 				return fmt.Errorf(
 					"package `%s` with version %d not found (dependency of %s)",
 					depName, depVersion, pkg.Info().Name)
+			}
+
+			if err := addPackage(depPkg); err != nil {
+				return err
 			}
 			resolvedInfo.Dependencies[depPkg.Info().Name] = depPkg.Info().Version
 		}

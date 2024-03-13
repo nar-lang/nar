@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"runtime/debug"
 	"strings"
+	"sync"
 )
 
 const Version = 100
@@ -27,18 +28,19 @@ type server struct {
 	cancelCtx context.CancelFunc
 
 	rootURI          protocol.DocumentURI
-	workspaceFolders []protocol.WorkspaceFolder
 	initialized      bool
 	responseChan     chan rpcResponse
 	notificationChan chan rpcNotification
 	inChan           chan []byte
 	compileChan      chan docChange
+	locker           sync.Locker
 
 	documentToPackageRoot map[protocol.DocumentURI]string
 	packageRootToName     map[string]ast.PackageIdentifier
 	locator               locator.Locator
 	provides              map[string]*provider
 	cacheProvider         locator.Provider
+	workspaceProviders    []locator.Provider
 	parsedModules         map[ast.QualifiedIdentifier]*parsed.Module
 	normalizedModules     map[ast.QualifiedIdentifier]*normalized.Module
 	typedModules          map[ast.QualifiedIdentifier]*typed.Module
@@ -61,12 +63,14 @@ func NewServer(cacheDir string, writeResponse func([]byte)) LanguageServer {
 	lastId++
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	s := &server{
-		id:                    lastId,
-		cancelCtx:             cancelCtx,
-		inChan:                make(chan []byte, 16),
-		responseChan:          make(chan rpcResponse, 16),
-		notificationChan:      make(chan rpcNotification, 128),
-		compileChan:           make(chan docChange, 1024),
+		id:               lastId,
+		cancelCtx:        cancelCtx,
+		inChan:           make(chan []byte, 16),
+		responseChan:     make(chan rpcResponse, 16),
+		notificationChan: make(chan rpcNotification, 128),
+		compileChan:      make(chan docChange, 1024),
+		locker:           &sync.Mutex{},
+
 		log:                   &logger.LogWriter{},
 		cacheProvider:         locator.NewDirectoryProvider(cacheDir),
 		documentToPackageRoot: map[protocol.DocumentURI]string{},
@@ -75,6 +79,7 @@ func NewServer(cacheDir string, writeResponse func([]byte)) LanguageServer {
 		parsedModules:         map[ast.QualifiedIdentifier]*parsed.Module{},
 		normalizedModules:     map[ast.QualifiedIdentifier]*normalized.Module{},
 		typedModules:          map[ast.QualifiedIdentifier]*typed.Module{},
+		openedDocuments:       map[protocol.DocumentURI]struct{}{},
 	}
 	go s.sender(writeResponse, ctx)
 	go s.receiver(ctx)

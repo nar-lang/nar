@@ -7,7 +7,7 @@ import (
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/internal/pkg/common"
 	"nar-compiler/internal/pkg/lsp/protocol"
-	"nar-compiler/internal/pkg/processors"
+	"nar-compiler/pkg/compiler"
 	"nar-compiler/pkg/logger"
 	"os"
 	"runtime/debug"
@@ -16,14 +16,10 @@ import (
 
 func (s *server) compiler(ctx context.Context) {
 	modifiedDocs := map[protocol.DocumentURI]struct{}{}
-	forcedDocs := map[protocol.DocumentURI]struct{}{}
 	modifiedPackages := map[ast.PackageIdentifier]struct{}{}
 
 	doc := <-s.compileChan
 	modifiedDocs[doc.uri] = struct{}{}
-	if doc.force {
-		forcedDocs[doc.uri] = struct{}{}
-	}
 
 	for {
 		waitTimeout := true
@@ -31,9 +27,6 @@ func (s *server) compiler(ctx context.Context) {
 			select {
 			case doc = <-s.compileChan:
 				modifiedDocs[doc.uri] = struct{}{}
-				if doc.force {
-					forcedDocs[doc.uri] = struct{}{}
-				}
 				continue
 			case <-time.After(500 * time.Millisecond):
 				waitTimeout = false
@@ -47,9 +40,7 @@ func (s *server) compiler(ctx context.Context) {
 			continue
 		}
 
-		for uri := range forcedDocs {
-			delete(forcedDocs, uri)
-		}
+		s.locker.Lock()
 
 		for name, mod := range s.parsedModules {
 			for uri := range modifiedDocs {
@@ -73,7 +64,9 @@ func (s *server) compiler(ctx context.Context) {
 			}
 		}
 
-		s.compile(common.Keys(modifiedPackages))
+		s.locker.Unlock()
+
+		s.compile()
 
 		for name := range modifiedPackages {
 			delete(modifiedPackages, name)
@@ -81,7 +74,7 @@ func (s *server) compiler(ctx context.Context) {
 	}
 }
 
-func (s *server) compile(pkgNames []ast.PackageIdentifier) {
+func (s *server) compile() {
 	defer func() {
 		if r := recover(); r != nil {
 			s.reportError(fmt.Sprintf("internal error:\n%v\n\n%s", r, debug.Stack()))
@@ -89,35 +82,32 @@ func (s *server) compile(pkgNames []ast.PackageIdentifier) {
 		}
 	}()
 	log := &logger.LogWriter{}
-	packages, err := s.locator.Packages()
-	if err != nil {
-		log.Err(err)
-	} else {
-		affectedModuleNames := processors.Compile(log, packages, s.parsedModules, s.normalizedModules, s.typedModules)
 
-		diagnosticData := s.extractDiagnosticsData(log)
-		if len(diagnosticData) == 0 {
-			s.log.Flush(os.Stdout)
-		}
+	_, affectedModuleNames := compiler.CompileEx(
+		log, s.locator, nil, true, s.parsedModules, s.normalizedModules, s.typedModules)
 
-		for _, moduleName := range affectedModuleNames {
-			if mod, ok := s.parsedModules[moduleName]; ok {
-				uri := pathToUri(mod.Location().FilePath())
-				if _, reported := diagnosticData[uri]; !reported {
-					s.notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
-						URI:         uri,
-						Diagnostics: []protocol.Diagnostic{},
-					})
-				}
+	diagnosticData := s.extractDiagnosticsData(log)
+	if len(diagnosticData) == 0 {
+		s.log.Flush(os.Stdout)
+	}
+
+	for _, moduleName := range affectedModuleNames {
+		if mod, ok := s.parsedModules[moduleName]; ok {
+			uri := pathToUri(mod.Location().FilePath())
+			if _, reported := diagnosticData[uri]; !reported {
+				s.notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
+					URI:         uri,
+					Diagnostics: []protocol.Diagnostic{},
+				})
 			}
 		}
+	}
 
-		for uri, dsx := range diagnosticData {
-			s.notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
-				URI:         uri,
-				Diagnostics: dsx,
-			})
-		}
+	for uri, dsx := range diagnosticData {
+		s.notify("textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
+			URI:         uri,
+			Diagnostics: dsx,
+		})
 	}
 }
 

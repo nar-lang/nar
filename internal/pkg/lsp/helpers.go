@@ -45,6 +45,7 @@ func (s *server) statementAtLocation(
 }
 
 func (s *server) setDocumentStatus(uri protocol.DocumentURI, opened bool) {
+	s.locker.Lock()
 	if opened {
 		s.openedDocuments[uri] = struct{}{}
 	} else {
@@ -74,6 +75,7 @@ func (s *server) setDocumentStatus(uri protocol.DocumentURI, opened bool) {
 	for _, p := range s.provides {
 		providers = append(providers, p)
 	}
+	providers = append(providers, s.workspaceProviders...)
 	providers = append(providers, s.cacheProvider)
 	s.locator = locator.NewLocator(providers...)
 
@@ -90,6 +92,7 @@ func (s *server) setDocumentStatus(uri protocol.DocumentURI, opened bool) {
 			}
 		}
 	}
+	s.locker.Unlock()
 }
 
 func (s *server) getProvider(textDocumentUrl protocol.DocumentURI) (*provider, bool) {

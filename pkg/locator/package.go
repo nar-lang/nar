@@ -10,6 +10,7 @@ type Package interface {
 	SetInfo(info PackageInfo)
 	Sources() map[string][]rune
 	NativeFilePaths(platform string) ([]string, error)
+	Path() string
 }
 
 type PackageInfo struct {
@@ -20,18 +21,18 @@ type PackageInfo struct {
 	Main         string         `json:"main"`
 }
 
-func NewLoadedPackage(info PackageInfo, sources map[string][]rune, nativeFilesRoot string) Package {
+func NewLoadedPackage(info PackageInfo, sources map[string][]rune, path string) Package {
 	return &loadedPackage{
-		info:            info,
-		sources:         sources,
-		nativeFilesRoot: nativeFilesRoot,
+		info:    info,
+		sources: sources,
+		path:    path,
 	}
 }
 
 type loadedPackage struct {
-	info            PackageInfo
-	sources         map[string][]rune
-	nativeFilesRoot string
+	info    PackageInfo
+	sources map[string][]rune
+	path    string
 }
 
 func (l *loadedPackage) Info() PackageInfo {
@@ -48,7 +49,7 @@ func (l *loadedPackage) Sources() map[string][]rune {
 
 func (l *loadedPackage) NativeFilePaths(platform string) ([]string, error) {
 	var result []string
-	root := filepath.Join(l.nativeFilesRoot, platform)
+	root := filepath.Join(l.path, "native", platform)
 	if _, err := os.Stat(root); err != nil {
 		return nil, nil
 	}
@@ -66,4 +67,8 @@ func (l *loadedPackage) NativeFilePaths(platform string) ([]string, error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+func (l *loadedPackage) Path() string {
+	return l.path
 }

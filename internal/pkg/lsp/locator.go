@@ -5,7 +5,6 @@ import (
 	"maps"
 	"nar-compiler/internal/pkg/lsp/protocol"
 	"nar-compiler/pkg/locator"
-	"path/filepath"
 )
 
 func newProvider(path string) *provider {
@@ -57,16 +56,15 @@ func (p *provider) load() error {
 
 	maps.Copy(p.merged, pkg[0].Sources())
 	maps.Copy(p.merged, p.overrides)
-	p.pkg = locator.NewLoadedPackage(pkg[0].Info(), p.merged, filepath.Join(p.path, "native"))
+	p.pkg = locator.NewLoadedPackage(pkg[0].Info(), p.merged, p.path)
 	return nil
 }
 
 func (p *provider) OverrideFile(uri protocol.DocumentURI, content []rune) {
 	path := uriToPath(uri)
-	rel, _ := filepath.Rel(filepath.Join(p.path, "src"), path)
 	if content == nil {
-		delete(p.overrides, rel)
+		delete(p.overrides, path)
 	} else {
-		p.overrides[rel] = content
+		p.overrides[path] = content
 	}
 }

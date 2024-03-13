@@ -18,6 +18,16 @@ func Compile(log *logger.LogWriter, lc locator.Locator, link linker.Linker, debu
 	parsedModules := map[ast.QualifiedIdentifier]*parsed.Module{}
 	normalizedModules := map[ast.QualifiedIdentifier]*normalized.Module{}
 	typedModules := map[ast.QualifiedIdentifier]*typed.Module{}
+	bin, _ := CompileEx(log, lc, link, debug, parsedModules, normalizedModules, typedModules)
+	return bin
+}
+
+func CompileEx(
+	log *logger.LogWriter, lc locator.Locator, link linker.Linker, debug bool,
+	parsedModules map[ast.QualifiedIdentifier]*parsed.Module,
+	normalizedModules map[ast.QualifiedIdentifier]*normalized.Module,
+	typedModules map[ast.QualifiedIdentifier]*typed.Module,
+) (*bytecode.Binary, []ast.QualifiedIdentifier) {
 
 	bin := bytecode.NewBinary()
 	hash := bytecode.NewBinaryHash()
@@ -25,7 +35,7 @@ func Compile(log *logger.LogWriter, lc locator.Locator, link linker.Linker, debu
 	packages, err := lc.Packages()
 	if err != nil {
 		log.Err(err)
-		return bin
+		return bin, nil
 	}
 
 	for _, pkg := range packages {
@@ -39,7 +49,7 @@ func Compile(log *logger.LogWriter, lc locator.Locator, link linker.Linker, debu
 		normalizedModules,
 		typedModules)
 
-	if !log.Err() {
+	if len(log.Errors()) == 0 {
 		for _, name := range affectedModuleNames {
 			m, ok := typedModules[name]
 			if !ok {
@@ -62,7 +72,7 @@ func Compile(log *logger.LogWriter, lc locator.Locator, link linker.Linker, debu
 	}
 
 	log.Trace("compilation finished")
-	return bin
+	return bin, affectedModuleNames
 }
 
 func Version() int {

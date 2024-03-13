@@ -9,15 +9,22 @@ import (
 	"nar-compiler/internal/pkg/common"
 	"nar-compiler/internal/pkg/lsp/protocol"
 	"nar-compiler/internal/pkg/processors"
+	"nar-compiler/pkg/locator"
 	"strings"
 	"unicode"
 )
 
 func (s *server) Initialize(params *protocol.InitializeParams) (protocol.InitializeResult, error) {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
 	s.rootURI = params.RootURI
-	s.workspaceFolders = params.WorkspaceFolders
 	if params.Trace != nil {
 		s.trace = *params.Trace
+	}
+	for _, f := range params.WorkspaceFolders {
+		s.workspaceProviders = append(s.workspaceProviders,
+			locator.NewDirectoryProvider(uriToPath(protocol.DocumentURI(f.URI))))
 	}
 
 	return protocol.InitializeResult{
@@ -87,10 +94,10 @@ func (s *server) S_setTraceNotification(params *protocol.SetTraceParams) error {
 }
 
 func (s *server) TextDocument_didOpen(params *protocol.DidOpenTextDocumentParams) error {
+	s.setDocumentStatus(params.TextDocument.URI, true)
 	if pvd, ok := s.getProvider(params.TextDocument.URI); ok {
 		pvd.OverrideFile(params.TextDocument.URI, []rune(params.TextDocument.Text))
 		s.compileChan <- docChange{uri: params.TextDocument.URI, force: true}
-		s.openedDocuments[params.TextDocument.URI] = struct{}{}
 	}
 	return nil
 }
@@ -108,7 +115,7 @@ func (s *server) TextDocument_didClose(params *protocol.DidCloseTextDocumentPara
 	if pvd, ok := s.getProvider(params.TextDocument.URI); ok {
 		pvd.OverrideFile(params.TextDocument.URI, nil)
 	}
-	delete(s.openedDocuments, params.TextDocument.URI)
+	s.setDocumentStatus(params.TextDocument.URI, false)
 	return nil
 }
 
