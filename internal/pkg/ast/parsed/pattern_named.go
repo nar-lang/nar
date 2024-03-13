@@ -5,16 +5,22 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
-func NewPNamed(loc ast.Location, name ast.Identifier) Pattern {
+func NewPNamed(loc ast.Location, name ast.Identifier, nameLocation ast.Location) Pattern {
 	return &PNamed{
-		patternBase: newPatternBase(loc),
-		name:        name,
+		patternBase:  newPatternBase(loc),
+		name:         name,
+		nameLocation: nameLocation,
 	}
 }
 
 type PNamed struct {
 	*patternBase
-	name ast.Identifier
+	name         ast.Identifier
+	nameLocation ast.Location
+}
+
+func (e *PNamed) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{e.nameLocation.ToToken(ast.TokenTypeVariable, ast.TokenModifierDeclaration)}
 }
 
 func (e *PNamed) Iterate(f func(statement Statement)) {

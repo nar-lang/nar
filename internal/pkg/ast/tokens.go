@@ -1,6 +1,6 @@
 package ast
 
-type SemanticTokenType int
+type SemanticTokenType uint32
 
 const (
 	TokenTypeNamespace SemanticTokenType = iota
@@ -54,7 +54,7 @@ var SemanticTokenTypesLegend = []string{
 	"decorator",
 }
 
-type SemanticTokenModifier int
+type SemanticTokenModifier uint32
 
 const (
 	TokenModifierDeclaration    SemanticTokenModifier = 0x01
@@ -80,4 +80,10 @@ var SemanticTokenModifiersLegend = []string{
 	"modification",
 	"documentation",
 	"defaultLibrary",
+}
+
+type SemanticToken struct {
+	Line, Char, Length uint32
+	Type               SemanticTokenType
+	Modifiers          SemanticTokenModifier
 }

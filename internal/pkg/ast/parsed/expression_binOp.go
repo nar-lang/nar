@@ -19,6 +19,16 @@ type BinOp struct {
 	inParentheses bool
 }
 
+func (e *BinOp) SemanticTokens() []ast.SemanticToken {
+	var tokens []ast.SemanticToken
+	for _, i := range e.items {
+		if i.operand != nil {
+			tokens = append(tokens, i.operand.SemanticTokens()...)
+		}
+	}
+	return tokens
+}
+
 func (e *BinOp) Iterate(f func(statement Statement)) {
 	f(e)
 	for _, i := range e.items {

@@ -17,6 +17,10 @@ type List struct {
 	items []Expression
 }
 
+func (e *List) SemanticTokens() []ast.SemanticToken {
+	return nil
+}
+
 func (e *List) Iterate(f func(statement Statement)) {
 	f(e)
 	for _, item := range e.items {

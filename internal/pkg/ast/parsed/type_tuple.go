@@ -16,6 +16,10 @@ type TTuple struct {
 	items []Type
 }
 
+func (t *TTuple) SemanticTokens() []ast.SemanticToken {
+	return nil
+}
+
 func (t *TTuple) Iterate(f func(statement Statement)) {
 	f(t)
 	for _, item := range t.items {

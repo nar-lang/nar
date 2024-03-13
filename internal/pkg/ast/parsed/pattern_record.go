@@ -18,6 +18,10 @@ type PRecord struct {
 	fields []*PRecordField
 }
 
+func (e *PRecord) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{e.location.ToToken(ast.TokenTypeStruct)}
+}
+
 func (e *PRecord) Iterate(f func(statement Statement)) {
 	f(e)
 	e.patternBase.Iterate(f)

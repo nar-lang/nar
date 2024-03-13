@@ -8,18 +8,24 @@ import (
 	"strings"
 )
 
-func NewTNamed(loc ast.Location, name ast.QualifiedIdentifier, args []Type) Type {
+func NewTNamed(loc ast.Location, name ast.QualifiedIdentifier, args []Type, nameLocation ast.Location) Type {
 	return &TNamed{
-		typeBase: newTypeBase(loc),
-		name:     name,
-		args:     args,
+		typeBase:     newTypeBase(loc),
+		name:         name,
+		args:         args,
+		nameLocation: nameLocation,
 	}
 }
 
 type TNamed struct {
 	*typeBase
-	name ast.QualifiedIdentifier
-	args []Type
+	name         ast.QualifiedIdentifier
+	args         []Type
+	nameLocation ast.Location
+}
+
+func (t *TNamed) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{t.nameLocation.ToToken(ast.TokenTypeType)}
 }
 
 func (t *TNamed) Iterate(f func(statement Statement)) {
@@ -77,5 +83,5 @@ func (t *TNamed) applyArgs(params map[ast.Identifier]Type, loc ast.Location) (Ty
 		}
 		args = append(args, nArg)
 	}
-	return NewTNamed(loc, t.name, args), nil
+	return NewTNamed(loc, t.name, args, t.nameLocation), nil
 }

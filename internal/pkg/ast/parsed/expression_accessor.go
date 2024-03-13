@@ -17,6 +17,10 @@ type Accessor struct {
 	fieldName ast.Identifier
 }
 
+func (e *Accessor) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{e.location.ToToken(ast.TokenTypeProperty)}
+}
+
 func (e *Accessor) Iterate(f func(statement Statement)) {
 	f(e)
 }
@@ -28,9 +32,9 @@ func (e *Accessor) normalize(
 	normalizedModule *normalized.Module,
 ) (normalized.Expression, error) {
 	lambda := NewLambda(e.location,
-		[]Pattern{NewPNamed(e.location, "x")},
+		[]Pattern{NewPNamed(e.location, "x", e.location)},
 		nil,
-		NewAccess(e.location, NewVar(e.location, "x"), e.fieldName))
+		NewAccess(e.location, NewVar(e.location, "x"), e.fieldName, e.location))
 	nLambda, err := lambda.normalize(locals, modules, module, normalizedModule)
 	if err != nil {
 		return nil, err

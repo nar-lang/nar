@@ -70,8 +70,6 @@ func CompileEx(
 			}
 		}
 	}
-
-	log.Trace("compilation finished")
 	return bin, affectedModuleNames
 }
 

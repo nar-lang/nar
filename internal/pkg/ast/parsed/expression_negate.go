@@ -18,6 +18,10 @@ type Negate struct {
 	nested Expression
 }
 
+func (e *Negate) SemanticTokens() []ast.SemanticToken {
+	return nil
+}
+
 func (e *Negate) Iterate(f func(statement Statement)) {
 	f(e)
 	if e.nested != nil {

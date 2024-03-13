@@ -19,6 +19,10 @@ type Var struct {
 	name ast.QualifiedIdentifier
 }
 
+func (e *Var) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{e.location.ToToken(ast.TokenTypeVariable)}
+}
+
 func (e *Var) SetSuccessor(s normalized.Expression) {
 	e.successor = s
 }
@@ -48,7 +52,9 @@ func (e *Var) normalize(
 	if len(parts) > 1 {
 		varAccess := NewVar(e.location, ast.QualifiedIdentifier(parts[0]))
 		for i := 1; i < len(parts); i++ {
-			varAccess = NewAccess(e.location, varAccess, ast.Identifier(parts[i]))
+			namelc := ast.NewLocation(e.location.FilePath(), e.location.FileContent(),
+				e.location.Start()+uint32(len(parts[0])+1), e.location.End())
+			varAccess = NewAccess(e.location, varAccess, ast.Identifier(parts[i]), namelc)
 		}
 		access, err := varAccess.normalize(locals, modules, module, normalizedModule)
 		if err != nil {

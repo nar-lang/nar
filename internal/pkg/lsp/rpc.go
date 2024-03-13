@@ -10,6 +10,7 @@ import (
 	"nar-compiler/internal/pkg/lsp/protocol"
 	"nar-compiler/internal/pkg/processors"
 	"nar-compiler/pkg/locator"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -280,8 +281,9 @@ func (s *server) TextDocument_hover(params *protocol.HoverParams) (*protocol.Hov
 func (s *server) TextDocument_documentSymbol(
 	params *protocol.DocumentSymbolParams,
 ) (result []protocol.DocumentSymbol, err error) {
+	path := uriToPath(params.TextDocument.URI)
 	for _, mod := range s.parsedModules {
-		if mod.Location().FilePath() == uriToPath(params.TextDocument.URI) {
+		if mod.Location().FilePath() == path {
 			for _, inf := range mod.InfixFns() {
 				result = append(result, protocol.DocumentSymbol{
 					Name:           string(inf.Name()),
@@ -376,6 +378,55 @@ func (s *server) TextDocument_documentSymbol(
 func (s *server) TextDocument_semanticTokens_full(
 	params *protocol.SemanticTokensParams,
 ) (*protocol.SemanticTokens, error) {
+	if len(s.parsedModules) == 0 {
+		<-s.compiledChan
+	}
+	path := uriToPath(params.TextDocument.URI)
+	for _, mod := range s.parsedModules {
+		if mod.Location().FilePath() == path {
+			var tokens []ast.SemanticToken
+			mod.Iterate(func(stmt parsed.Statement) {
+				tokens = append(tokens, stmt.SemanticTokens()...)
+			})
+			slices.SortFunc(tokens, func(a, b ast.SemanticToken) int {
+				if a.Line < b.Line {
+					return -1
+				}
+				if a.Line > b.Line {
+					return 1
+				}
+				if a.Char < b.Char {
+					return -1
+				}
+				if a.Char > b.Char {
+					return 1
+				}
+				return 0
+			})
+
+			deltas := make([]ast.SemanticToken, 0, len(tokens))
+			deltas = append(deltas, tokens[0])
+			for i := 1; i < len(tokens); i++ {
+				p := tokens[i-1]
+				t := tokens[i]
+				dl := t.Line - p.Line
+				if dl == 0 {
+					t.Line = 0
+					t.Char = t.Char - p.Char
+				} else {
+					t.Line = dl
+				}
+				deltas = append(deltas, t)
+			}
+
+			return &protocol.SemanticTokens{
+				Data: common.Fold(
+					func(t ast.SemanticToken, acc []uint32) []uint32 {
+						return append(acc, t.Line, t.Char, t.Length, uint32(t.Type), uint32(t.Modifiers))
+					}, nil, deltas),
+			}, nil
+		}
+	}
 	return nil, nil
 }
 

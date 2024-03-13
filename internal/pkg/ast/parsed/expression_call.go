@@ -19,6 +19,10 @@ type Call struct {
 	args []Expression
 }
 
+func (e *Call) SemanticTokens() []ast.SemanticToken {
+	return nil
+}
+
 func (e *Call) Iterate(f func(statement Statement)) {
 	f(e)
 	for _, arg := range e.args {

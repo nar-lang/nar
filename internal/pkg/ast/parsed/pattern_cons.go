@@ -19,6 +19,10 @@ type PCons struct {
 	head, tail Pattern
 }
 
+func (e *PCons) SemanticTokens() []ast.SemanticToken {
+	return nil
+}
+
 func (e *PCons) Iterate(f func(statement Statement)) {
 	f(e)
 	if e.head != nil {

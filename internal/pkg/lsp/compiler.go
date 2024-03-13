@@ -71,6 +71,11 @@ func (s *server) compiler(ctx context.Context) {
 		for name := range modifiedPackages {
 			delete(modifiedPackages, name)
 		}
+
+		select {
+		case s.compiledChan <- struct{}{}:
+		default:
+		}
 	}
 }
 

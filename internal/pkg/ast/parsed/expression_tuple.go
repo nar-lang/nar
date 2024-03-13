@@ -17,6 +17,10 @@ type Tuple struct {
 	items []Expression
 }
 
+func (e *Tuple) SemanticTokens() []ast.SemanticToken {
+	return nil
+}
+
 func (e *Tuple) Iterate(f func(statement Statement)) {
 	f(e)
 	for _, item := range e.items {

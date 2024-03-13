@@ -5,18 +5,24 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
-func NewAccess(location ast.Location, record Expression, fieldName ast.Identifier) Expression {
+func NewAccess(location ast.Location, record Expression, fieldName ast.Identifier, fieldNameLocation ast.Location) Expression {
 	return &Access{
-		expressionBase: newExpressionBase(location),
-		record:         record,
-		fieldName:      fieldName,
+		expressionBase:    newExpressionBase(location),
+		record:            record,
+		fieldName:         fieldName,
+		fieldNameLocation: fieldNameLocation,
 	}
 }
 
 type Access struct {
 	*expressionBase
-	record    Expression
-	fieldName ast.Identifier
+	record            Expression
+	fieldName         ast.Identifier
+	fieldNameLocation ast.Location
+}
+
+func (e *Access) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{e.fieldNameLocation.ToToken(ast.TokenTypeProperty)}
 }
 
 func (e *Access) Iterate(f func(statement Statement)) {

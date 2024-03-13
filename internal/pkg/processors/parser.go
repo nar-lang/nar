@@ -690,7 +690,9 @@ func parseType(src *source) (parsed.Type, error) {
 		return parsed.NewTRecord(loc(src, cursor), fields), nil
 	}
 
+	nameStart := src.cursor
 	if name := readIdentifier(src, true); nil != name {
+		nameLocation := loc(src, nameStart)
 		if unicode.IsLower([]rune(*name)[0]) {
 			return parsed.NewTParameter(loc(src, cursor), ast.Identifier(*name)), nil
 		} else {
@@ -716,7 +718,7 @@ func parseType(src *source) (parsed.Type, error) {
 				}
 			}
 
-			return parsed.NewTNamed(loc(src, cursor), *name, typeParams), nil
+			return parsed.NewTNamed(loc(src, cursor), *name, typeParams, nameLocation), nil
 		}
 	}
 	return nil, nil
@@ -806,8 +808,10 @@ func parsePattern(src *source) (parsed.Pattern, error) {
 	}
 
 	//union
+	nameStart := src.cursor
 	name := readIdentifier(src, true)
 	if nil != name && unicode.IsUpper([]rune(*name)[0]) {
+		nameLocation := loc(src, nameStart)
 		var items []parsed.Pattern
 		if readExact(src, SeqParenthesisOpen) {
 			for {
@@ -828,14 +832,16 @@ func parsePattern(src *source) (parsed.Pattern, error) {
 				return nil, newError(*src, "expected `,` or `)` here")
 			}
 		}
-		return finishParsePattern(src, parsed.NewPOption(loc(src, cursor), *name, items))
+		return finishParsePattern(src, parsed.NewPOption(loc(src, cursor), *name, items, nameLocation))
 	} else {
 		src.cursor = cursor
 	}
 
+	nameStart = src.cursor
 	name = readIdentifier(src, false)
 	if nil != name && unicode.IsLower([]rune(*name)[0]) {
-		return finishParsePattern(src, parsed.NewPNamed(loc(src, cursor), ast.Identifier(*name)))
+		nameLocation := loc(src, nameStart)
+		return finishParsePattern(src, parsed.NewPNamed(loc(src, cursor), ast.Identifier(*name), nameLocation))
 	} else {
 		src.cursor = cursor
 	}
@@ -1062,7 +1068,7 @@ func parseExpression(src *source, negate bool) (parsed.Expression, error) {
 			if nil == value {
 				return nil, newError(*src, "expected function body here")
 			}
-			pattern = parsed.NewPNamed(loc(src, defCursor), ast.Identifier(*name))
+			pattern = parsed.NewPNamed(loc(src, defCursor), ast.Identifier(*name), nameLoc)
 			fnType = parsed.NewTFunc(
 				loc(src, typeCursor),
 				common.Map(func(x parsed.Pattern) parsed.Type { return x.Type() }, params),
@@ -1317,11 +1323,13 @@ func finishParseExpression(src *source, expr parsed.Expression, negate bool) (pa
 	}
 
 	if readExact(src, SeqDot) {
+		nameStart := src.cursor
 		name := readIdentifier(src, false)
+		nameLocation := loc(src, nameStart)
 		if nil == name {
 			return nil, newError(*src, "expected field name here")
 		}
-		return finishParseExpression(src, parsed.NewAccess(loc(src, cursor), expr, ast.Identifier(*name)), negate)
+		return finishParseExpression(src, parsed.NewAccess(loc(src, cursor), expr, ast.Identifier(*name), nameLocation), negate)
 	}
 	if negate {
 		expr = parsed.NewNegate(loc(src, expr.Location().Start()), expr)
@@ -1334,7 +1342,9 @@ func parseDataOption(src *source) (parsed.DataTypeOption, error) {
 	hidden := readExact(src, KwHidden)
 	var types []*parsed.DataTypeValue
 
+	nameStart := src.cursor
 	name := readIdentifier(src, false)
+	nameLoc := loc(src, nameStart)
 
 	if nil == name {
 		return nil, newError(*src, "expected option name here")
@@ -1369,7 +1379,7 @@ func parseDataOption(src *source) (parsed.DataTypeOption, error) {
 		}
 	}
 
-	return parsed.NewDataTypeOption(loc(src, cursor), hidden, ast.Identifier(*name), types), nil
+	return parsed.NewDataTypeOption(loc(src, cursor), hidden, ast.Identifier(*name), types, nameLoc), nil
 }
 
 func parseImport(src *source) (parsed.Import, error) {
@@ -1523,10 +1533,12 @@ func parseAlias(src *source) (parsed.Alias, error) {
 	var type_ parsed.Type
 	var name ast.Identifier
 
+	nameStart := src.cursor
 	pName := readIdentifier(src, false)
 	if pName == nil {
 		err = newError(*src, "expected alias name here")
 	}
+	nameLoc := loc(src, nameStart)
 	if err == nil {
 		name = ast.Identifier(*pName)
 	}
@@ -1550,7 +1562,7 @@ func parseAlias(src *source) (parsed.Alias, error) {
 		}
 	}
 
-	return parsed.NewAlias(loc(src, cursor), hidden, name, params, type_), err
+	return parsed.NewAlias(loc(src, cursor), hidden, name, params, type_, nameLoc), err
 }
 
 func parseDataType(src *source) (parsed.DataType, error) {
@@ -1565,7 +1577,9 @@ func parseDataType(src *source) (parsed.DataType, error) {
 	var params []ast.Identifier
 	var options []parsed.DataTypeOption
 
+	nameStart := src.cursor
 	pName := readIdentifier(src, false)
+	nameLoc := loc(src, nameStart)
 	if pName == nil {
 		err = newError(*src, "expected data name here")
 	}
@@ -1591,7 +1605,7 @@ func parseDataType(src *source) (parsed.DataType, error) {
 		}
 	}
 
-	return parsed.NewDataType(loc(src, cursor), hidden, name, params, options), err
+	return parsed.NewDataType(loc(src, cursor), hidden, name, params, options, nameLoc), err
 }
 
 func parseDefinition(src *source, modName ast.QualifiedIdentifier) (parsed.Definition, error) {

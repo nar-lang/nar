@@ -15,6 +15,10 @@ type TUnit struct {
 	*typeBase
 }
 
+func (t *TUnit) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{t.location.ToToken(ast.TokenTypeRegexp)}
+}
+
 func (t *TUnit) Iterate(f func(statement Statement)) {
 	f(t)
 }

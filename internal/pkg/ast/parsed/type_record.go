@@ -17,6 +17,10 @@ type TRecord struct {
 	fields map[ast.Identifier]Type
 }
 
+func (t *TRecord) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{t.location.ToToken(ast.TokenTypeStruct)}
+}
+
 func (t *TRecord) Iterate(f func(statement Statement)) {
 	f(t)
 	for _, field := range t.fields {

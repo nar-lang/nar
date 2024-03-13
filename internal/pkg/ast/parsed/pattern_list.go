@@ -18,6 +18,10 @@ type PList struct {
 	items []Pattern
 }
 
+func (e *PList) SemanticTokens() []ast.SemanticToken {
+	return nil
+}
+
 func (e *PList) Iterate(f func(statement Statement)) {
 	f(e)
 	for _, item := range e.items {

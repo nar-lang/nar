@@ -14,22 +14,28 @@ type Alias interface {
 	aliasType() Type
 }
 
-func NewAlias(loc ast.Location, hidden bool, name ast.Identifier, params []ast.Identifier, type_ Type) Alias {
+func NewAlias(loc ast.Location, hidden bool, name ast.Identifier, params []ast.Identifier, type_ Type, nameLocation ast.Location) Alias {
 	return &alias{
-		location: loc,
-		hidden_:  hidden,
-		name_:    name,
-		params:   params,
-		type_:    type_,
+		location:     loc,
+		hidden_:      hidden,
+		name_:        name,
+		params:       params,
+		type_:        type_,
+		nameLocation: nameLocation,
 	}
 }
 
 type alias struct {
-	location ast.Location
-	hidden_  bool
-	name_    ast.Identifier
-	params   []ast.Identifier
-	type_    Type
+	location     ast.Location
+	hidden_      bool
+	name_        ast.Identifier
+	params       []ast.Identifier
+	type_        Type
+	nameLocation ast.Location
+}
+
+func (a *alias) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{a.nameLocation.ToToken(ast.TokenTypeType, ast.TokenModifierDeclaration)}
 }
 
 func (a *alias) aliasType() Type {
@@ -43,7 +49,7 @@ func (a *alias) Hidden() bool {
 func (a *alias) inferType(moduleName ast.QualifiedIdentifier, args []Type) (Type, ast.FullIdentifier, error) {
 	id := common.MakeFullIdentifier(moduleName, a.name_)
 	if a.type_ == nil {
-		return NewTNative(a.location, id, args), id, nil
+		return NewTNative(a.location, id, args, a.nameLocation), id, nil
 	}
 	if len(a.params) != len(args) {
 		return nil, "", common.NewErrorAt(a.location, "wrong number of type parameters, expected %d, got %d", len(a.params), len(args))

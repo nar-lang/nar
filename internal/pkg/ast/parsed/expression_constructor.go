@@ -10,6 +10,7 @@ func NewConstructor(
 	moduleName ast.QualifiedIdentifier,
 	dataName ast.Identifier,
 	optionName ast.Identifier,
+	nameLocation ast.Location,
 	args []Expression,
 ) Expression {
 	return &Constructor{
@@ -18,15 +19,21 @@ func NewConstructor(
 		dataName:       dataName,
 		optionName:     optionName,
 		args:           args,
+		nameLocation:   nameLocation,
 	}
 }
 
 type Constructor struct {
 	*expressionBase
-	moduleName ast.QualifiedIdentifier
-	dataName   ast.Identifier
-	optionName ast.Identifier
-	args       []Expression
+	moduleName   ast.QualifiedIdentifier
+	dataName     ast.Identifier
+	optionName   ast.Identifier
+	args         []Expression
+	nameLocation ast.Location
+}
+
+func (e *Constructor) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{e.nameLocation.ToToken(ast.TokenTypeEnumMember)}
 }
 
 func (e *Constructor) Iterate(f func(statement Statement)) {

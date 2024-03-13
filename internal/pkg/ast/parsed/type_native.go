@@ -5,18 +5,24 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
-func NewTNative(loc ast.Location, name ast.FullIdentifier, args []Type) Type {
+func NewTNative(loc ast.Location, name ast.FullIdentifier, args []Type, nameLocation ast.Location) Type {
 	return &TNative{
-		typeBase: newTypeBase(loc),
-		name:     name,
-		args:     args,
+		typeBase:     newTypeBase(loc),
+		name:         name,
+		args:         args,
+		nameLocation: nameLocation,
 	}
 }
 
 type TNative struct {
 	*typeBase
-	name ast.FullIdentifier
-	args []Type
+	name         ast.FullIdentifier
+	args         []Type
+	nameLocation ast.Location
+}
+
+func (t *TNative) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{t.nameLocation.ToToken(ast.TokenTypeInterface)}
 }
 
 func (t *TNative) Iterate(f func(statement Statement)) {
@@ -49,5 +55,5 @@ func (t *TNative) applyArgs(params map[ast.Identifier]Type, loc ast.Location) (T
 		}
 		args = append(args, nArg)
 	}
-	return NewTNative(loc, t.name, args), nil
+	return NewTNative(loc, t.name, args, t.nameLocation), nil
 }

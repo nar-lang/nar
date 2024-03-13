@@ -16,23 +16,30 @@ type DataType interface {
 
 func NewDataType(
 	loc ast.Location, hidden bool, name ast.Identifier, params []ast.Identifier, options []DataTypeOption,
+	nameLocation ast.Location,
 ) DataType {
 	return &dataType{
-		location: loc,
-		hidden:   hidden,
-		name:     name,
-		params:   params,
-		options:  options,
+		location:     loc,
+		hidden:       hidden,
+		name:         name,
+		params:       params,
+		options:      options,
+		nameLocation: nameLocation,
 	}
 }
 
 type dataType struct {
-	location  ast.Location
-	hidden    bool
-	name      ast.Identifier
-	params    []ast.Identifier
-	options   []DataTypeOption
-	successor Statement
+	location     ast.Location
+	hidden       bool
+	name         ast.Identifier
+	params       []ast.Identifier
+	options      []DataTypeOption
+	successor    Statement
+	nameLocation ast.Location
+}
+
+func (d dataType) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{d.nameLocation.ToToken(ast.TokenTypeEnum, ast.TokenModifierDeclaration)}
 }
 
 func (d dataType) Hidden() bool {
@@ -62,8 +69,9 @@ func (d dataType) flatten(moduleName ast.QualifiedIdentifier) (Alias, []Definiti
 		common.Map(func(x DataTypeOption) *DataOption {
 			return x.dataOption()
 		}, d.options),
+		d.nameLocation,
 	)
-	dataAlias := NewAlias(d.location, d.hidden, d.name, d.params, type_)
+	dataAlias := NewAlias(d.location, d.hidden, d.name, d.params, type_, d.nameLocation)
 	defs := make([]Definition, 0, len(d.options))
 	for _, option := range d.options {
 		def := option.constructor(moduleName, d.name, type_, d.hidden)
@@ -96,21 +104,27 @@ type DataTypeOption interface {
 	Hidden() bool
 }
 
-func NewDataTypeOption(loc ast.Location, hidden bool, name ast.Identifier, values []*DataTypeValue) DataTypeOption {
+func NewDataTypeOption(loc ast.Location, hidden bool, name ast.Identifier, values []*DataTypeValue, nameLocation ast.Location) DataTypeOption {
 	return &dataTypeOption{
-		location: loc,
-		hidden:   hidden,
-		name:     name,
-		values:   values,
+		location:     loc,
+		hidden:       hidden,
+		name:         name,
+		values:       values,
+		nameLocation: nameLocation,
 	}
 }
 
 type dataTypeOption struct {
-	location  ast.Location
-	hidden    bool
-	name      ast.Identifier
-	values    []*DataTypeValue
-	successor Statement
+	location     ast.Location
+	hidden       bool
+	name         ast.Identifier
+	values       []*DataTypeValue
+	successor    Statement
+	nameLocation ast.Location
+}
+
+func (d *dataTypeOption) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{d.nameLocation.ToToken(ast.TokenTypeEnumMember, ast.TokenModifierDeclaration)}
 }
 
 func (d *dataTypeOption) Hidden() bool {
@@ -131,6 +145,7 @@ func (d *dataTypeOption) constructor(moduleName ast.QualifiedIdentifier, dataNam
 		moduleName,
 		dataName,
 		d.name,
+		d.nameLocation,
 		common.Map(
 			func(i *DataTypeValue) Expression {
 				return NewVar(d.location, ast.QualifiedIdentifier("_"+i.name))
@@ -140,7 +155,7 @@ func (d *dataTypeOption) constructor(moduleName ast.QualifiedIdentifier, dataNam
 
 	params := common.Map(
 		func(i *DataTypeValue) Pattern {
-			return NewPNamed(d.location, "_"+i.name)
+			return NewPNamed(d.location, "_"+i.name, i.location)
 		},
 		d.values,
 	)
@@ -151,7 +166,7 @@ func (d *dataTypeOption) constructor(moduleName ast.QualifiedIdentifier, dataNam
 }
 
 func (d *dataTypeOption) dataOption() *DataOption {
-	return NewDataOption(d.name, d.hidden, common.Map(func(v *DataTypeValue) Type { return v.type_ }, d.values))
+	return NewDataOption(d.name, d.hidden, common.Map(func(v *DataTypeValue) Type { return v.type_ }, d.values), d.nameLocation)
 }
 
 func (d *dataTypeOption) Successor() normalized.Statement {

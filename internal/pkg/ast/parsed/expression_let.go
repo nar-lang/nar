@@ -6,13 +6,6 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
-type Let struct {
-	*expressionBase
-	pattern Pattern
-	value   Expression
-	nested  Expression
-}
-
 func NewLet(location ast.Location, pattern Pattern, value, nested Expression) Expression {
 	return &Let{
 		expressionBase: newExpressionBase(location),
@@ -20,6 +13,17 @@ func NewLet(location ast.Location, pattern Pattern, value, nested Expression) Ex
 		value:          value,
 		nested:         nested,
 	}
+}
+
+type Let struct {
+	*expressionBase
+	pattern Pattern
+	value   Expression
+	nested  Expression
+}
+
+func (e *Let) SemanticTokens() []ast.SemanticToken {
+	return nil
 }
 
 func (e *Let) Iterate(f func(statement Statement)) {

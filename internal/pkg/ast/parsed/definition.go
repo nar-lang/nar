@@ -49,6 +49,10 @@ type definition struct {
 	nameLocation ast.Location
 }
 
+func (def *definition) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{def.nameLocation.ToToken(ast.TokenTypeFunction, ast.TokenModifierDefinition)}
+}
+
 func (def *definition) Params() []Pattern {
 	return def.params
 }

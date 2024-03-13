@@ -18,6 +18,10 @@ type TParameter struct {
 	name ast.Identifier
 }
 
+func (t *TParameter) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{t.location.ToToken(ast.TokenTypeTypeParameter)}
+}
+
 func (t *TParameter) Iterate(f func(statement Statement)) {
 	f(t)
 }

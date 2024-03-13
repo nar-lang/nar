@@ -19,6 +19,10 @@ type Apply struct {
 	args  []Expression
 }
 
+func (e *Apply) SemanticTokens() []ast.SemanticToken {
+	return nil
+}
+
 func (e *Apply) Iterate(f func(statement Statement)) {
 	f(e)
 	if e.func_ != nil {

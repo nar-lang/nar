@@ -15,6 +15,10 @@ type PAny struct {
 	*patternBase
 }
 
+func (e *PAny) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{e.location.ToToken(ast.TokenTypeVariable, ast.TokenModifierDeclaration)}
+}
+
 func (e *PAny) Iterate(f func(statement Statement)) {
 	f(e)
 	e.patternBase.Iterate(f)

@@ -20,6 +20,14 @@ type Update struct {
 	fields     []*RecordField
 }
 
+func (e *Update) SemanticTokens() []ast.SemanticToken {
+	var tokens []ast.SemanticToken
+	for _, f := range e.fields {
+		tokens = append(tokens, f.location.ToToken(ast.TokenTypeStruct))
+	}
+	return tokens
+}
+
 func (e *Update) Iterate(f func(statement Statement)) {
 	f(e)
 	for _, field := range e.fields {

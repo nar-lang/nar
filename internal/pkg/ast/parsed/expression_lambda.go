@@ -21,6 +21,10 @@ type Lambda struct {
 	body    Expression
 }
 
+func (e *Lambda) SemanticTokens() []ast.SemanticToken {
+	return nil
+}
+
 func (e *Lambda) Iterate(f func(statement Statement)) {
 	f(e)
 	for _, param := range e.params {

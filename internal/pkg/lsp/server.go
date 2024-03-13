@@ -33,6 +33,7 @@ type server struct {
 	notificationChan chan rpcNotification
 	inChan           chan []byte
 	compileChan      chan docChange
+	compiledChan     chan struct{}
 	locker           sync.Locker
 
 	documentToPackageRoot map[protocol.DocumentURI]string
@@ -69,6 +70,7 @@ func NewServer(cacheDir string, writeResponse func([]byte)) LanguageServer {
 		responseChan:     make(chan rpcResponse, 16),
 		notificationChan: make(chan rpcNotification, 128),
 		compileChan:      make(chan docChange, 1024),
+		compiledChan:     make(chan struct{}),
 		locker:           &sync.Mutex{},
 
 		log:                   &logger.LogWriter{},

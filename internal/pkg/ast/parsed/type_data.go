@@ -5,20 +5,31 @@ import (
 	"nar-compiler/internal/pkg/ast/normalized"
 )
 
-func NewTData(loc ast.Location, name ast.FullIdentifier, args []Type, options []*DataOption) Type {
+func NewTData(loc ast.Location, name ast.FullIdentifier, args []Type, options []*DataOption, nameLocation ast.Location) Type {
 	return &TData{
-		typeBase: newTypeBase(loc),
-		name:     name,
-		args:     args,
-		options:  options,
+		typeBase:     newTypeBase(loc),
+		name:         name,
+		args:         args,
+		options:      options,
+		nameLocation: nameLocation,
 	}
 }
 
 type TData struct {
 	*typeBase
-	name    ast.FullIdentifier
-	args    []Type
-	options []*DataOption
+	name         ast.FullIdentifier
+	args         []Type
+	options      []*DataOption
+	nameLocation ast.Location
+}
+
+func (t *TData) SemanticTokens() []ast.SemanticToken {
+	var tokens []ast.SemanticToken
+	tokens = append(tokens, t.nameLocation.ToToken(ast.TokenTypeEnum))
+	for _, opt := range t.options {
+		tokens = append(tokens, opt.nameLocation.ToToken(ast.TokenTypeEnumMember))
+	}
+	return tokens
 }
 
 func (t *TData) Iterate(f func(statement Statement)) {
@@ -78,19 +89,21 @@ func (t *TData) applyArgs(params map[ast.Identifier]Type, loc ast.Location) (Typ
 		}
 		args = append(args, nArg)
 	}
-	return NewTData(loc, t.name, args, t.options), nil
+	return NewTData(loc, t.name, args, t.options, t.nameLocation), nil
 }
 
 type DataOption struct {
-	name   ast.Identifier
-	hidden bool
-	values []Type
+	name         ast.Identifier
+	hidden       bool
+	values       []Type
+	nameLocation ast.Location
 }
 
-func NewDataOption(name ast.Identifier, hidden bool, values []Type) *DataOption {
+func NewDataOption(name ast.Identifier, hidden bool, values []Type, nameLocation ast.Location) *DataOption {
 	return &DataOption{
-		name:   name,
-		hidden: hidden,
-		values: values,
+		name:         name,
+		hidden:       hidden,
+		values:       values,
+		nameLocation: nameLocation,
 	}
 }

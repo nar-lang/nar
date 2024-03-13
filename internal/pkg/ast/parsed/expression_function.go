@@ -31,6 +31,10 @@ type Function struct {
 	nested       Expression
 }
 
+func (e *Function) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{e.nameLocation.ToToken(ast.TokenTypeFunction, ast.TokenModifierDefinition)}
+}
+
 func (e *Function) SetSuccessor(s normalized.Expression) {
 	e.successor = s
 }

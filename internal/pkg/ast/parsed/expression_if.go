@@ -20,6 +20,10 @@ type If struct {
 	condition, positive, negative Expression
 }
 
+func (e *If) SemanticTokens() []ast.SemanticToken {
+	return nil
+}
+
 func (e *If) Iterate(f func(statement Statement)) {
 	f(e)
 	if e.condition != nil {

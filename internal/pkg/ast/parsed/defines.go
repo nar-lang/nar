@@ -10,6 +10,7 @@ type Statement interface {
 	Iterate(f func(statement Statement))
 	Successor() normalized.Statement
 	_parsed()
+	SemanticTokens() []ast.SemanticToken
 }
 
 type namedTypeMap map[ast.FullIdentifier]*normalized.TPlaceholder

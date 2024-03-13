@@ -17,6 +17,32 @@ type PConst struct {
 	value ast.ConstValue
 }
 
+func (e *PConst) SemanticTokens() []ast.SemanticToken {
+	switch e.value.(type) {
+	case ast.CChar:
+		{
+			return []ast.SemanticToken{e.location.ToToken(ast.TokenTypeString)}
+		}
+	case ast.CString:
+		{
+			return []ast.SemanticToken{e.location.ToToken(ast.TokenTypeString)}
+		}
+	case ast.CInt:
+		{
+			return []ast.SemanticToken{e.location.ToToken(ast.TokenTypeNumber)}
+		}
+	case ast.CFloat:
+		{
+			return []ast.SemanticToken{e.location.ToToken(ast.TokenTypeNumber)}
+		}
+	case ast.CUnit:
+		{
+			return []ast.SemanticToken{e.location.ToToken(ast.TokenTypeRegexp)}
+		}
+	}
+	return nil
+}
+
 func (e *PConst) Iterate(f func(statement Statement)) {
 	f(e)
 	e.patternBase.Iterate(f)

@@ -6,18 +6,24 @@ import (
 	"nar-compiler/internal/pkg/common"
 )
 
-func NewPOption(loc ast.Location, name ast.QualifiedIdentifier, values []Pattern) Pattern {
+func NewPOption(loc ast.Location, name ast.QualifiedIdentifier, values []Pattern, nameLocation ast.Location) Pattern {
 	return &POption{
-		patternBase: newPatternBase(loc),
-		name:        name,
-		values:      values,
+		patternBase:  newPatternBase(loc),
+		name:         name,
+		values:       values,
+		nameLocation: nameLocation,
 	}
 }
 
 type POption struct {
 	*patternBase
-	name   ast.QualifiedIdentifier
-	values []Pattern
+	name         ast.QualifiedIdentifier
+	values       []Pattern
+	nameLocation ast.Location
+}
+
+func (e *POption) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{e.nameLocation.ToToken(ast.TokenTypeEnumMember)}
 }
 
 func (e *POption) Iterate(f func(statement Statement)) {

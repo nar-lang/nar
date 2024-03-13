@@ -84,6 +84,21 @@ func (loc Location) GetLineAndColumn() (startLine, startColumn, endLine, endColu
 	return
 }
 
+func (loc Location) ToToken(type_ SemanticTokenType, modifiers ...SemanticTokenModifier) SemanticToken {
+	l, c, _, _ := loc.GetLineAndColumn()
+	mod := SemanticTokenModifier(0)
+	for _, m := range modifiers {
+		mod |= m
+	}
+	return SemanticToken{
+		Line:      uint32(l - 1),
+		Char:      uint32(c - 1),
+		Length:    loc.Size(),
+		Type:      type_,
+		Modifiers: mod,
+	}
+}
+
 func (loc Location) FilePath() string {
 	return loc.filePath
 }

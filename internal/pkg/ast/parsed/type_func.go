@@ -23,6 +23,10 @@ type TFunc struct {
 	return_ Type
 }
 
+func (t *TFunc) SemanticTokens() []ast.SemanticToken {
+	return nil
+}
+
 func (t *TFunc) Iterate(f func(statement Statement)) {
 	f(t)
 	for _, param := range t.params {

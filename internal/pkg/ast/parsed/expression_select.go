@@ -20,6 +20,10 @@ type Select struct {
 	cases     []*SelectCase
 }
 
+func (e *Select) SemanticTokens() []ast.SemanticToken {
+	return nil
+}
+
 func (e *Select) Iterate(f func(statement Statement)) {
 	f(e)
 	if e.condition != nil {

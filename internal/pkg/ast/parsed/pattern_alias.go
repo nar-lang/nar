@@ -20,6 +20,10 @@ type PAlias struct {
 	nested Pattern
 }
 
+func (e *PAlias) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{e.location.ToToken(ast.TokenTypeVariable, ast.TokenModifierDeclaration)}
+}
+
 func (e *PAlias) Iterate(f func(statement Statement)) {
 	f(e)
 	if e.nested != nil {

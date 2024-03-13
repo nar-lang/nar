@@ -18,6 +18,10 @@ type PTuple struct {
 	items []Pattern
 }
 
+func (e *PTuple) SemanticTokens() []ast.SemanticToken {
+	return nil
+}
+
 func (e *PTuple) Iterate(f func(statement Statement)) {
 	f(e)
 	for _, item := range e.items {

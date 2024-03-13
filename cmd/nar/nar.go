@@ -85,6 +85,7 @@ func doCompile(release bool, cacheDir string, link linker.Linker, packages []str
 	var lc = locator.NewLocator(providers...)
 
 	bin := compiler.Compile(log, lc, link, !release)
+	log.Trace("compilation finished")
 	log.Flush(os.Stdout)
 	return bin
 }

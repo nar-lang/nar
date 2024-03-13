@@ -17,6 +17,10 @@ type InfixVar struct {
 	infix ast.InfixIdentifier
 }
 
+func (e *InfixVar) SemanticTokens() []ast.SemanticToken {
+	return []ast.SemanticToken{e.location.ToToken(ast.TokenTypeFunction)}
+}
+
 func (e *InfixVar) Iterate(f func(statement Statement)) {
 	f(e)
 }
