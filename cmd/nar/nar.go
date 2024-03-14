@@ -44,6 +44,7 @@ func main() {
 	if *binar != "" {
 		if err := doRunBinar(*binar); err != nil {
 			fmt.Println(err)
+			os.Exit(-1)
 		}
 		return
 	}
@@ -57,7 +58,11 @@ func main() {
 	bin := doCompile(*release, *cache, lnk, flag.Args())
 
 	if bin != nil && *run {
-		doRun(bin, filepath.Dir(*out))
+		err := doRun(bin, filepath.Dir(*out))
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(-1)
+		}
 	}
 }
 
