@@ -120,6 +120,13 @@ func ToTuple(rt *Runtime, o Object) ([]Object, error) {
 
 }
 
+func toListItem(rt *Runtime, o Object) (listItem, error) {
+	if o.Kind() != InstanceKindList {
+		return listItem{}, fmt.Errorf("expected %s, got %s", kindToString(InstanceKindList), kindToString(o.Kind()))
+	}
+	return getObjectValue[listItem](rt, o)
+}
+
 func ToList(rt *Runtime, o Object) ([]Object, error) {
 	if o.Kind() != InstanceKindList {
 		return nil, fmt.Errorf("expected %s, got %s", kindToString(InstanceKindList), kindToString(o.Kind()))

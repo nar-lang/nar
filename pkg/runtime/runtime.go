@@ -439,21 +439,21 @@ func (rt *Runtime) match(pattern Object, obj Object, numLocals *int) (bool, erro
 		if kDebug && len(nested) != 2 {
 			return false, fmt.Errorf("cons pattern should have exactly two nested patterns")
 		}
-		list, err := ToList(rt, obj)
+		if obj.invalid() {
+			return false, nil
+		}
+		list, err := toListItem(rt, obj)
 		if err != nil {
 			return false, err
 		}
-		if len(list) < 1 {
-			return false, nil
-		}
-		match, err := rt.match(nested[1], list[0], numLocals)
+		match, err := rt.match(nested[1], list.value, numLocals)
 		if err != nil {
 			return false, err
 		}
 		if !match {
 			return false, nil
 		}
-		return rt.match(nested[0], rt.NewList(list[1:]...), numLocals) //TODO: optimize: do not create new list, use low level API
+		return rt.match(nested[0], list.next, numLocals) //TODO: optimize: do not create new list, use low level API
 	case bytecode.PatternKindConst:
 		nested, err := ToList(rt, p.items)
 		if err != nil {
