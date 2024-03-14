@@ -17,16 +17,18 @@ import (
 )
 
 func main() {
+	println(strings.Join(os.Args, " "))
 	homeDir, _ := os.UserHomeDir()
-	cache := flag.String("cache", filepath.Join(homeDir, ".nar"), "package cache directory")
+	cache := flag.String("cache", filepath.Join(homeDir, ".nar", "packages"), "package cache directory")
 	release := flag.Bool("release", false, "strip debug symbols")
 	link := flag.String("link", "dll", "link program for specific platform (available: dll)")
 	out := flag.String("out", "program.binar", "output file name")
-	runLsp := flag.String("lsp", "", "start language server with given transport (stdio/tcp)")
-	lspPort := flag.Int("lsp-port", 0, "port for tcp transport")
 	showVersion := flag.Bool("version", false, "show version")
 	run := flag.Bool("run", false, "execute program after compilation")
 	binar := flag.String("binar", "", "execute program from binar file")
+	lspEnable := flag.Bool("lsp", false, "start language server")
+	flag.Bool("stdio", false, "use stdio for language server (default)")
+	lspTcp := flag.Int("tcp", 0, "use tcp transport with given port for language server")
 	flag.Parse()
 
 	if *showVersion {
@@ -34,8 +36,8 @@ func main() {
 		return
 	}
 
-	if *runLsp != "" {
-		doLsp(*runLsp, *lspPort, *cache)
+	if *lspEnable {
+		doLsp(*lspTcp, *cache)
 		return
 	}
 
@@ -90,9 +92,9 @@ func doCompile(release bool, cacheDir string, link linker.Linker, packages []str
 	return bin
 }
 
-func doLsp(runLsp string, lspPort int, cacheDir string) {
+func doLsp(tcpPort int, cacheDir string) {
 	log := &logger.LogWriter{FailOnErr: true}
-	err := lsp.LanguageServer(runLsp, lspPort, cacheDir)
+	err := lsp.LanguageServer(tcpPort, cacheDir)
 	if err != nil {
 		log.Err(err)
 	}

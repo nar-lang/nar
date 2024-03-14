@@ -12,13 +12,12 @@ import (
 	"strings"
 )
 
-func LanguageServer(protocol string, port int, cacheDir string) error {
-	if protocol == "stdio" {
+func LanguageServer(tcpPort int, cacheDir string) error {
+	if tcpPort == 0 {
 		return ServeStdio(cacheDir)
-	} else if protocol == "tcp" {
-		return ServeTcp(port, cacheDir)
+	} else {
+		return ServeTcp(tcpPort, cacheDir)
 	}
-	return nil
 }
 
 func ServeStdio(cacheDir string) error {
