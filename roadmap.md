@@ -1,6 +1,6 @@
 # Roadmap
 
-## Compiler v0.1
+## Compiler v1.0
 * [x] Parser
 * [x] Normalizer
 * [x] Type solver
@@ -12,7 +12,7 @@
 * [x] Smart import system
 * [x] Support of \uNNNN string characters
 
-## Compiler v0.2
+## Compiler v...
 * [ ] Nested record fields access
 * [ ] Prefix operators (like infix ones, neg is ugly)
 * [ ] "Tree shaking" to strip unused code
@@ -23,25 +23,23 @@
 * [x] Nar.Base library + tests
 * [x] Nar.Program library
 * [x] Nar.Time
-* [ ] Nar.Random
+* [x] Nar.Random
 * [ ] Nar.Tests library
   * [x] Simple tests
   * [ ] Fuzz tests
-* [ ] Narwal library (game engine)
-  * [ ] Narwal.GL
-  * [ ] Narwal.Sprite
-  * [ ] Narwal.Input
-  * [ ] Narwal.UI
+* [ ] Unity plugin
 * [ ] ...
 
 ## Quality Of Life
 * [ ] Documentation
-* [ ] Language server
+* [x] Language server
 * [ ] Debugger
 * [ ] Formatter
 * [ ] IDE support
-  * [ ] Visual Studio Code
+  * [x] Visual Studio Code
   * [ ] Jetbrains Family
+  * [ ] Sublime
+  * [ ] Vim
 
 ## Platforms
 * JavaScript
@@ -49,6 +47,6 @@
   * [x] Linker
   * [ ] Clean runtime from dependencies
 * C99
-  * [ ] Runtime (static library)
-  * [ ] Linker
+  * [ ] Runtime
+  * [x] Linker
 * [ ] LLVM compiler
