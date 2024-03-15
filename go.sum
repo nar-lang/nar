@@ -4,7 +4,7 @@ github.com/nar-lang/nar-compiler v1.0.0 h1:3Agjfp+lyBS7v+5cES8MuPtigYVmf9ea51DMk
 github.com/nar-lang/nar-compiler v1.0.0/go.mod h1:g/+YN2eE/Y4XSkO/pgVFL1pXRWw13l/o6JbQvudHKb0=
 github.com/nar-lang/nar-lsp v1.0.0 h1:Evn+OSY0TSUhxzxWaKovaNWmmX2fSlSlDiDS+GQSxVM=
 github.com/nar-lang/nar-lsp v1.0.0/go.mod h1:f18CT4GkyzR+Xj54lLlIdnXGPdEQABawFS2Avfe/A58=
-github.com/nar-lang/nar-runtime v1.0.0 h1:xDvxa/ZTWlqG6/4qN/s9sGswJM48Iv9/9BsozxuF6WA=
-github.com/nar-lang/nar-runtime v1.0.0/go.mod h1:9P761NRmewWJ9+aBTKxqmP+OF3koBzKsNcH41T9R74g=
+github.com/nar-lang/nar-runtime v1.0.1 h1:JOT59i0+CHC7ja9IcMCYEJY4KV8muw7i+EI3e2IA8ik=
+github.com/nar-lang/nar-runtime v1.0.1/go.mod h1:9P761NRmewWJ9+aBTKxqmP+OF3koBzKsNcH41T9R74g=
 golang.org/x/text v0.14.0 h1:ScX5w1eTa3QqT8oi6+ziP7dTV1S2+ALU0bI+0zXKWiQ=
 golang.org/x/text v0.14.0/go.mod h1:18ZOQIKpY8NJVqYksKHtTdi31H5itFRjB5/qKTNYzSU=
