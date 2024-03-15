@@ -3,6 +3,7 @@ package runtime
 /*
 #cgo LDFLAGS: -ldl
 #include <dlfcn.h>
+#include <stdlib.h>
 #include "../../../narc/nar.h"
 
 typedef int (*init_fn_t)(init_data_t*);
@@ -507,8 +508,19 @@ func nar_to_native(runtime C.nar_runtime_t, obj C.nar_object_t) C.nar_native_t {
 
 //export nar_alloc
 func nar_alloc(runtime C.nar_runtime_t, size C.nar_size_t) unsafe.Pointer {
-	//todo: store pointer and free after frame
-	return C.malloc(C.size_t(size))
+	rt := getRuntime(runtime)
+	ptr := C.malloc(C.size_t(size))
+	rt.frameMemory = append(rt.frameMemory, ptr)
+	return ptr
+}
+
+//export nar_free_all
+func nar_free_all(runtime C.nar_runtime_t) {
+	rt := getRuntime(runtime)
+	for _, ptr := range rt.frameMemory {
+		C.free(ptr)
+	}
+	rt.frameMemory = rt.frameMemory[:0]
 }
 
 //export nar_print

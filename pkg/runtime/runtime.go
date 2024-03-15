@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"nar-compiler/internal/pkg/ast"
 	"nar-compiler/pkg/bytecode"
+	"unsafe"
 )
 
 //TODO: make const objects when loading binary, and dont copy for every instance
@@ -32,6 +33,7 @@ type Runtime struct {
 	callStack         []bytecode.StringHash
 	locals            []local
 	cachedExpressions map[bytecode.Pointer]Object
+	frameMemory       []unsafe.Pointer
 }
 
 func (rt *Runtime) Dispose() {
@@ -453,7 +455,7 @@ func (rt *Runtime) match(pattern Object, obj Object, numLocals *int) (bool, erro
 		if !match {
 			return false, nil
 		}
-		return rt.match(nested[0], list.next, numLocals) //TODO: optimize: do not create new list, use low level API
+		return rt.match(nested[0], list.next, numLocals)
 	case bytecode.PatternKindConst:
 		nested, err := ToList(rt, p.items)
 		if err != nil {
