@@ -35,7 +35,7 @@
 * [x] Language server
 * [ ] Debugger
 * [ ] Formatter
-* [ ] IDE support
+* IDE support
   * [x] Visual Studio Code
   * [ ] Jetbrains Family
   * [ ] Sublime
@@ -45,8 +45,9 @@
 * JavaScript
   * [x] Runtime
   * [x] Linker
-  * [ ] Clean runtime from dependencies
-* C99
-  * [ ] Runtime
+  * [ ] Replace with wasm from C
+* Native
+  * [x] CGo runtime
   * [x] Linker
+  * [ ] Replace with C Runtime
 * [ ] LLVM compiler
