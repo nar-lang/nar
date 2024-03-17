@@ -117,22 +117,21 @@ func doShowVersion() {
 }
 
 func doRun(bin *bytecode.Binary, libsPath string) (err error) {
-	rt := runtime.NewRuntime(bin)
+	rt, err := runtime.NewRuntime(bin, libsPath)
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("%v\n%s", r, strings.Join(rt.Stack(), "\n"))
+			err = fmt.Errorf("runtime error: %v\nat\n%s", r, strings.Join(rt.Stack(), "\n"))
 		}
 	}()
-	for name, version := range bin.Packages {
-		err = runtime.RegisterNativeLibrary(rt, string(name), int(version), libsPath)
-		if err != nil {
-			return
-		}
+	if err != nil {
+		return
+
 	}
 	if bin.Entry == "" {
 		err = fmt.Errorf("entry point not found")
 		return
 	}
 	_, err = rt.Apply(bin.Entry)
+	rt.Destroy()
 	return
 }
