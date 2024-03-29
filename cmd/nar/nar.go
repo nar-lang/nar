@@ -1,6 +1,15 @@
 package main
 
+/*
+#cgo CFLAGS: -I${SRCDIR}/../../../nar-runtime-c/include
+#cgo LDFLAGS: -ldl -L${SRCDIR}/../../../nar-runtime-c/include -lnar-runtime-c
+#include <string.h>
+#include <nar.h>
+#include <nar-runtime.h>
+*/
+import "C"
 import (
+	"bufio"
 	"bytes"
 	"flag"
 	"fmt"
@@ -9,11 +18,11 @@ import (
 	"github.com/nar-lang/nar-compiler/compiler"
 	"github.com/nar-lang/nar-compiler/linker"
 	"github.com/nar-lang/nar-compiler/locator"
-	"github.com/nar-lang/nar-lsp"
-	"github.com/nar-lang/nar-runtime/runtime"
+	nar_lsp "github.com/nar-lang/nar-lsp"
 	"os"
 	"path/filepath"
 	"strings"
+	"unsafe"
 )
 
 func main() {
@@ -58,7 +67,20 @@ func main() {
 	bin := doCompile(*release, *cache, lnk, flag.Args())
 
 	if bin != nil && *run {
-		err := doRun(bin, filepath.Dir(*out))
+		buf := bytes.NewBuffer(nil)
+		w := bufio.NewWriter(buf)
+		err := bin.Write(w, true)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(-1)
+		}
+		err = w.Flush()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(-1)
+		}
+
+		err = doRun(buf.Bytes(), filepath.Dir(*out))
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(-1)
@@ -71,11 +93,7 @@ func doRunBinar(path string) error {
 	if err != nil {
 		return err
 	}
-	binary, err := bytecode.Read(bytes.NewReader(data))
-	if err != nil {
-		return err
-	}
-	return doRun(binary, filepath.Dir(path))
+	return doRun(data, filepath.Dir(path))
 }
 
 func doCompile(release bool, cacheDir string, link linker.Linker, packages []string) *bytecode.Binary {
@@ -107,31 +125,61 @@ func doLsp(tcpPort int, cacheDir string) {
 }
 
 func doShowVersion() {
-	vts := func(v int) string { return fmt.Sprintf("%d.%02d", v/100, v%100) }
+	vts := func(v uint32) string { return fmt.Sprintf("%d.%02d", v/100, v%100) }
 	fmt.Printf("nar compiler version: %s\n"+
 		"language server protocol version: %s\n"+
 		"binar format version: %s\n",
-		vts(compiler.Version()),
-		vts(nar_lsp.Version()),
-		vts(bytecode.Version()))
+		vts(compiler.Version),
+		vts(nar_lsp.Version),
+		vts(bytecode.Version))
 }
 
-func doRun(bin *bytecode.Binary, libsPath string) (err error) {
-	rt, err := runtime.NewRuntime(bin, libsPath)
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("runtime error: %v\nat\n%s", r, strings.Join(rt.Stack(), "\n"))
-		}
-	}()
-	if err != nil {
-		return
+func doRun(data []byte, libsPath string) (err error) {
+	to_str := func(s C.nar_cstring_t) string {
+		sz := C.strlen(s)
+		return string(C.GoBytes(unsafe.Pointer(s), C.int(sz)))
+	}
 
+	var btc C.nar_bytecode_t
+	buf := C.CBytes(data)
+	bytecodeLoadResult := C.nar_bytecode_new(
+		C.nar_size_t(len(data)),
+		(*C.nar_byte_t)(buf),
+		&btc)
+	C.free(buf)
+	buf = nil
+
+	var rt C.nar_runtime_t = nil
+	var entryPoint C.nar_cstring_t = nil
+	var result C.nar_object_t = C.INVALID_OBJECT
+
+	if bytecodeLoadResult != 0 {
+		err = fmt.Errorf("could not create bytecode (error code %d)", int(bytecodeLoadResult))
+		goto cleanup
 	}
-	if bin.Entry == "" {
-		err = fmt.Errorf("entry point not found")
-		return
+
+	buf = C.CBytes(append([]byte(libsPath), 0))
+	rt = C.nar_runtime_new(btc, C.nar_cstring_t(buf))
+	if C.nar_get_last_error(rt) != nil {
+		err = fmt.Errorf("could not create runtime (error message: %s)", to_str(C.nar_get_last_error(rt)))
+		goto cleanup
 	}
-	_, err = rt.Apply(bin.Entry)
-	rt.Destroy()
-	return
+	C.free(buf)
+	buf = nil
+
+	entryPoint = C.nar_bytecode_get_entry(btc)
+
+	result = C.nar_apply(rt, entryPoint, 0, nil)
+	if C.nar_object_is_valid(rt, result) == 0 {
+		err = fmt.Errorf("could not execute entry point %s (error message: %s)",
+			to_str(entryPoint),
+			to_str(C.nar_get_last_error(rt)))
+		goto cleanup
+	}
+
+cleanup:
+	C.nar_runtime_free(rt)
+	C.nar_bytecode_free(btc)
+	C.free(buf)
+	return err
 }
