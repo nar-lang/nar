@@ -13,12 +13,12 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/nar-lang/nar-common/bytecode"
-	"github.com/nar-lang/nar-common/logger"
+	"github.com/nar-lang/nar-compiler/bytecode"
 	"github.com/nar-lang/nar-compiler/compiler"
 	"github.com/nar-lang/nar-compiler/linker"
 	"github.com/nar-lang/nar-compiler/locator"
-	nar_lsp "github.com/nar-lang/nar-lsp"
+	"github.com/nar-lang/nar-compiler/logger"
+	"github.com/nar/pkg"
 	"os"
 	"path/filepath"
 	"strings"
@@ -117,7 +117,7 @@ func doCompile(release bool, cacheDir string, link linker.Linker, packages []str
 
 func doLsp(tcpPort int, cacheDir string) {
 	log := &logger.LogWriter{FailOnErr: true}
-	err := nar_lsp.LanguageServer(tcpPort, cacheDir)
+	err := pkg.LanguageServer(tcpPort, cacheDir)
 	if err != nil {
 		log.Err(err)
 	}
@@ -130,7 +130,7 @@ func doShowVersion() {
 		"language server protocol version: %s\n"+
 		"binar format version: %s\n",
 		vts(compiler.Version),
-		vts(nar_lsp.Version),
+		vts(pkg.Version),
 		vts(bytecode.Version))
 }
 
