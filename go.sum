@@ -1,8 +1,5 @@
-github.com/nar-lang/nar-common v1.0.0 h1:ECUWFUNMx2a1xfwx+T1o3gWfsot8ZVORvym5W1GO/uY=
 github.com/nar-lang/nar-common v1.0.0/go.mod h1:PAhYM5zxJK/0SthuiR9xQs6h/PTLsEl+Tq8SMNicDLE=
-github.com/nar-lang/nar-compiler v1.0.0 h1:3Agjfp+lyBS7v+5cES8MuPtigYVmf9ea51DMkkmZavA=
 github.com/nar-lang/nar-compiler v1.0.0/go.mod h1:g/+YN2eE/Y4XSkO/pgVFL1pXRWw13l/o6JbQvudHKb0=
-github.com/nar-lang/nar-lsp v1.0.0 h1:Evn+OSY0TSUhxzxWaKovaNWmmX2fSlSlDiDS+GQSxVM=
 github.com/nar-lang/nar-lsp v1.0.0/go.mod h1:f18CT4GkyzR+Xj54lLlIdnXGPdEQABawFS2Avfe/A58=
 github.com/nar-lang/nar-runtime v1.0.2 h1:MaQ4GUJ+m41Y5c+bnjZ/RUaohJK0YEaYKj0WBoOmFz0=
 github.com/nar-lang/nar-runtime v1.0.2/go.mod h1:CZxuAZcMbTt+JbMOUAmmOC7/YRg6W1pKEtKQjhqne8o=
