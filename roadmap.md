@@ -49,5 +49,5 @@
 * Native
   * [x] CGo runtime
   * [x] Linker
-  * [ ] Replace with C Runtime
+  * [x] Replace with C Runtime
 * [ ] LLVM compiler
