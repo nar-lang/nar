@@ -17,7 +17,8 @@ Checkout the [Home page](https://nar-lang.com/) for more information.
     cd nar-runtime-c
     cmake . && make
     ```
-4. Compile nar using go compiler:
+4. Specify you home directory in nar/cmd/nar/nar.go:11 and :12. Note: this is temporary, until solution is found.
+5. Compile nar using go compiler:
    ```bash
    cd ../nar
    CGO_ENABLED=1 go build -o ~/.nar/bin/nar ./cmd/nar/nar.go

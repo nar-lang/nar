@@ -1,11 +1,20 @@
 package main
 
+import (
+	"os"
+	"strings"
+)
+
+//TODO: how to specify home directory ?
+
 /*
-#cgo CFLAGS: -I${SRCDIR}/../../../nar-runtime-c/include
-#cgo LDFLAGS: -ldl -L${SRCDIR}/../../../nar-runtime-c/include -lnar-runtime-c
+#cgo CFLAGS: -I/Users/dvoyni/.nar/include
+#cgo LDFLAGS: -ldl -L/Users/dvoyni/.nar/include -lnar-runtime-c
 #include <string.h>
 #include <nar.h>
 #include <nar-runtime.h>
+
+void goStdoutWrapper(nar_runtime_t rt, nar_cstring_t msg);
 */
 import "C"
 import (
@@ -19,9 +28,7 @@ import (
 	"github.com/nar-lang/nar-compiler/locator"
 	"github.com/nar-lang/nar-compiler/logger"
 	"github.com/nar/pkg"
-	"os"
 	"path/filepath"
-	"strings"
 	"unsafe"
 )
 
@@ -134,18 +141,24 @@ func doShowVersion() {
 		vts(bytecode.Version))
 }
 
-func doRun(data []byte, libsPath string) (err error) {
-	to_str := func(s C.nar_cstring_t) string {
-		sz := C.strlen(s)
-		return string(C.GoBytes(unsafe.Pointer(s), C.int(sz)))
+func toStr(s C.nar_cstring_t) string {
+	if s == nil {
+		return ""
 	}
+	sz := C.strlen(s)
+	return string(C.GoBytes(unsafe.Pointer(s), C.int(sz)))
+}
 
-	var btc C.nar_bytecode_t
+//export goStdOut
+func goStdOut(rt C.nar_runtime_t, msg C.nar_cstring_t) {
+	fmt.Println(toStr(msg))
+}
+
+func doRun(data []byte, libsPath string) (err error) {
 	buf := C.CBytes(data)
-	bytecodeLoadResult := C.nar_bytecode_new(
+	btc := C.nar_bytecode_new(
 		C.nar_size_t(len(data)),
-		(*C.nar_byte_t)(buf),
-		&btc)
+		(*C.nar_byte_t)(buf))
 	C.free(buf)
 	buf = nil
 
@@ -153,27 +166,31 @@ func doRun(data []byte, libsPath string) (err error) {
 	var entryPoint C.nar_cstring_t = nil
 	var result C.nar_object_t = C.INVALID_OBJECT
 
-	if bytecodeLoadResult != 0 {
-		err = fmt.Errorf("could not create bytecode (error code %d)", int(bytecodeLoadResult))
+	btcErr := C.nar_get_last_error(nil)
+	if btc == nil || btcErr != nil {
+		err = fmt.Errorf("could not create bytecode (error code %s)", toStr(btcErr))
 		goto cleanup
 	}
 
+	rt = C.nar_runtime_new(btc)
+
 	buf = C.CBytes(append([]byte(libsPath), 0))
-	rt = C.nar_runtime_new(btc, C.nar_cstring_t(buf))
-	if C.nar_get_last_error(rt) != nil {
-		err = fmt.Errorf("could not create runtime (error message: %s)", to_str(C.nar_get_last_error(rt)))
+	if C.nar_register_libs(rt, C.nar_cstring_t(buf)) == C.nar_false {
+		err = fmt.Errorf("Error: could not create runtime (error message: %s)\n", toStr(C.nar_get_last_error(rt)))
 		goto cleanup
 	}
 	C.free(buf)
 	buf = nil
+
+	C.nar_set_stdout(rt, C.nar_stdout_fn_t(C.goStdoutWrapper))
 
 	entryPoint = C.nar_bytecode_get_entry(btc)
 
 	result = C.nar_apply(rt, entryPoint, 0, nil)
 	if C.nar_object_is_valid(rt, result) == 0 {
 		err = fmt.Errorf("could not execute entry point %s (error message: %s)",
-			to_str(entryPoint),
-			to_str(C.nar_get_last_error(rt)))
+			toStr(entryPoint),
+			toStr(C.nar_get_last_error(rt)))
 		goto cleanup
 	}
 
