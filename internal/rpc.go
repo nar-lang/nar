@@ -405,18 +405,20 @@ func (s *server) TextDocument_semanticTokens_full(
 			})
 
 			deltas := make([]ast.SemanticToken, 0, len(tokens))
-			deltas = append(deltas, tokens[0])
-			for i := 1; i < len(tokens); i++ {
-				p := tokens[i-1]
-				t := tokens[i]
-				dl := t.Line - p.Line
-				if dl == 0 {
-					t.Line = 0
-					t.Char = t.Char - p.Char
-				} else {
-					t.Line = dl
+			if len(tokens) > 0 {
+				deltas = append(deltas, tokens[0])
+				for i := 1; i < len(tokens); i++ {
+					p := tokens[i-1]
+					t := tokens[i]
+					dl := t.Line - p.Line
+					if dl == 0 {
+						t.Line = 0
+						t.Char = t.Char - p.Char
+					} else {
+						t.Line = dl
+					}
+					deltas = append(deltas, t)
 				}
-				deltas = append(deltas, t)
 			}
 
 			return &protocol.SemanticTokens{
@@ -471,6 +473,9 @@ func (s *server) TextDocument_completion(
 	}
 
 	loc, module, ok := s.locationUnderCursor(params.TextDocument.URI, params.Position.Line, params.Position.Character)
+	if module == nil {
+		return nil, nil
+	}
 	if ok {
 		module.Iterate(func(stmt parsed.Statement) {
 			if stmt.Location().Contains(loc) {
@@ -513,31 +518,27 @@ func (s *server) TextDocument_completion(
 			}
 
 			addName := func(name ast.Identifier, kind protocol.CompletionItemKind) {
-				if isCurrentModule {
-					completions = append(completions, protocol.CompletionItem{
-						Label: string(name),
+				completions = append(completions, protocol.CompletionItem{
+					Label: string(name), //TODO
+					Kind:  kind,
+				})
+				completions = append(completions,
+					protocol.CompletionItem{
+						Label: fmt.Sprintf("%s.%s", fullName, name),
 						Kind:  kind,
 					})
-				} else {
+				if alias != "" {
 					completions = append(completions,
 						protocol.CompletionItem{
-							Label: fmt.Sprintf("%s.%s", fullName, name),
+							Label: fmt.Sprintf("%s.%s", alias, name),
 							Kind:  kind,
 						})
-					if alias != "" {
-						completions = append(completions,
-							protocol.CompletionItem{
-								Label: fmt.Sprintf("%s.%s", alias, name),
-								Kind:  kind,
-							})
-					} else if shortName != "" {
-						completions = append(completions,
-							protocol.CompletionItem{
-								Label: fmt.Sprintf("%s.%s", shortName, name),
-								Kind:  kind,
-							})
-					}
-
+				} else if shortName != "" {
+					completions = append(completions,
+						protocol.CompletionItem{
+							Label: fmt.Sprintf("%s.%s", shortName, name),
+							Kind:  kind,
+						})
 				}
 			}
 

@@ -1,4 +1,4 @@
-github.com/nar-lang/nar-compiler v1.0.1 h1:649v+mLWZOOKfG976LnvSycZEFegJNtI+U4nHOEmLwI=
-github.com/nar-lang/nar-compiler v1.0.1/go.mod h1:XKCgyWwgCuDq6sQAzcKRv0aO7hDQ15MFlMpPW4VUX1s=
+github.com/nar-lang/nar-compiler v1.0.2 h1:lTD6hV0CTFYci/cjKE4AckZbxjGGT3o8xiho0dqM7IM=
+github.com/nar-lang/nar-compiler v1.0.2/go.mod h1:XKCgyWwgCuDq6sQAzcKRv0aO7hDQ15MFlMpPW4VUX1s=
 golang.org/x/text v0.14.0 h1:ScX5w1eTa3QqT8oi6+ziP7dTV1S2+ALU0bI+0zXKWiQ=
 golang.org/x/text v0.14.0/go.mod h1:18ZOQIKpY8NJVqYksKHtTdi31H5itFRjB5/qKTNYzSU=

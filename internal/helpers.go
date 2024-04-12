@@ -35,11 +35,15 @@ func (s *server) statementAtLocation(
 	})
 	if pStmt != nil {
 		nStmt := pStmt.Successor()
-		var tStmt typed.Statement
 		if nStmt != nil {
-			tStmt = nStmt.Successor()
+			tStmt := nStmt.Successor()
+			if tStmt != nil {
+				return pStmt, nStmt, tStmt
+			}
+			return pStmt, nStmt, nil
+		} else {
+			return pStmt, nil, nil
 		}
-		return pStmt, nStmt, tStmt
 	}
 	return nil, nil, nil
 }

@@ -13,8 +13,6 @@ import (
 #include <string.h>
 #include <nar.h>
 #include <nar-runtime.h>
-
-void goStdoutWrapper(nar_runtime_t rt, nar_cstring_t msg);
 */
 import "C"
 import (
@@ -164,7 +162,7 @@ func doRun(data []byte, libsPath string) (err error) {
 
 	var rt C.nar_runtime_t = nil
 	var entryPoint C.nar_cstring_t = nil
-	var result C.nar_object_t = C.INVALID_OBJECT
+	var result C.nar_object_t = C.NAR_INVALID_OBJECT
 
 	btcErr := C.nar_get_last_error(nil)
 	if btc == nil || btcErr != nil {
@@ -181,8 +179,6 @@ func doRun(data []byte, libsPath string) (err error) {
 	}
 	C.free(buf)
 	buf = nil
-
-	C.nar_set_stdout(rt, C.nar_stdout_fn_t(C.goStdoutWrapper))
 
 	entryPoint = C.nar_bytecode_get_entry(btc)
 
