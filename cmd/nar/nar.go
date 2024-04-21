@@ -77,18 +77,18 @@ func main() {
 		err := bin.Write(w, true)
 		if err != nil {
 			fmt.Println(err)
-			os.Exit(-1)
+			os.Exit(1)
 		}
 		err = w.Flush()
 		if err != nil {
 			fmt.Println(err)
-			os.Exit(-1)
+			os.Exit(1)
 		}
 
 		err = doRun(buf.Bytes(), filepath.Dir(*out))
 		if err != nil {
 			fmt.Println(err)
-			os.Exit(-1)
+			os.Exit(1)
 		}
 	}
 }
@@ -106,15 +106,29 @@ func doCompile(release bool, cacheDir string, link linker.Linker, packages []str
 
 	var providers []locator.Provider
 	for _, path := range packages {
+		if s, err := os.Stat(path); err != nil || !s.IsDir() {
+			modulePath := filepath.Join(cacheDir, path)
+			if s, err := os.Stat(modulePath); err != nil || !s.IsDir() {
+				log.Err(fmt.Errorf("%s is neither module directory nor module name inside cache directory", path))
+				continue
+			}
+			path = modulePath
+		}
 		providers = append(providers, locator.NewFileSystemPackageProvider(path))
 	}
 	if cacheDir != "" {
+		if s, err := os.Stat(cacheDir); err != nil || !s.IsDir() {
+			log.Err(fmt.Errorf("cache directory %s does not exist", cacheDir))
+		}
 		providers = append(providers, locator.NewDirectoryProvider(cacheDir))
 	}
-	//TODO: add git repository provider
-	var lc = locator.NewLocator(providers...)
 
-	bin := compiler.Compile(log, lc, link, !release)
+	var bin *bytecode.Binary
+	if !log.Err() {
+		//TODO: add git repository provider
+		var lc = locator.NewLocator(providers...)
+		bin = compiler.Compile(log, lc, link, !release)
+	}
 	log.Trace("compilation finished")
 	log.Flush(os.Stdout)
 	return bin
@@ -164,7 +178,7 @@ func doRun(data []byte, libsPath string) (err error) {
 	var entryPoint C.nar_cstring_t = nil
 	var result C.nar_object_t = C.NAR_INVALID_OBJECT
 
-	btcErr := C.nar_get_last_error(nil)
+	btcErr := C.nar_get_error(nil)
 	if btc == nil || btcErr != nil {
 		err = fmt.Errorf("could not create bytecode (error code %s)", toStr(btcErr))
 		goto cleanup
@@ -174,7 +188,7 @@ func doRun(data []byte, libsPath string) (err error) {
 
 	buf = C.CBytes(append([]byte(libsPath), 0))
 	if C.nar_register_libs(rt, C.nar_cstring_t(buf)) == C.nar_false {
-		err = fmt.Errorf("Error: could not create runtime (error message: %s)\n", toStr(C.nar_get_last_error(rt)))
+		err = fmt.Errorf("Error: could not create runtime (error message: %s)\n", toStr(C.nar_get_error(rt)))
 		goto cleanup
 	}
 	C.free(buf)
@@ -186,7 +200,7 @@ func doRun(data []byte, libsPath string) (err error) {
 	if C.nar_object_is_valid(rt, result) == 0 {
 		err = fmt.Errorf("could not execute entry point %s (error message: %s)",
 			toStr(entryPoint),
-			toStr(C.nar_get_last_error(rt)))
+			toStr(C.nar_get_error(rt)))
 		goto cleanup
 	}
 
