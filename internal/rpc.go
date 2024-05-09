@@ -519,25 +519,37 @@ func (s *server) TextDocument_completion(
 
 			addName := func(name ast.Identifier, kind protocol.CompletionItemKind) {
 				completions = append(completions, protocol.CompletionItem{
-					Label: string(name), //TODO
+					Label: string(name), //TODO: do not insert ambiguous names
 					Kind:  kind,
+					LabelDetails: &protocol.CompletionItemLabelDetails{
+						Detail: fmt.Sprintf(" %s.%s", fullName, name),
+					},
 				})
 				completions = append(completions,
 					protocol.CompletionItem{
 						Label: fmt.Sprintf("%s.%s", fullName, name),
 						Kind:  kind,
+						LabelDetails: &protocol.CompletionItemLabelDetails{
+							Detail: fmt.Sprintf(" %s.%s", fullName, name),
+						},
 					})
 				if alias != "" {
 					completions = append(completions,
 						protocol.CompletionItem{
 							Label: fmt.Sprintf("%s.%s", alias, name),
 							Kind:  kind,
+							LabelDetails: &protocol.CompletionItemLabelDetails{
+								Detail: fmt.Sprintf(" %s.%s", fullName, name),
+							},
 						})
 				} else if shortName != "" {
 					completions = append(completions,
 						protocol.CompletionItem{
 							Label: fmt.Sprintf("%s.%s", shortName, name),
 							Kind:  kind,
+							LabelDetails: &protocol.CompletionItemLabelDetails{
+								Detail: fmt.Sprintf(" %s.%s", fullName, name),
+							},
 						})
 				}
 			}
