@@ -32,5 +32,3 @@ No additional installation required. Just put nar executable into your PATH if y
 
 If you got stuck, you can always ask for help in [Discussions](https://github.com/nar-lang/nar/discussions) or join
 a [Discord server](https://discord.gg/sGNJVtNwpU).
-
-If you got stuck, feel free to ask
