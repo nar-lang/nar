@@ -144,6 +144,33 @@ func (s *server) TextDocument_definition(
 				return locToLocation(def.Location()), nil
 			}
 		}
+
+		text := loc.FileContent()
+		end := loc.Start()
+		start := loc.Start()
+		for end < uint32(len(text)) && isIdentChar(text[end]) {
+			end++
+		}
+		for start > 0 && isIdentChar(text[start]) {
+			start--
+		}
+		if !isIdentChar(text[start]) {
+			start++
+		}
+
+		if end-start > 0 && start > 0 {
+			ident := ast.QualifiedIdentifier(text[start:end])
+			if def, _, _ := m.FindDefinition(s.parsedModules, ident); def != nil {
+				if nDef := def.Successor(); nDef != nil {
+					if tDef := nDef.Successor(); tDef != nil {
+						return locToLocation(tDef.Location()), nil
+					}
+					return locToLocation(nDef.Location()), nil
+				}
+				return locToLocation(def.Location()), nil
+			}
+		}
+
 	}
 	return nil, nil
 }
@@ -650,8 +677,77 @@ func (s *server) TextDocument_signatureHelp(
 				}
 			}
 		})
+
+		if signature == nil {
+			text := loc.FileContent()
+			end := loc.Start()
+			for end > 0 && text[end] != '(' {
+				end--
+			}
+			if end < 0 {
+				start := end - 1
+				for start > 0 && isIdentChar(text[start]) {
+					start--
+				}
+				if !isIdentChar(text[start]) {
+					start++
+				}
+
+				if end-start > 0 && start > 0 {
+					ident := text[start:end]
+					if def, defMod, _ := m.FindDefinition(s.parsedModules, ast.QualifiedIdentifier(ident)); def != nil {
+						if nDef := def.Successor(); nDef != nil {
+							if tDef := nDef.Successor(); tDef != nil {
+								label := strings.Builder{}
+								label.WriteString(string(common.MakeFullIdentifier(defMod.Name(), def.Name())))
+								label.WriteString("(\n")
+								for _, x := range tDef.Children() {
+									if p, ok := x.(typed.Pattern); ok {
+										label.WriteString("\t")
+										label.WriteString(p.Code(defMod.Name()))
+										label.WriteString("\n")
+									}
+								}
+								label.WriteString(") : ")
+								label.WriteString(tDef.(*typed.Definition).DeclaredType().(*typed.TFunc).Return().Code(defMod.Name()))
+								var parameters []protocol.ParameterInformation
+								for _, x := range tDef.Children() {
+									if p, ok := x.(typed.Pattern); ok {
+										parameters = append(parameters, protocol.ParameterInformation{
+											Label: p.Code(defMod.Name()),
+										})
+									}
+								}
+								signature = &protocol.SignatureHelp{
+									Signatures: []protocol.SignatureInformation{
+										{
+											Documentation: &protocol.Or_SignatureInformation_documentation{
+												Value: label.String(),
+											},
+										},
+									},
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 	return signature, nil
+}
+
+func isIdentChar(c rune) bool {
+	if unicode.IsLetter(c) {
+		return true
+	}
+	if ('_' == c) || ('`' == c) || unicode.IsDigit(c) {
+		return true
+	}
+	if '.' == c {
+		return true
+	}
+	return false
 }
 
 func (s *server) TextDocument_rename(
