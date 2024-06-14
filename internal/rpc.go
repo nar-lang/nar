@@ -158,7 +158,7 @@ func (s *server) TextDocument_definition(
 			start++
 		}
 
-		if end-start > 0 && start > 0 {
+		if end-start > 0 && start > 0 && end < uint32(len(text)) {
 			ident := ast.QualifiedIdentifier(text[start:end])
 			if def, _, _ := m.FindDefinition(s.parsedModules, ident); def != nil {
 				if nDef := def.Successor(); nDef != nil {
