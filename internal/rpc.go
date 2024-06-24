@@ -158,7 +158,7 @@ func (s *server) TextDocument_definition(
 			start++
 		}
 
-		if end-start > 0 && start > 0 && end < uint32(len(text)) {
+		if end > start && start > 0 && end < uint32(len(text)) {
 			ident := ast.QualifiedIdentifier(text[start:end])
 			if def, _, _ := m.FindDefinition(s.parsedModules, ident); def != nil {
 				if nDef := def.Successor(); nDef != nil {
@@ -815,30 +815,64 @@ func (s *server) TextDocument_rename(
 		}
 	}
 
+	appendType := func(t typed.Type) {
+		if t != nil {
+
+			result.Changes[pathToUri(t.Location().FilePath())] = append(
+				result.Changes[pathToUri(t.Location().FilePath())],
+				protocol.TextEdit{
+					Range:   locToRange(t.Location()),
+					NewText: params.NewName,
+				})
+			for _, m := range s.parsedModules {
+				m.Iterate(func(stmt parsed.Statement) {
+					nStmt := stmt.Successor()
+					if nStmt != nil {
+						if p, ok := nStmt.Successor().(typed.Pattern); ok {
+							if p.DeclaredType().EqualsTo(t, nil) {
+								result.Changes[pathToUri(t.Location().FilePath())] = append(
+									result.Changes[pathToUri(t.Location().FilePath())],
+									protocol.TextEdit{
+										Range:   locToRange(p.Type().Location()),
+										NewText: params.NewName,
+									})
+							}
+						}
+					}
+				})
+			}
+		}
+	}
+
 	if ok {
-		_, _, stmt := s.statementAtLocation(loc, mod)
-		if stmt != nil {
-			switch stmt.(type) {
+		_, _, tStmt := s.statementAtLocation(loc, mod)
+		if tStmt != nil {
+			switch tStmt.(type) {
 			case *typed.Global:
-				def := stmt.(*typed.Global).Definition()
+				def := tStmt.(*typed.Global).Definition()
 				if def != nil {
 					appendDefinition(def)
 				}
 				break
 			case *typed.Local:
-				target := stmt.(*typed.Local).Target()
+				target := tStmt.(*typed.Local).Target()
 				if target != nil {
 					appendPattern(target)
 				}
 			case *typed.Definition:
-				def := stmt.(*typed.Definition)
+				def := tStmt.(*typed.Definition)
 				appendDefinition(def)
 				break
 			case typed.Pattern:
-				pattern := stmt.(typed.Pattern)
+				pattern := tStmt.(typed.Pattern)
 				appendPattern(pattern)
 				break
+			case typed.Type:
+				type_ := tStmt.(typed.Type)
+				appendType(type_)
+				break
 			}
+
 		}
 	}
 	return result, nil

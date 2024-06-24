@@ -80,7 +80,7 @@ func Intersect(a, b Range) bool {
 // Format implements fmt.Formatter.
 //
 // Note: Formatter is implemented instead of Stringer (presumably) for
-// performance reasons, though it is not clear that it matters in practice.
+// performance reasons, though it is not render_clear that it matters in practice.
 func (r Range) Format(f fmt.State, _ rune) {
 	fmt.Fprintf(f, "%v-%v", r.Start, r.End)
 }

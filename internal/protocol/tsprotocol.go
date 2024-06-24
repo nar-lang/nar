@@ -5238,7 +5238,7 @@ const (
 	SourceOrganizeImports CodeActionKind = "source.organizeImports"
 	// Base kind for auto-fix source actions: `source.fixAll`.
 	//
-	// Fix all actions automatically fix errors that have a clear fix that do not require user input.
+	// Fix all actions automatically fix errors that have a render_clear fix that do not require user input.
 	// They should not suppress errors or perform unsafe fixes such as generating new types or classes.
 	//
 	// @since 3.15.0
